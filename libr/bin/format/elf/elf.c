@@ -1135,6 +1135,9 @@ static ut64 get_import_addr(ELFOBJ *bin, int sym) {
 		j = 0;
 		while (!rel_sec && rel_sect[j]) {
 			rel_sec = get_section_by_name (bin, rel_sect[j++]);
+			if (rel_sec && !rel_sec->offset) {
+				rel_sec = 0;
+			}
 		}
 		tsize = sizeof (Elf_(Rel));
 	} else if (bin->is_rela == DT_RELA) {
@@ -1250,6 +1253,9 @@ static ut64 get_import_addr(ELFOBJ *bin, int sym) {
 			case EM_ARM:
 			case EM_AARCH64:
 				plt_addr = Elf_(r_bin_elf_get_section_addr) (bin, ".plt");
+				if (plt_addr == 0) {
+					plt_addr = Elf_(r_bin_elf_get_section_addr_end) (bin, ".rela.plt");
+				}
 				if (plt_addr == -1) {
 					free (rela);
 					return UT32_MAX;
@@ -2391,7 +2397,6 @@ static RBinElfSection* get_sections_from_phdr(ELFOBJ *bin) {
 		i++;
 	}
 	ret[i].last = 1;
-
 	return ret;
 }
 
@@ -2409,7 +2414,17 @@ RBinElfSection* Elf_(r_bin_elf_get_sections)(ELFOBJ *bin) {
 		//we don't give up search in phdr section
 		return get_sections_from_phdr (bin);
 	}
-	if (!(ret = calloc ((bin->ehdr.e_shnum + 1), sizeof (RBinElfSection)))) {
+	RBinElfSection *phdr_sections = get_sections_from_phdr (bin);
+	int phdr_sections_count = 0;
+	RBinElfSection *ps = phdr_sections;
+	if (phdr_sections) {
+		while (!ps->last) {
+			phdr_sections_count++;
+			ps++;
+		}
+	}
+
+	if (!(ret = calloc ((bin->ehdr.e_shnum + 1 + phdr_sections_count), sizeof (RBinElfSection)))) {
 		return NULL;
 	}
 	for (i = 0; i < bin->ehdr.e_shnum; i++) {
@@ -2446,8 +2461,44 @@ RBinElfSection* Elf_(r_bin_elf_get_sections)(ELFOBJ *bin) {
 				}
 			}
 		}
-		ret[i].name[ELF_STRING_LENGTH-2] = '\0';
+		// patch shdr empty sections from the phdr "hints". ELF SUCKS
+		RBinElfSection *ps = phdr_sections;
+		if (ps) {
+			while (!ps->last) {
+				if (!strcmp (ps->name, ret[i].name)) {
+					if (!ret[i].offset) {
+						ret[i].offset = ps->offset;
+						ret[i].size = ps->size;
+						ret[i].rva = ps->rva;
+					}
+				}
+				ps++;
+			}
+		}
+		ret[i].name[ELF_STRING_LENGTH - 2] = '\0';
 		ret[i].last = 0;
+	}
+	// append phdr not found in shdr.
+	if (phdr_sections) {
+		ps = phdr_sections;
+		int j;
+		while (!ps->last) {
+			for (j = 0; j < i; j++) {
+				if (!strcmp (ret[j].name, ps->name)) {
+					goto next;
+				}
+			}
+			memset (&ret[i], 0, sizeof (ret[i]));
+			ret[i].last = 0;
+			strcpy (ret[i].name, ps->name);
+			ret[i].last = 0;
+			ret[i].size = ps->size;
+			ret[i].offset = ps->offset;
+			ret[i].rva = ps->rva;
+			i++;
+next:
+			ps++;
+		}
 	}
 	ret[i].last = 1;
 	return ret;
