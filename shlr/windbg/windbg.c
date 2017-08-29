@@ -778,7 +778,7 @@ int windbg_query_mem(WindCtx *ctx, const ut64 addr, int *address_space, int *fla
 
 }
 
-int windbg_bkpt(WindCtx *ctx, const ut64 addr, const int set, const int hw, int *handle) {
+int windbg_bkpt(WindCtx *ctx, const ut64 addr, const int set, const int type, int *handle) {
 	kd_req_t req = {
 		0
 	};

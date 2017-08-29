@@ -870,21 +870,32 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 	return NULL;
 }
 
-static int r_debug_gdb_breakpoint (RBreakpoint *bp, RBreakpointItem *b, bool set) {
-	int ret;
-	if (!b) {
+static int r_debug_gdb_breakpoint (RBreakpoint *bp, RBreakpointItem *b, int set, void *user) {
+	int ret = false;
+	if (!bp) {
 		return false;
 	}
 	// TODO handle rwx and conditions
-	if (set)
-		ret = b->hw?
-			gdbr_set_hwbp (desc, b->addr, ""):
+	if (set) {
+		switch (b->type) {
+		case R_BP_TYPE_SW:
 			gdbr_set_bp (desc, b->addr, "");
-	else
-		ret = b->hw?
-			gdbr_remove_hwbp (desc, b->addr):
+			break;
+		case R_BP_TYPE_HW:
+			gdbr_set_hwbp (desc, b->addr, "");
+			break;
+		}
+	} else {
+		switch (b->type) {
+		case R_BP_TYPE_SW:
 			gdbr_remove_bp (desc, b->addr);
-	return !ret;
+			break;
+		case R_BP_TYPE_HW:
+			gdbr_remove_hwbp (desc, b->addr);
+			break;
+		}
+	}
+	return ret;
 }
 
 static bool r_debug_gdb_kill(RDebug *dbg, int pid, int tid, int sig) {

@@ -5,6 +5,14 @@
 
 R_LIB_VERSION (r_bp);
 
+static inline ut64 pg_align_up(int pgsize, ut64 addr) {
+        return ((addr + pgsize - 1) & ~(pgsize - 1));
+}
+
+static inline ut64 pg_align_down(int pgsize, ut64 addr) {
+        return (addr & ~(pgsize - 1));
+}
+
 static struct r_bp_plugin_t *bp_static_plugins[] =
 	{ R_BP_STATIC_PLUGINS };
 
@@ -92,18 +100,36 @@ R_API RBreakpointItem *r_bp_get_at(RBreakpoint *bp, ut64 addr) {
 	RListIter *iter;
 	RBreakpointItem *b;
 	r_list_foreach(bp->bps, iter, b) {
-		if (b->addr == addr)
+		if (b->type != R_BP_TYPE_MEM && b->addr == addr)
 			return b;
 	}
 	return NULL;
 }
 
-static inline bool inRange(RBreakpointItem *b, ut64 addr) {
+static inline bool in_range(RBreakpointItem *b, ut64 addr) {
 	return (addr >= b->addr && addr < (b->addr + b->size));
 }
 
-static inline bool matchProt(RBreakpointItem *b, int rwx) {
+static inline bool match_prot(RBreakpointItem *b, int rwx) {
 	return (!rwx || (rwx && b->rwx));
+}
+
+static inline bool in_mem_range(RBreakpointItem *b, ut64 addr, int size) {
+	return (addr <= b->addr && (addr + size) > b->addr) ||
+		(addr > b->addr && addr < (b->addr + b->size));
+		
+}
+
+R_API RBreakpointItem *r_bp_mem_get_in(RBreakpoint *bp, ut64 addr, int size) {
+	RBreakpointItem *b;
+	RListIter *iter;
+	r_list_foreach (bp->bps, iter, b) {
+		// Check addr within mem range
+		if (b->type == R_BP_TYPE_MEM && in_mem_range (b, addr, size)) {
+			return b;
+		}
+	}
+	return NULL;
 }
 
 R_API RBreakpointItem *r_bp_get_in(RBreakpoint *bp, ut64 addr, int rwx) {
@@ -112,7 +138,7 @@ R_API RBreakpointItem *r_bp_get_in(RBreakpoint *bp, ut64 addr, int rwx) {
 	r_list_foreach (bp->bps, iter, b) {
 		// eprintf ("---ataddr--- 0x%08"PFMT64x" %d %d %x\n", b->addr, b->size, b->recoil, b->rwx);
 		// Check addr within range and provided rwx matches (or null)
-		if (inRange (b, addr) && matchProt (b, rwx)) {
+		if (b->type != R_BP_TYPE_MEM && in_range (b, addr) && match_prot (b, rwx)) {
 			return b;
 		}
 	}
@@ -143,24 +169,42 @@ R_API int r_bp_stepy_continuation(RBreakpoint *bp) {
 }
 
 /* TODO: detect overlapping of breakpoints */
-static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, int size, int hw, int rwx) {
+static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, int size, int type, int rwx) {
 	int ret;
 	RBreakpointItem *b;
+
 	if (addr == UT64_MAX || size < 1) {
+		eprintf ("Invalid breakpoint address or size.\n");
 		return NULL;
 	}
-	if (r_bp_get_in (bp, addr, rwx)) {
+	if (type == R_BP_TYPE_MEM) {
+		ut64 _addr;
+		int _size;
+
+		_addr = pg_align_down (bp->pgsize, addr);
+		_size = (int)pg_align_up (bp->pgsize, (ut64)size);
+		if (r_bp_mem_get_in (bp, _addr, _size)) {
+			eprintf ("Memory breakpoint already set at this address.\n");
+			return NULL;
+		}
+		b = r_bp_item_new (bp);
+		b->addr = _addr;
+		b->size = _size;
+		b->r_addr = addr;
+		b->r_size = size;
+	} else if (r_bp_get_in (bp, addr, rwx)) {
 		eprintf ("Breakpoint already set at this address.\n");
 		return NULL;
+	} else {
+		b = r_bp_item_new (bp);
+		b->addr = addr + bp->delta;
+		b->size = size;
 	}
-	b = r_bp_item_new (bp);
-	b->addr = addr + bp->delta;
-	b->size = size;
 	b->enabled = true;
 	b->rwx = rwx;
-	b->hw = hw;
+	b->type = type;
 	// NOTE: for hw breakpoints there are no bytes to save/restore
-	if (!hw) {
+	if (type == R_BP_TYPE_SW) {
 		b->bbytes = calloc (size + 16, 1);
 		if (obytes) {
 			b->obytes = malloc (size);
@@ -182,9 +226,8 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	return b;
 }
 
-R_API int r_bp_add_fault(RBreakpoint *bp, ut64 addr, int size, int rwx) {
-	// TODO
-	return false;
+R_API RBreakpointItem* r_bp_add_mem(RBreakpoint *bp, ut64 addr, int size, int rwx) {
+	return r_bp_add (bp, NULL, addr, size, R_BP_TYPE_MEM, rwx);
 }
 
 R_API RBreakpointItem* r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx) {
@@ -264,7 +307,7 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 				(b->rwx & R_BP_PROT_READ) ? 'r' : '-',
 				(b->rwx & R_BP_PROT_WRITE) ? 'w' : '-',
 				(b->rwx & R_BP_PROT_EXEC) ? 'x' : '-',
-				b->hw ? "hw": "sw",
+				b->type == R_BP_TYPE_HW ? "hw": (b->type == R_BP_TYPE_SW ? "sw": "mem"),
 				b->trace ? "trace" : "break",
 				b->enabled ? "enabled" : "disabled",
 				r_str_get2 (b->data),
@@ -287,7 +330,7 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 			break;
 		case 'j':
 			bp->cb_printf ("%s{\"addr\":%"PFMT64d",\"size\":%d,"
-				"\"prot\":\"%c%c%c\",\"hw\":%s,"
+				"\"prot\":\"%c%c%c\",\"type\":%s,"
 				"\"trace\":%s,\"enabled\":%s,"
 				"\"data\":\"%s\","
 				"\"cond\":\"%s\"}",
@@ -296,7 +339,7 @@ R_API int r_bp_list(RBreakpoint *bp, int rad) {
 				(b->rwx & R_BP_PROT_READ) ? 'r' : '-',
 				(b->rwx & R_BP_PROT_WRITE) ? 'w' : '-',
 				(b->rwx & R_BP_PROT_EXEC) ? 'x' : '-',
-				b->hw ? "true" : "false",
+				b->type == R_BP_TYPE_HW ? "true": "false",
 				b->trace ? "true" : "false",
 				b->enabled ? "true" : "false",
 				r_str_get2 (b->data),

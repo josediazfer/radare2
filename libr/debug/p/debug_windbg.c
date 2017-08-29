@@ -147,7 +147,7 @@ static int r_debug_windbg_breakpoint(RBreakpoint *bp, RBreakpointItem *b, bool s
 	if (!b) return false;
 	// Use a 32 bit word here to keep this compatible with 32 bit hosts
 	tag = (int *)&b->data;
-	return windbg_bkpt (wctx, b->addr, set, b->hw, tag);
+	return windbg_bkpt (wctx, b->addr, set, b->type, tag);
 }
 
 static int r_debug_windbg_init(RDebug *dbg) {

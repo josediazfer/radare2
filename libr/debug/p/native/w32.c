@@ -238,8 +238,9 @@ static bool w32dbg_SeDebugPrivilege() {
 	return ret;
 }
 
-static int w32_dbg_init() {
+static int w32_dbg_init(RDebug *dbg) {
 	HANDLE lib;
+        SYSTEM_INFO si = {0};
 
 	/* escalate privs (required for win7/vista) */
 	w32dbg_SeDebugPrivilege ();
@@ -298,6 +299,8 @@ static int w32_dbg_init() {
 		GetProcAddress (lib, "NtQueryInformationThread");
 	w32_CreateToolhelp32Snapshot = (HANDLE (WINAPI *)(DWORD, DWORD))
 		GetProcAddress (lib, "CreateToolhelp32Snapshot");
+        GetSystemInfo (&si);
+	dbg->pgsize = (int)si.dwPageSize;
 	if (!w32_DebugActiveProcessStop || !w32_openthread || !w32_DebugBreakProcess ||
 	    !w32_GetModuleBaseName || !w32_GetModuleInformation) {
 		// OOPS!

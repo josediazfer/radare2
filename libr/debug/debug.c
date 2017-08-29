@@ -39,9 +39,10 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
  * r_debug_bp_hit handles stage 1.
  * r_debug_recoil handles stage 2.
  */
-static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb) {
+static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb, bool *ign) {
 	RBreakpointItem *b;
 
+	*ign = false;
 	if (!pb) {
 		eprintf ("BreakpointItem is NULL!\n");
 		return false;
@@ -70,39 +71,51 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 		return true;
 	}
 
-	/* The MIPS ptrace has a different behaviour */
-# if __mips__
-	/* see if we really have a breakpoint here... */
-	b = r_bp_get_at (dbg->bp, pc);
-	if (!b) { /* we don't. nothing left to do */
-		return true;
-	}
-# else
-	int pc_off = dbg->bpsize;
-	/* see if we really have a breakpoint here... */
-	b = r_bp_get_at (dbg->bp, pc - dbg->bpsize);
-	if (!b) { /* we don't. nothing left to do */
-		/* Some targets set pc to breakpoint */
-		b = r_bp_get_at (dbg->bp, pc);
+	if (dbg->reason.bp_type == R_BP_TYPE_MEM) {
+		b = r_bp_mem_get_in (dbg->bp, dbg->reason.fault_addr, 1);
 		if (!b) {
 			return true;
 		}
-		pc_off = 0;
-	}
+		if (dbg->reason.fault_addr < b->r_addr || 
+			dbg->reason.fault_addr >= (b->r_addr + b->r_size)) {
+			*ign = true;
+		} 
+	} else {
+		/* The MIPS ptrace has a different behaviour */
+# if __mips__
+		/* The MIPS ptrace has a different behaviour */
+		/* see if we really have a breakpoint here... */
+		b = r_bp_get_at (dbg->bp, pc);
+		if (!b) { /* we don't. nothing left to do */
+			return true;
+		}	
+# else
+		int pc_off = dbg->bpsize;
+		/* see if we really have a breakpoint here... */
+		b = r_bp_get_at (dbg->bp, pc - dbg->bpsize);
+		if (!b) { /* we don't. nothing left to do */
+			/* Some targets set pc to breakpoint */
+			b = r_bp_get_at (dbg->bp, pc);
+			if (!b) {
+				return true;
+			}	
+			pc_off = 0;
+		}
 
-	/* set the pc value back */
-	if (pc_off) {
-		pc -= pc_off;
-		if (!r_reg_set_value (dbg->reg, pc_ri, pc)) {
-			eprintf ("failed to set PC!\n");
-			return false;
+		/* set the pc value back */
+		if (pc_off) {
+			pc -= pc_off;
+			if (!r_reg_set_value (dbg->reg, pc_ri, pc)) {
+				eprintf ("failed to set PC!\n");
+				return false;
+			}	
+			if (!r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true)) {
+				eprintf ("cannot set registers!\n");
+				return false;
+			}
 		}
-		if (!r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true)) {
-			eprintf ("cannot set registers!\n");
-			return false;
-		}
-	}
 # endif
+	}
 
 	*pb = b;
 
@@ -117,14 +130,21 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 
 	/* inform the user of what happened */
 	if (dbg->hitinfo) {
-		eprintf ("hit %spoint at: %"PFMT64x "\n",
-				b->trace ? "trace" : "break", pc);
+		if (b->type == R_BP_TYPE_MEM) {
+			if (!*ign) {
+				eprintf ("hit memory breakpoint at: %"PFMT64x ", ptr %"PFMT64x "\n",
+					pc, dbg->reason.fault_addr);
+			}
+		} else {
+			eprintf ("hit %spoint at: %"PFMT64x "\n",
+					b->trace ? "trace" : "break", pc);
+		}
 	}
 
 	/* now that we've cleaned up after the breakpoint, call the other
 	 * potential breakpoint handlers
 	 */
-	if (dbg->corebind.core && dbg->corebind.bphit) {
+	if (dbg->corebind.core && dbg->corebind.bphit && !*ign) {
 		dbg->corebind.bphit (dbg->corebind.core, b);
 	}
 	return true;
@@ -218,6 +238,33 @@ static int get_bpsz_arch(RDebug *dbg) {
 	}
 	return bpsz;
 }
+
+#if 0
+R_API RBreakpointItem *r_debug_bp_add_mem(RDebug *dbg, ut64 addr, int size, int perms) {
+	RList *list;
+	RBreakpointItem *bpi = NULL;
+	
+	r_debug_map_sync (dbg);
+	list = r_debug_copy_map_range (dbg, addr, size < 0? addr : addr + size);
+	if (r_list_length (list) == 0) {
+		goto err_r_debug_bp_add_mem;
+	}
+	if (size <= 0) {
+		RDebugMap *map;
+
+		map = r_debug_map_get(dbg, addr);
+		size = map->addr_end - map->addr;
+	}
+	bpi = r_bp_add_mem (dbg, list, addr, size, perms);
+	if (!r_debug_map_protect(dbg, addr, size, 0)) {
+		goto err_r_debug_bp_add_mem;
+	}
+err_r_debug_bp_add_mem:
+	if (!bpi)
+		r_list_free(list);
+	return bpi;
+}
+#endif
 
 /* add a breakpoint with some typical values */
 R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, bool watch, int rw, char *module, st64 m_delta) {
@@ -326,6 +373,7 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->snaps = r_list_newf ((RListFree)r_debug_snap_free);
 	dbg->sessions = r_list_newf ((RListFree)r_debug_session_free);
 	dbg->pid = -1;
+	dbg->pgsize = 4096;
 	dbg->bpsize = 1;
 	dbg->tid = -1;
 	dbg->tree = r_tree_new ();
@@ -347,6 +395,7 @@ R_API RDebug *r_debug_new(int hard) {
 		dbg->bp = r_bp_new ();
 		r_debug_plugin_init (dbg);
 		dbg->bp->iob.init = false;
+		dbg->bp->pgsize = dbg->pgsize;
 	}
 	return dbg;
 }
@@ -490,7 +539,6 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 		r_debug_continue (dbg);
 		//r_bp_del (dbg->bp, rpc+len);
 		/* TODO: check if stopped in breakpoint or not */
-
 		r_bp_del (dbg->bp, rpc+len);
 		dbg->iob.write_at (dbg->iob.io, rpc, backup, len);
 		if (restore) {
@@ -508,7 +556,7 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
 		free (backup);
 		free (orig);
-		eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
+		//eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
 	} else eprintf ("r_debug_execute: Cannot get program counter\n");
 	return (ra0);
 }
@@ -646,6 +694,7 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			RRegItem *pc_ri;
 			RBreakpointItem *b = NULL;
 			ut64 pc;
+			bool ign;
 
 			/* get the program coounter */
 			pc_ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], -1);
@@ -656,7 +705,7 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			/* get the value */
 			pc = r_reg_get_value (dbg->reg, pc_ri);
 
-			if (!r_debug_bp_hit (dbg, pc_ri, pc, &b)) {
+			if (!r_debug_bp_hit (dbg, pc_ri, pc, &b, &ign)) {
 				return R_DEBUG_REASON_ERROR;
 			}
 
@@ -671,6 +720,9 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			}
 			if (b && b->trace) {
 				reason = R_DEBUG_REASON_TRACEPOINT;
+			}
+			if (ign) {
+				reason = R_DEBUG_REASON_IGN;
 			}
 		}
 
@@ -1032,6 +1084,9 @@ repeat:
 		//XXX(jjd): why? //dbg->reason.signum = 0;
 
 		reason = r_debug_wait (dbg, &bp);
+		if (reason == R_DEBUG_REASON_IGN) {
+			goto repeat;
+		}
 		if (dbg->corebind.core) {
 			RCore *core = (RCore *)dbg->corebind.core;
 			RNum *num = core->num;
@@ -1049,7 +1104,6 @@ repeat:
 			   		    dbg->corebind.cfggeti (dbg->corebind.core, "dbg.bpsysign")))) {
 			goto repeat;
 		}
-
 #if __linux__
 		if (reason == R_DEBUG_REASON_NEW_PID && dbg->follow_child) {
 #if DEBUGGER

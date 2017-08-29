@@ -19,6 +19,15 @@ static int r_debug_native_continue (RDebug *dbg, int pid, int tid, int sig);
 static int r_debug_native_reg_read (RDebug *dbg, int type, ut8 *buf, int size);
 static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int size);
 static void r_debug_native_stop(RDebug *dbg);
+static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int perms);
+
+typedef struct {
+	RBuffer *buf;
+	ut64 *k;
+	int n_k;
+} RDebugEggCache;
+
+static RList *r_debug_egg_cache;
 
 #include "native/bt.c"
 
@@ -100,7 +109,7 @@ static void r_debug_native_stop(RDebug *dbg);
 #if !__APPLE__
 static int r_debug_handle_signals (RDebug *dbg) {
 #if __linux__
-	return linux_handle_signals (dbg);
+	return linux_handle_signals (dbg, 0);
 #else
 	return -1;
 #endif
@@ -192,6 +201,64 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 	}
 	return pid;
 #endif
+}
+
+static RDebugEggCache* r_debug_native_find_egg_code(ut64 *k, int n_k, RListIter **ret_it)
+{
+	RListIter *it;
+	RDebugEggCache *ec;
+
+	if (!r_debug_egg_cache) {
+		r_debug_egg_cache = r_list_new();
+		return NULL;
+	}
+	r_list_foreach (r_debug_egg_cache, it, ec) {
+		if (ec->n_k == n_k) {
+			int i;
+			for (i = 0; i < n_k; i++) {
+				if (ec->k[i] != k[i]) {
+					break;
+				}
+			}
+			if (i == n_k) {
+				*ret_it = it;
+				return ec;
+			}
+		}
+	}
+	return NULL;
+}
+
+static void r_debug_native_del_egg_code(ut64 *k, int n_k)
+{
+	RListIter *it;
+
+	it = NULL;
+	r_debug_native_find_egg_code(k, n_k, &it);
+	if (it) {
+		r_list_delete(r_debug_egg_cache, it);
+	}
+}
+
+static void r_debug_native_add_egg_code(ut64 *k, int n_k, RBuffer *buf)
+{
+	ut64 *k_v;
+	RDebugEggCache *ec;
+
+	k_v = (ut64)malloc(n_k * sizeof(ut64));
+	if (!k_v) {
+		perror("malloc r_debug_native_add_egg_code");
+		return;
+	}
+	memcpy(k_v, k, sizeof(ut64) * n_k);	
+	ec = R_NEW0 (RDebugEggCache);
+	if (!ec) {
+		perror("new0 RDebugEggCache");
+	}
+	ec->buf = r_buf_new_with_bytes (buf->buf, buf->length);
+	ec->k = k_v;
+	ec->n_k = n_k;
+	r_list_append (r_debug_egg_cache, ec);
 }
 
 static int r_debug_native_detach (RDebug *dbg, int pid) {
@@ -1238,7 +1305,9 @@ struct r_debug_desc_plugin_t r_debug_desc_plugin_native;
 static int r_debug_native_init (RDebug *dbg) {
 	dbg->h->desc = r_debug_desc_plugin_native;
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_init ();
+	return w32_dbg_init (dbg);
+#elif __linux__
+	return linux_dbg_init (dbg);
 #else
 	return true;
 #endif
@@ -1290,16 +1359,58 @@ static int r_debug_native_drx (RDebug *dbg, int n, ut64 addr, int sz, int rwx, i
  * we only handle the case for hardware breakpoints here. otherwise,
  * we let the caller handle the work.
  */
-static int r_debug_native_bp (RBreakpoint *bp, RBreakpointItem *b, bool set) {
+static int r_debug_native_bp (RBreakpointItem *bp, RBreakpointItem *b, int set, void *user) {
+	int ret = false;
+	RDebug *dbg = user;
 #if __i386__ || __x86_64__
-	RDebug *dbg = bp->user;
-	if (b && b->hw) {
+	if (bp && bp->type == R_BP_TYPE_HW) {
 		return set
 		? drx_add (dbg, bp, b)
 		: drx_del (dbg, bp, b);
 	}
 #endif
-	return false;
+#if __WINDOWS__ || __linux__
+	if (bp && !bp->ign && bp->type == R_BP_TYPE_MEM &&
+		!r_debug_is_dead(dbg) && dbg->reason.type != R_DEBUG_REASON_EXIT_PID) {
+		bp->ign = true;
+		if (set) {
+			RListIter *iter;
+			RDebugMap *map;
+			int unmap_len;
+
+			r_debug_map_sync (dbg);
+			r_list_free (bp->omap);
+			bp->omap = r_debug_get_map_pages (dbg, bp->addr, bp->size, &unmap_len);
+			if (r_list_empty (bp->omap)) {
+				r_list_free (bp->omap);
+				bp->omap = NULL;
+			} else {
+				RDebugReason reason = dbg->reason;
+
+				if (unmap_len > 0) {
+					bp->size -= unmap_len;
+					eprintf("warning memory breakpoint %llx: unmapped length %d, changed breakpoint size to %d\n", bp->addr, unmap_len, bp->size);
+				}
+				ret = r_debug_native_map_protect (dbg, bp->addr, bp->size, 0);
+				dbg->reason = reason;
+			} 
+		} else {
+			RListIter *iter;
+			RDebugMap *map;
+
+			if (bp->omap) {
+				RDebugReason reason = dbg->reason;
+
+				r_list_foreach (bp->omap, iter, map) {
+					ret = r_debug_native_map_protect (dbg, map->addr, map->addr_end - map->addr, map->perm);
+				}
+				dbg->reason = reason;
+			}
+		}
+		bp->ign = false;
+	}
+#endif
+	return ret;
 }
 
 #if __KFBSD__
@@ -1571,34 +1682,46 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 #elif __linux__
 	RBuffer *buf = NULL;
 	char code[1024];
+	ut64 k[] = {0, addr, size, perms};
 	int num;
+	RDebugEggCache *ec;
 
 	num = r_syscall_get_num (dbg->anal->syscall, "mprotect");
-	snprintf (code, sizeof (code),
-		"sc@syscall(%d);\n"
-		"main@global(0) { sc(%p,%d,%d);\n"
-		":int3\n"
-		"}\n", num, (void*)addr, size, perms);
+	k[0] = num;
+	ec = r_debug_native_find_egg_code(k, 4, NULL);
+	if (!ec) {
+		snprintf (code, sizeof (code),
+			"sc@syscall(%d);\n"
+			"main@global(0) { sc(%p,%d,%d);\n"
+			":int3\n"
+			"}\n", num, (void*)addr, size, perms);
 
-	r_egg_reset (dbg->egg);
-	r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
-	r_egg_load (dbg->egg, code, 0);
-	if (!r_egg_compile (dbg->egg)) {
-		eprintf ("Cannot compile.\n");
-		return false;
-	}
-	if (!r_egg_assemble (dbg->egg)) {
-		eprintf ("r_egg_assemble: invalid assembly\n");
-		return false;
-	}
-	buf = r_egg_get_bin (dbg->egg);
-	if (buf) {
+		r_egg_reset (dbg->egg);
+		r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
+		r_egg_load (dbg->egg, code, 0);
+		if (!r_egg_compile (dbg->egg)) {
+			eprintf ("Cannot compile.\n");
+			return false;
+		}	
+		if (!r_egg_assemble (dbg->egg)) {
+			eprintf ("r_egg_assemble: invalid assembly\n");
+			return false;
+		}
+		buf = r_egg_get_bin (dbg->egg);
+		if (buf) {
+			r_debug_native_add_egg_code(k, 4, buf);
+			r_reg_arena_push (dbg->reg);
+			r_debug_execute (dbg, buf->buf, buf->length , 1);
+			r_reg_arena_pop (dbg->reg);
+			return true;
+		}
+	} else {
 		r_reg_arena_push (dbg->reg);
-		r_debug_execute (dbg, buf->buf, buf->length , 1);
+		r_debug_execute (dbg, ec->buf->buf, ec->buf->length , 1);
 		r_reg_arena_pop (dbg->reg);
 		return true;
-	}
 
+	}
 	return false;
 #else
 	// mprotect not implemented for this platform

@@ -24,11 +24,10 @@ typedef struct r_bp_arch_t {
 } RBreakpointArch;
 
 enum {
+	R_BP_TYPE_UK,
 	R_BP_TYPE_SW,
 	R_BP_TYPE_HW,
-	R_BP_TYPE_COND,
-	R_BP_TYPE_FAULT,
-	R_BP_TYPE_DELETE,
+	R_BP_TYPE_MEM
 };
 
 typedef struct r_bp_plugin_t {
@@ -48,7 +47,7 @@ typedef struct r_bp_item_t {
 	int recoil; /* recoil */
 	bool swstep; 	/* is this breakpoint from a swstep? */
 	int rwx;
-	int hw;
+	int type;
 	int trace;
 	int internal; /* used for internal purposes */
 	int enabled;
@@ -58,6 +57,10 @@ typedef struct r_bp_item_t {
 	int pids[R_BP_MAXPIDS];
 	char *data;
 	char *cond; /* used for conditional breakpoints */
+	bool ign;   /* ignore if set/unset breakpoint (currently only for memory breakpoints) */
+	RList *omap; /* memory breakpoint: original pages that were changed */
+	ut64 r_addr; /* memory breakpoint: real addr (unaligned) */
+	int r_size; /* memory breakpoint: real size (unaligned) */
 } RBreakpointItem;
 
 typedef int (*RBreakpointCallback)(void *bp, RBreakpointItem *b, bool set);
@@ -80,6 +83,7 @@ typedef struct r_bp_t {
 	RBreakpointItem **bps_idx;
 	int bps_idx_count;
 	st64 delta;
+	int pgsize;
 } RBreakpoint;
 
 enum {
@@ -128,6 +132,7 @@ R_API RBreakpointItem *r_bp_item_new (RBreakpoint *bp);
 
 R_API RBreakpointItem *r_bp_get_at (RBreakpoint *bp, ut64 addr);
 R_API RBreakpointItem *r_bp_get_in (RBreakpoint *bp, ut64 addr, int rwx);
+R_API RBreakpointItem *r_bp_mem_get_in (RBreakpoint *bp, ut64 addr, int size);
 
 R_API int r_bp_add_cond(RBreakpoint *bp, const char *cond);
 R_API int r_bp_del_cond(RBreakpoint *bp, int idx);

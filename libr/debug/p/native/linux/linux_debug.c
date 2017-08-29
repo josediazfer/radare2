@@ -45,19 +45,31 @@ const char *linux_reg_profile (RDebug *dbg) {
 #endif
 }
 
-int linux_handle_signals (RDebug *dbg) {
+static void show_sig_stop_info(int status)
+{
+	if (WSTOPSIG (status) != SIGTRAP &&
+		WSTOPSIG (status) != SIGSTOP) {
+		eprintf ("child stopped with signal %d\n", WSTOPSIG (status));
+	}
+}
+int linux_handle_signals (RDebug *dbg, int status) {
 	siginfo_t siginfo = {0};
 	int ret = ptrace (PTRACE_GETSIGINFO, dbg->pid, 0, &siginfo);
+	bool show_siginfo = true;
+	bool bp_mem = false;
+
+	dbg->reason.bp_type = R_BP_TYPE_UK;
 	if (ret == -1) {
 		/* ESRCH means the process already went away :-/ */
 		if (errno == ESRCH) {
+			show_sig_stop_info(status);
 			dbg->reason.type = R_DEBUG_REASON_DEAD;
 			return true;
 		}
+		show_sig_stop_info(status);
 		r_sys_perror ("ptrace GETSIGINFO");
 		return false;
 	}
-
 	if (siginfo.si_signo > 0) {
 		//siginfo_t newsiginfo = {0};
 		//ptrace (PTRACE_SETSIGINFO, dbg->pid, 0, &siginfo);
@@ -102,21 +114,37 @@ int linux_handle_signals (RDebug *dbg) {
 				dbg->reason.type = R_DEBUG_REASON_ABORT;
 				break;
 			case SIGSEGV:
-				dbg->reason.type = R_DEBUG_REASON_SEGFAULT;
+			{
+				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, (ut64)siginfo.si_addr, 1);
+				dbg->reason.fault_addr = (ut64)siginfo.si_addr;
+				if (b) {
+					dbg->reason.bp_type = R_BP_TYPE_MEM;
+					dbg->reason.fault_addr = (ut64)siginfo.si_addr;
+					dbg->reason.type = R_DEBUG_REASON_BREAKPOINT;
+					show_siginfo = false;
+					bp_mem = true;
+				} else { 
+					dbg->reason.type = R_DEBUG_REASON_SEGFAULT;
+				}
 				break;
+			}
 			case SIGCHLD:
 				dbg->reason.type = R_DEBUG_REASON_SIGNAL;
 			default:
 				break;
 		}
-		if (dbg->reason.signum != SIGTRAP) {
+		if (show_siginfo && dbg->reason.signum != SIGTRAP) {
 			eprintf ("[+] SIGNAL %d errno=%d addr=0x%08"PFMT64x
 				" code=%d ret=%d\n",
 				siginfo.si_signo, siginfo.si_errno,
 				(ut64)siginfo.si_addr, siginfo.si_code, ret);
 		}
+		if (!bp_mem) {
+			show_sig_stop_info(status);
+		}
 		return true;
 	}
+	show_sig_stop_info(status);
 	return false;
 }
 
@@ -346,11 +374,7 @@ repeat:
 				eprintf ("child received signal %d\n", WTERMSIG (status));
 				reason = R_DEBUG_REASON_SIGNAL;
 			} else if (WIFSTOPPED (status)) {
-				if (WSTOPSIG (status) != SIGTRAP &&
-					WSTOPSIG (status) != SIGSTOP) {
-					eprintf ("child stopped with signal %d\n", WSTOPSIG (status));
-				}
-				if (!linux_handle_signals (dbg)) {
+				if (!linux_handle_signals (dbg, status)) {
 					eprintf ("can't handle signals\n");
 					return R_DEBUG_REASON_ERROR;
 				}
@@ -941,6 +965,15 @@ int linux_reg_write (RDebug *dbg, int type, const ut8 *buf, int size) {
 		return (ret != 0) ? false : true;
 	}
 	return false;
+}
+
+int linux_dbg_init(RDebug *dbg) {
+	dbg->pgsize = sysconf(_SC_PAGE_SIZE);
+	if (dbg->pgsize == -1) {
+		r_sys_perror ("sysconf get pagesize");
+		return false;
+	}
+	return true;
 }
 
 RList *linux_desc_list (int pid) {

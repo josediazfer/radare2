@@ -262,6 +262,40 @@ R_API int r_debug_map_sync(RDebug *dbg) {
 	return (int)ret;
 }
 
+R_API RList* r_debug_get_map_pages(RDebug *dbg, ut64 addr, int size, int *unmap_len) {
+	RListIter *iter;
+	RDebugMap *map;
+        RList *list = r_list_new ();
+	ut64 p_addr = addr;
+	int c_size = size;
+
+	r_list_foreach (dbg->maps, iter, map) {
+		ut64 p_addr_end;
+		int range_len;
+
+		if (c_size <= 0 || (p_addr + c_size) < map->addr)
+			break;
+		if (p_addr < map->addr || p_addr > map->addr_end)
+			continue;
+		range_len = (map->addr_end - p_addr);
+		if (range_len < c_size) {
+			c_size -= range_len;
+			p_addr_end = p_addr + range_len;
+		} else {
+			p_addr_end = p_addr + c_size;
+			c_size = 0;
+		}
+		//eprintf("map pages %llx %llx\n", p_addr, p_addr_end);
+		map = r_debug_map_new (map->name, p_addr, p_addr_end, map->perm, map->user);
+		if (map)  {
+			r_list_append (list, map);
+		}
+		p_addr = p_addr_end;
+	}
+	*unmap_len = c_size;
+	return list;
+}
+
 R_API RDebugMap* r_debug_map_alloc(RDebug *dbg, ut64 addr, int size) {
 	RDebugMap *map = NULL;
 	if (dbg && dbg->h && dbg->h->map_alloc) {
@@ -273,9 +307,10 @@ R_API RDebugMap* r_debug_map_alloc(RDebug *dbg, ut64 addr, int size) {
 R_API int r_debug_map_dealloc(RDebug *dbg, RDebugMap *map) {
 	bool ret = false;
 	ut64 addr = map->addr;
-	if (dbg && dbg->h && dbg->h->map_dealloc)
-		if (dbg->h->map_dealloc (dbg, addr, map->size))
-			ret = true;
+	if (dbg && dbg->h && dbg->h->map_dealloc && 
+		dbg->h->map_dealloc (dbg, addr, map->size)) {
+		ret = true;
+	}
 	return (int)ret;
 }
 
