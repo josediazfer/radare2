@@ -645,7 +645,7 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 			return -1;
 		}
 		memset (&de, 0, sizeof (DEBUG_EVENT));
-		if (WaitForDebugEvent (&de, INFINITE) == 0) {
+		if (!WaitForDebugEvent (&de, INFINITE)) {
 			r_sys_perror ("w32_dbg_wait/WaitForDebugEvent");
 			return -1;
 		}
@@ -890,7 +890,7 @@ bool w32_terminate_process (RDebug *dbg, int pid) {
 		w32_DebugActiveProcessStop (pid); //DebugActiveProcessStop (pid);
 	}
 	if (TerminateProcess (h_proc, 1) == 0) {
-		r_sys_perror ("e32_terminate_process/TerminateProcess");
+		r_sys_perror ("w32_terminate_process/TerminateProcess");
 		goto err_w32_terminate_process;
 
 	}
