@@ -255,6 +255,9 @@ static int w32_dbg_init(RDebug *dbg) {
 	w32_DebugBreakProcess = (BOOL (WINAPI *)(HANDLE))
 		GetProcAddress (GetModuleHandleA ("kernel32"),
 				"DebugBreakProcess");
+	w32_CreateToolhelp32Snapshot = (HANDLE (WINAPI *)(DWORD, DWORD))
+		GetProcAddress (GetModuleHandleA ("kernel32"),
+				"CreateToolhelp32Snapshot");
 	// only windows vista :(
 	w32_getthreadid = (DWORD (WINAPI *)(HANDLE))
 		GetProcAddress (GetModuleHandleA ("kernel32"), "GetThreadId");
@@ -297,8 +300,6 @@ static int w32_dbg_init(RDebug *dbg) {
 		GetProcAddress(lib,"NtQueryObject");
 	w32_ntqueryinformationthread = (NTSTATUS  (WINAPI *)(HANDLE, ULONG, PVOID, ULONG, PULONG))
 		GetProcAddress (lib, "NtQueryInformationThread");
-	w32_CreateToolhelp32Snapshot = (HANDLE (WINAPI *)(DWORD, DWORD))
-		GetProcAddress (lib, "CreateToolhelp32Snapshot");
         GetSystemInfo (&si);
 	dbg->pgsize = (int)si.dwPageSize;
 	if (!w32_DebugActiveProcessStop || !w32_openthread || !w32_DebugBreakProcess ||
@@ -352,7 +353,7 @@ static int w32_first_thread(int pid) {
 		eprintf("w32_thread_list: no w32_openthread?\n");
 		return -1;
 	}
-	th = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
+	th = w32_CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
 	if (th == INVALID_HANDLE_VALUE) {
 		eprintf ("w32_thread_list: invalid handle\n");
 		return -1;
@@ -399,6 +400,9 @@ static char *get_w32_excep_name(unsigned long code) {
 	case EXCEPTION_STACK_OVERFLOW:
 		desc = "stack overflow";
 		break;
+	case STATUS_GUARD_PAGE_VIOLATION:
+		desc = "page guard";
+		break;
 	default:
 		desc = "unknown";
 	}
@@ -406,8 +410,25 @@ static char *get_w32_excep_name(unsigned long code) {
 	return desc;
 }
 
-static int debug_exception_event (DEBUG_EVENT *de) {
+static bool fault_by_mem_bp (RDebug *dbg, DEBUG_EVENT *de) {
+	ut64 fault_addr = (ut64)de->u.Exception.ExceptionRecord.ExceptionInformation[1];
+
+	RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, fault_addr, 1);
+	dbg->reason.fault_addr = fault_addr;
+	eprintf("FAULT: %llx\n", fault_addr);
+	if (b) {
+		dbg->reason.bp_type = R_BP_TYPE_MEM;
+		dbg->reason.type = R_DEBUG_REASON_BREAKPOINT;
+		return true;
+	}
+	return false;
+}
+
+static bool debug_excep_event (DEBUG_EVENT *de) {
 	unsigned long code = de->u.Exception.ExceptionRecord.ExceptionCode;
+	bool show_fexcep = false;
+	bool cont = false;
+
 	switch (code) {
 	case EXCEPTION_BREAKPOINT:
 		break;
@@ -419,28 +440,33 @@ static int debug_exception_event (DEBUG_EVENT *de) {
 	case EXCEPTION_ILLEGAL_INSTRUCTION:
 	case EXCEPTION_INT_DIVIDE_BY_ZERO:
 	case EXCEPTION_STACK_OVERFLOW:
-		eprintf ("(%d) Fatal exception (%s) in thread %d\n",
-			(int)de->dwProcessId, 
-			get_w32_excep_name(code),
-			(int)de->dwThreadId);
+	case STATUS_GUARD_PAGE_VIOLATION:
+		show_fexcep = true;
 		break;
 #if __MINGW64__ || _WIN64
 	/* STATUS_WX86_BREAKPOINT */
 	case 0x4000001f:
 		eprintf ("(%d) WOW64 loaded.\n", (int)de->dwProcessId);
-		return 1;
+		cont = true;
+		break;
 #endif
 	/* MS_VC_EXCEPTION */
 	case 0x406D1388:
 		eprintf ("(%d) MS_VC_EXCEPTION (%x) in thread %d\n",
 			(int)de->dwProcessId, (int)code, (int)de->dwThreadId);
-		return 1;
+		cont = true;
+		break;
 	default:
 		eprintf ("(%d) Unknown exception %x in thread %d\n",
 			(int)de->dwProcessId, (int)code, (int)de->dwThreadId);
-		break;
 	}
-	return 0;
+	if (show_fexcep) {
+		eprintf ("(%d) Fatal exception (%s) in thread %d\n",
+			(int)de->dwProcessId, 
+			get_w32_excep_name(code),
+			(int)de->dwThreadId);
+	}
+	return cont;
 }
 
 static char *get_file_name_from_handle (HANDLE handle_file) {
@@ -654,6 +680,7 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 		code = de.dwDebugEventCode;
 		tid = de.dwThreadId;
 		pid = de.dwProcessId;
+		dbg->reason.bp_type = R_BP_TYPE_UK;
 		dbg->tid = tid;
 		dbg->pid = pid;
 		/* TODO: DEBUG_CONTROL_C */
@@ -741,16 +768,20 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 				ret = R_DEBUG_REASON_STEP;
 				next_event = 0;
 				break;
+			case STATUS_GUARD_PAGE_VIOLATION:
+				if (fault_by_mem_bp(dbg, &de)) {
+					ret = R_DEBUG_REASON_BREAKPOINT;
+					next_event = 0;
+					break;
+				}
 			default:
-				if (!debug_exception_event (&de)) {
+				if (!debug_excep_event (&de)) {
 					ret = R_DEBUG_REASON_TRAP;
 					next_event = 0;
-				}
-				else {
+				} else {
 					next_event = 1;
 					r_debug_native_continue (dbg, pid, tid, -1);
 				}
-
 			}
 			break;
 		default:
@@ -793,7 +824,7 @@ RList *w32_thread_list (int pid, RList *list) {
 		eprintf("w32_thread_list: no w32_openthread?\n");
 		return list;
 	}
-        th = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
+        th = w32_CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
         if(th == INVALID_HANDLE_VALUE || !Thread32First (th, &te32))
                 goto err_load_th;
         do {
@@ -854,7 +885,7 @@ RList *w32_pids (int pid, RList *list) {
 	pe.dwSize = sizeof (PROCESSENTRY32);
 	int show_all_pids = pid == 0;
 
-	process_snapshot = CreateToolhelp32Snapshot (TH32CS_SNAPPROCESS, pid);
+	process_snapshot = w32_CreateToolhelp32Snapshot (TH32CS_SNAPPROCESS, pid);
 	if (process_snapshot == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("w32_pids/CreateToolhelp32Snapshot");
 		return list;

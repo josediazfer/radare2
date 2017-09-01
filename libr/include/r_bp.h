@@ -140,6 +140,7 @@ R_API int r_bp_add_fault(RBreakpoint *bp, ut64 addr, int size, int rwx);
 
 R_API RBreakpointItem *r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx);
 R_API RBreakpointItem *r_bp_add_hw(RBreakpoint *bp, ut64 addr, int size, int rwx);
+R_API RBreakpointItem* r_bp_add_mem(RBreakpoint *bp, ut64 addr, int size, int rwx);
 R_API void r_bp_restore_one(RBreakpoint *bp, RBreakpointItem *b, bool set);
 R_API int r_bp_restore(RBreakpoint *bp, bool set);
 R_API bool r_bp_restore_except(RBreakpoint *bp, bool set, ut64 addr);
@@ -157,7 +158,7 @@ R_API RList *r_bp_traptrace_new(void);
 R_API void r_bp_traptrace_enable(RBreakpoint *bp, int enable);
 
 /* watchpoint */
-R_API RBreakpointItem *r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int hw, int rw);
+R_API RBreakpointItem *r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int type, int rw);
 
 /* plugin pointers */
 extern RBreakpointPlugin r_bp_plugin_x86;

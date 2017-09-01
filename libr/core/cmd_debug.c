@@ -2914,12 +2914,6 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						ut64 size;
 						int perms;
 
-/* <<<<<<< Updated upstream
-			module = strtok (string, " ");
-			delta = (ut64)r_num_math (core->num, strtok (NULL, ""));
-			bpi = r_debug_bp_add (core->dbg, 0, hwbp, false, 0, module, delta);
-			free (string);
-=======*/
 						*q++ = 0;
 						size = r_num_math (core->num, p);
 						perms = r_str_rwx (q);
@@ -2941,11 +2935,10 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 
 				module = strtok (string, " ");
 				delta = (ut64)r_num_math (core->num, strtok (NULL, ""));
-				bpi = r_debug_bp_add (core->dbg, 0, hwbp, module, delta);
+				bpi = r_debug_bp_add (core->dbg, 0, hwbp, false, 0, module, delta);
 				free (string);
 			}
 			break;
->>>>>>> Stashed changes
 		}
 		break;
 	case 'j': r_bp_list (core->dbg->bp, 'j'); break;

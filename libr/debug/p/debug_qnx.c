@@ -312,28 +312,21 @@ static const char *r_debug_qnx_reg_profile (RDebug *dbg) {
 	return NULL;
 }
 
-static int r_debug_qnx_breakpoint (RBreakpoint *bp, RBreakpointItem *b, int set, void *user) {
+static int r_debug_qnx_breakpoint (void *bp, RBreakpointItem *b, bool set) {
 	int ret = false;
 	if (!bp)
 		return false;
-	if (set) {
-		switch (bp->type) {
-		case R_BP_TYPE_SW:
-			qnxr_set_bp (desc, b->addr, "");
-			break;
-		case R_BP_TYPE_HW:
-			qnxr_set_hwbp (desc, b->addr, "");
-			break;
-		}
-	} else {
-		switch (b->type) {
-		case R_BP_TYPE_SW:
+	switch (b->type) {
+	case R_BP_TYPE_SW:
+		ret = set ?
+			qnxr_set_bp (desc, b->addr, "") :
 			qnxr_remove_bp (desc, b->addr);
-			break;
-		case R_BP_TYPE_HW:
+		break;
+	case R_BP_TYPE_HW:
+		ret = set ? 
+			qnxr_set_hwbp (desc, b->addr, "") :
 			qnxr_remove_hwbp (desc, b->addr);
-			break;
-		}
+		break;
 	}
 	return ret;
 }

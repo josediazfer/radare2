@@ -5,6 +5,10 @@ typedef struct {
 	int sect_count;
 } RWinModInfo;
 
+typedef struct {
+	MEMORY_BASIC_INFORMATION mbi;
+} RWinMemMapInfo;
+
 static char *get_map_type(MEMORY_BASIC_INFORMATION *mbi) {
 	char *type;
 	switch (mbi->Type) {
@@ -23,47 +27,195 @@ static char *get_map_type(MEMORY_BASIC_INFORMATION *mbi) {
 	return type;
 }
 
+static DWORD perms2map (int perms) {
+	DWORD ret;
+
+	if (R_IO_PERM (perms, R_IO_RWX)) {
+		ret = PAGE_EXECUTE_READWRITE;
+	} else if (R_IO_PERM (perms, R_IO_RW)) {
+		ret = PAGE_READWRITE;
+	} else if (R_IO_PERM (perms, R_IO_READ)) {
+		ret = PAGE_READONLY;
+	} else if (R_IO_PERM (perms, R_IO_WRITE)) {
+		ret = PAGE_WRITECOPY;
+	} else if (R_IO_PERM (perms, R_IO_EXEC)) {
+		ret = PAGE_EXECUTE;
+	} else {
+		ret = 0;
+	}
+	return ret;
+}
+
+static int map2perms (DWORD perms) {
+	DWORD perms_;
+	int ret;
+
+	/* mask additional permissions 
+	 * PAGE_GUARD 0x100
+	 * PAGE_NOCACHE	0x200
+	 * PAGE_WRITECOMBINE 0x400
+	 */
+	perms_ = perms & (DWORD)~0xF00;
+	switch (perms_) {
+	case PAGE_EXECUTE:
+		ret = R_IO_EXEC;
+		break;
+	case PAGE_EXECUTE_READ:
+		ret = R_IO_READ | R_IO_EXEC;
+		break;
+	case PAGE_EXECUTE_READWRITE:
+	case PAGE_EXECUTE_WRITECOPY:
+		ret = R_IO_READ | R_IO_WRITE | R_IO_EXEC;
+		break;
+	case PAGE_READONLY:
+		ret = R_IO_READ;
+		break;
+	case PAGE_READWRITE:
+	case PAGE_WRITECOPY:
+		ret = R_IO_READ | R_IO_WRITE;
+		break;
+	default:
+		ret = 0;
+	}
+	return ret;
+}
+
+static char *w32_get_map_info_perms (RDebugMap *map) {
+	RWinMemMapInfo *map_inf;
+	DWORD perms;
+	char perms_str[10];
+
+	map_inf = (RWinMemMapInfo *)map->data;
+	if (!map_inf) {
+		return NULL;
+	}
+	perms = map_inf->mbi.Protect;
+	if ((perms & PAGE_READONLY) || (perms & PAGE_EXECUTE_READ) || (perms & PAGE_READWRITE) ||
+		(perms & PAGE_EXECUTE_READWRITE) || (perms & PAGE_EXECUTE_WRITECOPY) || (perms & PAGE_WRITECOPY)) {
+		perms_str[0] = 'r';
+	} else {
+		perms_str[0] = '-';
+	}
+	if ((perms & PAGE_WRITECOPY) || (perms & PAGE_EXECUTE_WRITECOPY) || (perms & PAGE_READWRITE) ||
+		(perms & PAGE_EXECUTE_READWRITE)) {
+		perms_str[1] = 'w';
+	} else {
+		perms_str[1] = '-';
+	}
+	if ((perms & PAGE_EXECUTE) || (perms & PAGE_EXECUTE_WRITECOPY) || (perms & PAGE_EXECUTE_READ) ||
+		(perms & PAGE_EXECUTE_READWRITE) || (perms & PAGE_EXECUTE_WRITECOPY)) {
+		perms_str[2] = 'x';
+	} else {
+		perms_str[2] = '-';
+	}
+	if (perms & PAGE_GUARD) {
+		perms_str[3] = 'g';
+	} else if (perms & PAGE_NOCACHE) {
+		perms_str[3] = 'n';
+	} else if (perms & PAGE_WRITECOMBINE) {
+		perms_str[3] = 'c';
+	} else {
+		perms_str[3] = '-';
+	}
+	return strdup (perms_str);
+}
+
+char *w32_get_map_info (RDebug *dbg, RDebugMap *map, int type) {
+	char *ret;
+
+	ret = NULL;
+	switch (type) {
+	case R_DEBUG_MAP_INFO_PERMS:
+		ret = w32_get_map_info_perms (map);
+		break;
+	case R_DEBUG_MAP_INFO_EXTRA:
+		break;
+	}
+	return ret;
+}
+
+int w32_map_protect (RDebug *dbg, ut64 addr, int size, int perms) {
+	DWORD perms_old;
+	BOOL ret;
+	HANDLE h_proc = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
+	if (!h_proc) {
+		r_sys_perror ("w32_map_protect/w32_OpenProcess");
+		goto err_w32_map_protect;
+	}
+	ret = VirtualProtectEx (h_proc, (LPVOID)addr, size, perms2map (perms), &perms_old);
+err_w32_map_protect:
+	if (h_proc) {
+		CloseHandle (h_proc);
+	}
+	return ret;
+}
+
+static int w32_set_page_guard (RDebug *dbg, RList *map_list, bool enable) {
+	RListIter *iter;
+	RDebugMap *map;
+	DWORD perms_old;
+	int ret = false;
+	HANDLE h_proc = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
+	if (!h_proc) {
+		r_sys_perror ("w32_set_page_guard/w32_OpenProcess");
+		goto err_w32_set_page_guard;
+	}
+	r_list_foreach (map_list, iter, map) {
+		RWinMemMapInfo *map_inf;
+
+		map_inf = (RWinMemMapInfo *)map->data;
+		if (map_inf) {
+			DWORD perms;
+			perms = map_inf->mbi.Protect;
+			if (enable) {
+				perms |= PAGE_GUARD;
+			}
+			ret = VirtualProtectEx (h_proc, (LPVOID)map->addr, (SIZE_T)map->addr_end - map->addr, perms, &perms_old);
+			if (!ret) {
+				char *fmtstr;
+
+				r_sys_perror ("w32_set_page_guard/VirtualProtectEx");
+				fmtstr = (dbg->bits & R_SYS_BITS_64) ?
+					"failed to modify the memory range permissions : 0x%016"PFMT64x" 0x%016"PFMT64x" %d\n":
+					"failed to modify the memory range permissions : 0x%08"PFMT64x" 0x%08"PFMT64x" %d\n";
+				eprintf (fmtstr, map->addr, map->addr_end, perms);
+			}
+		}
+	}
+err_w32_set_page_guard:
+	if (h_proc) {
+		CloseHandle (h_proc);
+	}
+	return ret;
+}
+
 static RDebugMap *add_map(RList *list, const char *name, ut64 addr, ut64 len, MEMORY_BASIC_INFORMATION *mbi) {
 	RDebugMap *mr;
 	int perm;
 	char *map_type = get_map_type (mbi);
 	char *map_name;
 
-	switch (mbi->Protect) {
-	case PAGE_EXECUTE:
-		perm = R_IO_EXEC;
-		break;
-	case PAGE_EXECUTE_READ:
-		perm = R_IO_READ | R_IO_EXEC;
-		break;
-	case PAGE_EXECUTE_READWRITE:
-		perm = R_IO_READ | R_IO_WRITE | R_IO_EXEC;
-		break;
-	case PAGE_READONLY:
-		perm = R_IO_READ;
-		break;
-	case PAGE_READWRITE:
-		perm = R_IO_READ | R_IO_WRITE;
-		break;
-	case PAGE_WRITECOPY:
-		perm = R_IO_WRITE;
-		break;
-	case PAGE_EXECUTE_WRITECOPY:
-		perm = R_IO_EXEC;
-		break;
-	default:
-		perm = 0;
-	}
+	perm = map2perms (mbi->Protect);
 	map_name = r_str_newf ("%-8s %s", map_type, name);
 	if (!map_name) {
-		perror ("r_str_newf");
+		perror ("add_map/r_str_newf");
 		goto err_add_map;
 	}
 	mr = r_debug_map_new (map_name,
 			     addr,
 			     addr + len, perm, mbi->Type == MEM_PRIVATE);
 	if (mr)  {
+		RWinMemMapInfo *map_inf;
+
 		r_list_append (list, mr);
+		map_inf = (RWinMemMapInfo *)malloc (sizeof (RWinMemMapInfo));
+		if (!map_inf) {
+			perror ("add_map/malloc RWinMemMapInfo");
+			goto err_add_map;
+		}
+		memcpy (&map_inf->mbi, mbi, sizeof (RWinMemMapInfo));
+		mr->data = (void *) map_inf;
+		mr->data_sz = sizeof (RWinMemMapInfo);
 	}
 err_add_map:
 	free (map_name);
@@ -117,7 +269,7 @@ static int set_mod_inf(HANDLE h_proc, RDebugMap *map, RWinModInfo *mod) {
 	len = 0;
 	sect_hdr = NULL;
 	mod_inf_fill = -1;
-	ReadProcessMemory (h_proc, (LPCVOID)(size_t)map->addr, (LPVOID)pe_hdr, sizeof (pe_hdr), (PDWORD)&len);
+	ReadProcessMemory (h_proc, (LPCVOID)(size_t)map->addr, (LPVOID)pe_hdr, sizeof (pe_hdr), (SIZE_T *)&len);
 	if (len == sizeof (pe_hdr) && is_pe_hdr (pe_hdr)) {
 		dos_hdr = (IMAGE_DOS_HEADER *)pe_hdr;
 		if (!dos_hdr) {

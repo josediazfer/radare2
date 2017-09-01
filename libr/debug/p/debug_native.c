@@ -21,6 +21,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 static void r_debug_native_stop(RDebug *dbg);
 static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int perms);
 
+#if __linux__
 typedef struct {
 	RBuffer *buf;
 	ut64 *k;
@@ -28,6 +29,7 @@ typedef struct {
 } RDebugEggCache;
 
 static RList *r_debug_egg_cache;
+#endif
 
 #include "native/bt.c"
 
@@ -203,6 +205,7 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 #endif
 }
 
+#if __linux__
 static RDebugEggCache* r_debug_native_find_egg_code(ut64 *k, int n_k, RListIter **ret_it)
 {
 	RListIter *it;
@@ -260,6 +263,7 @@ static void r_debug_native_add_egg_code(ut64 *k, int n_k, RBuffer *buf)
 	ec->n_k = n_k;
 	r_list_append (r_debug_egg_cache, ec);
 }
+#endif
 
 static int r_debug_native_detach (RDebug *dbg, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
@@ -389,7 +393,6 @@ static bool tracelib(RDebug *dbg, const char *mode, PLIB_ITEM item) {
  * Returns R_DEBUG_REASON_*
  */
 static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
-	int status = -1;
 	RDebugReasonType reason = R_DEBUG_REASON_UNKNOWN;
 
 #if __WINDOWS__ && !__CYGWIN__
@@ -998,6 +1001,20 @@ static RList *r_debug_native_sysctl_map (RDebug *dbg) {
 }
 #endif
 
+static char* r_debug_native_get_map_info (RDebug *dbg, RDebugMap *map, int type) {
+	char *ret;
+
+	ret = NULL;
+#if __WINDOWS__
+	ret = w32_get_map_info (dbg, map, type);
+#else
+	if (type == R_DEBUG_MAP_INFO_PERMS) {
+		ret = strdup(r_str_rwx_i (map->perms));
+	}
+#endif
+	return ret;
+}
+
 static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 
 #if __APPLE__
@@ -1359,55 +1376,60 @@ static int r_debug_native_drx (RDebug *dbg, int n, ut64 addr, int sz, int rwx, i
  * we only handle the case for hardware breakpoints here. otherwise,
  * we let the caller handle the work.
  */
-static int r_debug_native_bp (RBreakpointItem *bp, RBreakpointItem *b, int set, void *user) {
+static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 	int ret = false;
-	RDebug *dbg = user;
+	RDebug *dbg = ((RBreakpoint *)bp)->user;
 #if __i386__ || __x86_64__
-	if (bp && bp->type == R_BP_TYPE_HW) {
+	if (b && b->type == R_BP_TYPE_HW) {
 		return set
 		? drx_add (dbg, bp, b)
 		: drx_del (dbg, bp, b);
 	}
 #endif
 #if __WINDOWS__ || __linux__
-	if (bp && !bp->ign && bp->type == R_BP_TYPE_MEM &&
+	if (b && !b->ign && b->type == R_BP_TYPE_MEM &&
 		!r_debug_is_dead(dbg) && dbg->reason.type != R_DEBUG_REASON_EXIT_PID) {
-		bp->ign = true;
+		b->ign = true;
 		if (set) {
-			RListIter *iter;
-			RDebugMap *map;
 			int unmap_len;
 
 			r_debug_map_sync (dbg);
-			r_list_free (bp->omap);
-			bp->omap = r_debug_get_map_pages (dbg, bp->addr, bp->size, &unmap_len);
-			if (r_list_empty (bp->omap)) {
-				r_list_free (bp->omap);
-				bp->omap = NULL;
+			r_list_free (b->omap);
+			b->omap = r_debug_get_map_pages (dbg, b->addr, b->size, &unmap_len);
+			if (r_list_empty (b->omap)) {
+				r_list_free (b->omap);
+				b->omap = NULL;
 			} else {
 				RDebugReason reason = dbg->reason;
 
 				if (unmap_len > 0) {
-					bp->size -= unmap_len;
-					eprintf("warning memory breakpoint %llx: unmapped length %d, changed breakpoint size to %d\n", bp->addr, unmap_len, bp->size);
+					b->size -= unmap_len;
+					eprintf("warning memory breakpoint %llx: unmapped length %d, changed breakpoint size to %d\n", b->addr, unmap_len, b->size);
 				}
-				ret = r_debug_native_map_protect (dbg, bp->addr, bp->size, 0);
+#if __WINDOWS__
+				ret = w32_set_page_guard (dbg, b->omap, true);		
+#else
+				ret = r_debug_native_map_protect (dbg, b->addr, b->size, 0);
+#endif
 				dbg->reason = reason;
 			} 
 		} else {
-			RListIter *iter;
-			RDebugMap *map;
-
-			if (bp->omap) {
+			if (b->omap) {
 				RDebugReason reason = dbg->reason;
+				RListIter *iter;
+				RDebugMap *map;
 
-				r_list_foreach (bp->omap, iter, map) {
+#if __WINDOWS__
+				ret = w32_set_page_guard (dbg, b->omap, false);		
+#else
+				r_list_foreach (b->omap, iter, map) {
 					ret = r_debug_native_map_protect (dbg, map->addr, map->addr_end - map->addr, map->perm);
 				}
+#endif
 				dbg->reason = reason;
 			}
 		}
-		bp->ign = false;
+		b->ign = false;
 	}
 #endif
 	return ret;
@@ -1670,13 +1692,7 @@ static RList *r_debug_desc_native_list (int pid) {
 
 static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int perms) {
 #if __WINDOWS__ && !__CYGWIN__
-	DWORD old;
-	HANDLE process = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
-	// TODO: align pointers
-	BOOL ret = VirtualProtectEx (WIN32_PI (process), (LPVOID)(UINT)addr,
-	  			size, perms, &old);
-	CloseHandle (process);
-	return ret;
+	return w32_map_protect (dbg, addr, size, perms);
 #elif __APPLE__
 	return xnu_map_protect (dbg, addr, size, perms);
 #elif __linux__
@@ -1822,6 +1838,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.map_alloc = r_debug_native_map_alloc,
 	.map_dealloc = r_debug_native_map_dealloc,
 	.map_get = r_debug_native_map_get,
+	.map_info = r_debug_native_get_map_info,
 	.modules_get = r_debug_native_modules_get,
 	.map_protect = r_debug_native_map_protect,
 	.breakpoint = r_debug_native_bp,

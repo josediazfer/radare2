@@ -119,7 +119,6 @@ int linux_handle_signals (RDebug *dbg, int status) {
 				dbg->reason.fault_addr = (ut64)siginfo.si_addr;
 				if (b) {
 					dbg->reason.bp_type = R_BP_TYPE_MEM;
-					dbg->reason.fault_addr = (ut64)siginfo.si_addr;
 					dbg->reason.type = R_DEBUG_REASON_BREAKPOINT;
 					show_siginfo = false;
 					bp_mem = true;

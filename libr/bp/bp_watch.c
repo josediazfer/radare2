@@ -8,7 +8,7 @@ static void r_bp_watch_add_hw(RBreakpoint *bp, RBreakpointItem *b) {
 	}
 }
 
-R_API RBreakpointItem* r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int hw, int rw) {
+R_API RBreakpointItem* r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int type, int rw) {
 	RBreakpointItem *b;
 	if (addr == UT64_MAX || size < 1) {
 		return NULL;
@@ -22,11 +22,11 @@ R_API RBreakpointItem* r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int 
 	b->size = size;
 	b->enabled = true;
 	b->rwx = rw;
-	b->hw = hw;
-	if (hw) {
+	b->type = type;
+	if (type == R_BP_TYPE_HW) {
 		r_bp_watch_add_hw (bp, b);
 	} else {
-		eprintf ("[TODO]: Software watchpoint is not implmented yet (use ESIL)\n");
+		eprintf ("[TODO]: Watchpoint is not implmented yet (use ESIL)\n");
 		/* TODO */
 	}
 	bp->nbps++;

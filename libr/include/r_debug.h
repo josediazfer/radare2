@@ -112,6 +112,10 @@ typedef enum {
 	R_DEBUG_REASON_IGN,
 } RDebugReasonType;
 
+typedef enum {
+	R_DEBUG_MAP_INFO_PERMS,
+	R_DEBUG_MAP_INFO_EXTRA
+} RDebugMapInfoType;
 
 /* TODO: move to r_anal */
 typedef struct r_debug_frame_t {
@@ -144,6 +148,8 @@ typedef struct r_debug_map_t {
 	int perm;
 	int user;
 	bool shared;
+	void *data;
+	int data_sz;
 } RDebugMap;
 
 typedef struct r_debug_signal_t {
@@ -383,6 +389,7 @@ typedef struct r_debug_plugin_t {
 	char* (*reg_profile)(RDebug *dbg);
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
+	char *(*map_info)(RDebug *dbg, RDebugMap *map, int type);
 	RList *(*modules_get)(RDebug *dbg);
 	RDebugMap* (*map_alloc)(RDebug *dbg, ut64 addr, int size);
 	int (*map_dealloc)(RDebug *dbg, ut64 addr, int size);
@@ -484,6 +491,7 @@ R_API bool r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo);
 /* memory */
 R_API RList *r_debug_modules_list(RDebug*);
 R_API RDebugMap *r_debug_map_alloc(RDebug *dbg, ut64 addr, int size);
+R_API char* r_debug_get_map_info(RDebug *dbg, RDebugMap *map, int type);
 R_API int r_debug_map_dealloc(RDebug *dbg, RDebugMap *map);
 R_API RList *r_debug_map_list_new(void);
 R_API RDebugMap *r_debug_map_get(RDebug *dbg, ut64 addr);
@@ -527,12 +535,8 @@ R_API ut64 r_debug_arg_get(RDebug *dbg, int fast, int num);
 R_API bool r_debug_arg_set(RDebug *dbg, int fast, int num, ut64 value);
 
 /* breakpoints (most in r_bp, this calls those) */
-<<<<<<< Updated upstream
 R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, bool watch, int rw, char *module, st64 m_delta);
-=======
-R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, char *module, st64 m_delta);
 R_API RBreakpointItem *r_debug_bp_add_mem(RDebug *dbg, ut64 addr, int size, int perms);
->>>>>>> Stashed changes
 
 /* pid */
 R_API int r_debug_thread_list(RDebug *dbg, int pid);

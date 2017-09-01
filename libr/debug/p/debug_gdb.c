@@ -870,30 +870,23 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 	return NULL;
 }
 
-static int r_debug_gdb_breakpoint (RBreakpoint *bp, RBreakpointItem *b, int set, void *user) {
+static int r_debug_gdb_breakpoint (RBreakpoint *bp, RBreakpointItem *b, int set) {
 	int ret = false;
 	if (!bp) {
 		return false;
 	}
 	// TODO handle rwx and conditions
-	if (set) {
-		switch (b->type) {
-		case R_BP_TYPE_SW:
-			gdbr_set_bp (desc, b->addr, "");
-			break;
-		case R_BP_TYPE_HW:
-			gdbr_set_hwbp (desc, b->addr, "");
-			break;
-		}
-	} else {
-		switch (b->type) {
-		case R_BP_TYPE_SW:
+	switch (b->type) {
+	case R_BP_TYPE_SW:
+		ret = set ?
+			gdbr_set_bp (desc, b->addr, "") :
 			gdbr_remove_bp (desc, b->addr);
-			break;
-		case R_BP_TYPE_HW:
+		break;
+	case R_BP_TYPE_HW:
+		ret = set ? 
+			gdbr_set_hwbp (desc, b->addr, "") :
 			gdbr_remove_hwbp (desc, b->addr);
-			break;
-		}
+		break;
 	}
 	return ret;
 }

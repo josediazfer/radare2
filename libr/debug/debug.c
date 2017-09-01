@@ -239,33 +239,6 @@ static int get_bpsz_arch(RDebug *dbg) {
 	return bpsz;
 }
 
-#if 0
-R_API RBreakpointItem *r_debug_bp_add_mem(RDebug *dbg, ut64 addr, int size, int perms) {
-	RList *list;
-	RBreakpointItem *bpi = NULL;
-	
-	r_debug_map_sync (dbg);
-	list = r_debug_copy_map_range (dbg, addr, size < 0? addr : addr + size);
-	if (r_list_length (list) == 0) {
-		goto err_r_debug_bp_add_mem;
-	}
-	if (size <= 0) {
-		RDebugMap *map;
-
-		map = r_debug_map_get(dbg, addr);
-		size = map->addr_end - map->addr;
-	}
-	bpi = r_bp_add_mem (dbg, list, addr, size, perms);
-	if (!r_debug_map_protect(dbg, addr, size, 0)) {
-		goto err_r_debug_bp_add_mem;
-	}
-err_r_debug_bp_add_mem:
-	if (!bpi)
-		r_list_free(list);
-	return bpi;
-}
-#endif
-
 /* add a breakpoint with some typical values */
 R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, bool watch, int rw, char *module, st64 m_delta) {
 	int bpsz = get_bpsz_arch (dbg);
