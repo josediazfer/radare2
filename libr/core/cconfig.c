@@ -877,13 +877,8 @@ static int cb_cfgdebug(void *user, void *data) {
 		if (!strcmp (dbgbackend, "bf"))
 			r_config_set (core->config, "asm.arch", "bf");
 		if (core->file) {
-// regression!
-#if __WINDOWS__
-                       r_debug_select (core->dbg, core->dbg->pid, core->dbg->tid);             //XXX use desc-api here for pid and tid
-#else
-                       r_debug_select (core->dbg, r_io_desc_get_pid (core->file->desc),
-                                       r_io_desc_get_tid (core->file->desc));
-#endif
+			r_debug_select (core->dbg, r_io_fd_get_pid (core->io, core->file->fd),
+					r_io_fd_get_tid (core->io, core->file->fd));
 		}
 	} else {
 		if (core->dbg) {
