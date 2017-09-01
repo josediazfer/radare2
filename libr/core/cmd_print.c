@@ -2803,6 +2803,10 @@ static void _pointer_table(RCore *core, ut64 origin, ut64 offset, const ut8 *buf
 	if (step < 1) {
 		step = 4;
 	}
+	if (!r_io_is_valid_offset (core->io, origin, 0) ||
+	    !r_io_is_valid_offset (core->io, offset, 0)) {	
+		return;
+	}
 	if (origin != offset) {
 		switch (mode) {
 		case '*':
@@ -5409,7 +5413,11 @@ R_API void r_print_offset(RPrint *p, ut64 off, int invert, int offseg, int offde
 	const char *white;
 	bool show_color = p->flags & R_PRINT_FLAGS_COLOR;
 	if (show_color) {
+		char rgbstr[32];
 		const char *k = r_cons_singleton ()->pal.offset; // TODO etooslow. must cache
+		if (p->flags & R_PRINT_FLAGS_RAINBOW) {
+			k = r_cons_rgb_str_off (rgbstr, off);
+		}
 		if (invert) {
 			r_cons_invert (true, true);
 		}

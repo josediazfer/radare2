@@ -271,25 +271,25 @@ R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf,
 	if (!b) {
 		return 0;
 	}
-// TODO: handle sections ?
+	// TODO: handle sections ?
 	if (from >= to) {
 		eprintf ("aap: Invalid search range 0x%08"PFMT64x " - 0x%08"PFMT64x "\n", from, to);
 		free (b);
 		return 0;
 	}
 	r_search_reset (core->search, R_SEARCH_KEYWORD);
-	r_search_kw_add (core->search,
-		r_search_keyword_new (buf, blen, mask, mlen, NULL));
+	r_search_kw_add (core->search, r_search_keyword_new (buf, blen, mask, mlen, NULL));
 	r_search_begin (core->search);
 	r_search_set_callback (core->search, &__prelude_cb_hit, core);
 	preludecnt = 0;
 	for (at = from; at < to; at += core->blocksize) {
-		if (r_cons_singleton ()->breaked) {
+		if (r_cons_is_breaked ()) {
 			break;
 		}
-		if (!r_io_read_at (core->io, at, b, core->blocksize)) {
+		if (!r_io_is_valid_offset (core->io, at, 0)) {
 			break;
 		}
+		(void)r_io_read_at (core->io, at, b, core->blocksize);
 		if (r_search_update (core->search, &at, b, core->blocksize) == -1) {
 			eprintf ("search: update read error at 0x%08"PFMT64x "\n", at);
 			break;
@@ -626,14 +626,14 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char 
 			ls_foreach (core->io->sections, iter, s) {
 				if (!*from) {
 					*from = s->vaddr;
-					*to = s->vaddr + s->vsize;
+					*to = s->vaddr + s->vsize -1 ;
 					continue;
 				}
 				if (((s->vaddr) < *from) && s->vaddr) {
 					*from = s->vaddr;
 				}
 				if ((s->vaddr + s->vsize) > *to) {
-					*to = s->vaddr + s->vsize;
+					*to = s->vaddr + s->vsize - 1;
 				}
 			}
 		//}
@@ -653,11 +653,11 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char 
 			ls_foreach (core->io->sections, iter, s) {
 				if (*from >= s->paddr && *from < (s->paddr + s->size)) {
 					*from = s->vaddr;
-					*to = s->vaddr + s->vsize;
+					*to = s->vaddr + s->vsize - 1;
 					break;
 				}
 				if (*from >= s->vaddr && *from < (s->vaddr + s->vsize)) {
-					*to = s->vaddr + s->vsize;
+					*to = s->vaddr + s->vsize - 1;
 					break;
 				}
 			}
@@ -726,7 +726,7 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char 
 					}
 					map->fd = s->fd;
 					map->from = s->vaddr;
-					map->to = s->vaddr + s->vsize;
+					map->to = s->vaddr + s->vsize - 1;
 					if (map->from && map->to) {
 						if (map->from < *from) {
 							*from = map->from;
@@ -1898,7 +1898,7 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 static void do_string_search(RCore *core, struct search_parameters *param) {
 	ut64 at;
 	ut8 *buf;
-	int oldfd = (core && core->io && core->io->desc) ? core->io->desc->fd : -1;
+	int oldfd = (core && core->io) ? r_io_fd_get_current (core->io) : -1;
 	int bufsz;
 
 	if (json) {
@@ -1930,7 +1930,7 @@ static void do_string_search(RCore *core, struct search_parameters *param) {
 		// XXX required? imho nor_io_set_fd (core->io, core->file->fd);
 		if (!param->boundaries) {
 			RIOMap *map = R_NEW0 (RIOMap);
-			map->fd = core->io->desc->fd;
+			map->fd = r_io_fd_get_current (core->io);
 			map->from = param->from;
 			map->to = param->to;
 			param->boundaries = r_list_newf (free);
