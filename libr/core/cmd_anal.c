@@ -235,7 +235,7 @@ static const char *help_msg_afb[] = {
 	"afb+", " fcn_at bbat bbsz [jump] [fail] ([type] ([diff]))", "add basic block by hand",
 	"afbr", "", "Show addresses of instructions which leave the function",
 	"afbj", "", "show basic blocks information in json",
-	"afbe", "bbfrom bbto", "add basic-block edge for switch-cases",
+	"afbe", " bbfrom bbto", "add basic-block edge for switch-cases",
 	"afB", " [bits]", "define asm.bits for the given function",
 	NULL
 };
@@ -456,13 +456,13 @@ static const char *help_msg_ah[] = {
 static const char *help_msg_ahi[] = {
 	"Usage", "ahi [sbodh] [@ offset]", " Define numeric base",
 	"ahi", " [base]", "set numeric base (1, 2, 8, 10, 16)",
-	"ahi", " b", "set base to binary (1)",
+	"ahi", " b", "set base to binary (2)",
 	"ahi", " d", "set base to decimal (10)",
 	"ahi", " h", "set base to hexadecimal (16)",
 	"ahi", " o", "set base to octal (8)",
 	"ahi", " i", "set base to IP address (32)",
 	"ahi", " S", "set base to syscall (80)",
-	"ahi", " s", "set base to string (2)",
+	"ahi", " s", "set base to string (1)",
 	NULL
 };
 
@@ -1788,18 +1788,20 @@ static bool fcnNeedsPrefix(const char *name) {
 }
 
 /* TODO: move into r_anal_fcn_rename(); */
-static bool setFunctionName(RCore *core, ut64 off, const char *name, bool prefix) {
-	char *oname, *nname = NULL;
+static bool setFunctionName(RCore *core, ut64 off, const char *_name, bool prefix) {
+	char *name, *oname, *nname = NULL;
 	RAnalFunction *fcn;
-	if (!core || !name) {
+	if (!core || !_name) {
 		return false;
 	}
 	const char *fcnpfx = r_config_get (core->config, "anal.fcnprefix");
 	if (!fcnpfx) {
 		fcnpfx = "fcn";
 	}
-	if (r_reg_get (core->anal->reg, name, -1)) {
-		name = r_str_newf ("%s.%s", fcnpfx, name);
+	if (r_reg_get (core->anal->reg, _name, -1)) {
+		name = r_str_newf ("%s.%s", fcnpfx, _name);
+	} else {
+		name = strdup (_name);
 	}
 	fcn = r_anal_get_fcn_in (core->anal, off,
 				R_ANAL_FCN_TYPE_FCN | R_ANAL_FCN_TYPE_SYM | R_ANAL_FCN_TYPE_LOC);
@@ -1820,6 +1822,7 @@ static bool setFunctionName(RCore *core, ut64 off, const char *name, bool prefix
 	}
 	free (oname);
 	free (nname);
+	free (name);
 	return true;
 }
 
@@ -1849,7 +1852,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 
 	r_cons_break_timeout (r_config_get_i (core->config, "anal.timeout"));
 	switch (input[1]) {
-	case 'f':
+	case 'f': // "aff"
 		r_anal_fcn_fit_overlaps (core->anal, NULL);
 		break;
 	case '-': // "af-"
@@ -1864,7 +1867,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			r_anal_fcn_del (core->anal, addr);
 		}
 		break;
-	case 'u':
+	case 'u': // "afu"
 		{
 		ut64 addr = core->offset;
 		ut64 addr_end = r_num_math (core->num, input + 2);
@@ -1994,7 +1997,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 		case '?':
 			r_core_cmd_help (core, help_msg_afl);
 			break;
-		case 'l':
+		case 'l': // "afll"
 			if (input[3] == '?') {
 				// TODO #7967 help refactor
 				help_msg_afll[1] = "afll";
@@ -2002,19 +2005,19 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 				break;
 			}
 			/* fallthrough */
-		case 'j':
-		case 'q':
-		case 's':
-		case '*':
+		case 'j': // "aflj"
+		case 'q': // "aflq"
+		case 's': // "afls"
+		case '*': // "afl*"
 			r_core_anal_fcn_list (core, NULL, input + 2);
 			break;
-		default:
+		default: // "afl "
 			r_core_anal_fcn_list (core, NULL, "o");
 			break;
 		}
 		break;
-	case 's':
-		{ // "afs"
+	case 's': // "afs"
+		{
 		ut64 addr;
 		RAnalFunction *f;
 		const char *arg = input + 3;
@@ -2072,7 +2075,26 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			break;
 		}
 		switch (input[2]) {
-		case 'o':{
+		case '\0': // "afc"
+			r_cons_println (fcn->cc);
+			break;
+		case ' ': { // "afc "
+			char *cc = r_str_chop (strdup (input + 3));
+			if (!r_anal_cc_exist (core->anal, cc)) {
+				eprintf ("Unknown calling convention '%s'\n"
+						"See afcl for available types\n", cc);
+			} else {
+				fcn->cc = r_str_const (r_anal_cc_to_constant (core->anal, cc));
+			}
+			break;
+		}
+		case 'a': // "afca""
+			eprintf ("Todo\n");
+			break;
+		case 'l': // "afcl" list all function Calling conventions.
+			sdb_foreach (core->anal->sdb_cc, cc_print, NULL);
+			break;
+		case 'o': { // "afco"
 			char *dbpath = r_str_chop (strdup (input + 3));
 			if (r_file_exists (dbpath)) {
 				Sdb *db = sdb_new (0, dbpath, 0);
@@ -2081,17 +2103,9 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 				sdb_free (db);
 			}
 			free (dbpath);
-			} break;
-		case'?':
-			r_core_cmd_help (core, help_msg_afc);
 			break;
-		case 'l': //afcl list all function Calling conventions.
-			sdb_foreach (core->anal->sdb_cc, cc_print, NULL);
-			break;
-		case 'a':
-			eprintf ("Todo\n");
-			break;
-		case 'r': {	// afcr
+		}
+		case 'r': {	// "afcr"
 			int i;
 			char *out, *cmd, *regname, *tmp;
 			char *subvec_str = r_str_new ("");
@@ -2155,20 +2169,9 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			free (subvec_str);
 			free (json_str);
 		} break;
-		case ' ': {
-			char *cc = r_str_chop (strdup (input + 3));
-			if (!r_anal_cc_exist (core->anal, cc)) {
-				eprintf ("Unknown calling convention '%s'\n"
-					"See afcl for available types\n", cc);
-			} else {
-				fcn->cc = r_str_const (r_anal_cc_to_constant (core->anal, cc));
-			}
-			}break;
-		case 0:
-			r_cons_println (fcn->cc);
-			break;
+		case '?': // "afc?"
 		default:
-			r_cons_println ("See afc?");
+			r_core_cmd_help (core, help_msg_afc);
 		}
 		}break;
 	case 'B': // "afB" // set function bits
@@ -2191,21 +2194,21 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 		break;
 	case 'b': // "afb"
 		switch (input[2]) {
-		case '-':
+		case '-': // "afb-"
 			anal_fcn_del_bb (core, input + 3);
 			break;
-		case 'e':
+		case 'e': // "afbe"
 			anal_bb_edge (core, input + 3);
 			break;
 		case 0:
-		case ' ':
-		case 'q':
-		case 'r':
-		case '*':
+		case ' ': // "afb "
+		case 'q': // "afbq"
+		case 'r': // "afbr"
+		case '*': // "afb*"
 		case 'j': // "afbj"
 			anal_fcn_list_bb (core, input + 2, false);
 			break;
-		case '.':
+		case '.': // "afb."
 			anal_fcn_list_bb (core, input[2]? " $$": input + 2, true);
 			break;
 		case '+': // "afb+"
@@ -2219,10 +2222,10 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 		break;
 	case 'n': // "afn"
 		switch (input[2]) {
-		case 's':
+		case 's': // "afns"
 			free (r_core_anal_fcn_autoname (core, core->offset, 1));
 			break;
-		case 'a':
+		case 'a': // "afna"
 			{
 			char *name = r_core_anal_fcn_autoname (core, core->offset, 0);
 			if (name) {
@@ -2231,7 +2234,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			}
 			}
 			break;
-		case 0:
+		case 0: // "afn"
 			{
 				RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, -1);
 				if (fcn) {
@@ -2239,7 +2242,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 				}
 			}
 			break;
-		case ' ':
+		case ' ': // "afn "
 			{
 			ut64 off = core->offset;
 			char *p, *name = strdup (input + 3);
@@ -2263,7 +2266,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			break;
 		}
 		break;
-	case 'S':
+	case 'S': // afS"
 		{
 		RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, -1);
 		if (fcn) {
@@ -2306,10 +2309,10 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 		}
 		break;
 #endif
-	case 'x':
+	case 'x': // "afx"
 		switch (input[2]) {
-		case '\0':
-		case ' ':
+		case '\0': // "afx"
+		case ' ': // "afx "
 #if FCN_OLD
 			// TODO: sdbize!
 			// list xrefs from current address
@@ -2330,10 +2333,10 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			eprintf ("TODO\n");
 #endif
 			break;
-		case 'c': // add meta xref
-		case 'd':
-		case 's':
-		case 'C': {
+		case 'c': // "afxc" add code xref
+		case 'd': // "afxd"
+		case 's': // "afxs"
+		case 'C': { // "afxC"
 			char *p;
 			ut64 a, b;
 			RAnalFunction *fcn;
@@ -2354,7 +2357,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			free (mi);
 			}
 			break;
-		case '-':
+		case '-': // "afx-"
 			{
 			char *p;
 			ut64 a, b;
@@ -2375,7 +2378,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			}
 			break;
 		default:
-		case '?':
+		case '?': // "afx?"
 			r_core_cmd_help (core, help_msg_afx);
 			break;
 		}
@@ -2389,12 +2392,12 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			}
 		}
 		break;
-	case '?':
+	case '?': // "af?"
 		r_core_cmd_help (core, help_msg_af);
 		break;
 	case 'r': // "afr" // analyze function recursively
-	case ' ':
-	case 0:
+	case ' ': // "af "
+	case '\0': // "af"
 		{
 		char *uaddr = NULL, *name = NULL;
 		int depth = r_config_get_i (core->config, "anal.depth");
@@ -2479,7 +2482,7 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 
 		if (name) {
 			if (*name && !setFunctionName (core, addr, name, true)) {
-				eprintf ("Cannot find function '%s' at 0x%08" PFMT64x "\n", name, addr);
+				eprintf ("Cannot find function '%s' at 0x%08" PFMT64x "\n", name, (ut64)addr);
 			}
 			free (name);
 		}
@@ -2927,9 +2930,11 @@ repeat:
 			goto out_return_one;
 		}
 	}
-	if (!r_io_read_at (core->io, addr, code, sizeof (code))) {
+	// TODO #8264 bool vs int, bring back old hack
+	if (!r_io_read_at (core->io, addr, code, 4)) {
 		eprintf ("read errno\n");
 	}
+	(void)r_io_read_at (core->io, addr, code, sizeof (code));
 	// TODO: sometimes this is dupe
 	ret = r_anal_op (core->anal, &op, addr, code, sizeof (code));
 	if (ret < 0) {
@@ -3219,14 +3224,6 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 				}
 			}
 		}
-	}
-	if (!esil) {
-		int stacksize = r_config_get_i (core->config, "esil.stack.depth");
-		int iotrap = r_config_get_i (core->config, "esil.iotrap");
-		if (!(esil = r_anal_esil_new (stacksize, iotrap))) {
-			return;
-		}
-		core->anal->esil = esil;
 	}
 	if (*input == '?') {
 		eprintf ("Usage: aeim [addr] [size] [name] - initialize ESIL VM stack\n");
@@ -3683,8 +3680,6 @@ static void cmd_anal_esil(RCore *core, const char *input) {
 		case 'c':
 			if (input[2] == ' ') {
 				// seek to this address
-				r_core_cmd0 (core, "aei");  // init vm
-				r_core_cmd0 (core, "aeim"); // init stack
 				r_core_cmdf (core, "ar PC=%s", input + 3);
 				r_core_cmd0 (core, ".ar*");
 			} else {
@@ -3810,6 +3805,7 @@ static void cmd_anal_esil(RCore *core, const char *input) {
 				}
 				ret = r_core_esil_step (core, UT64_MAX, NULL, NULL);
 				r_anal_op_free (op);
+				op = NULL;
 				if (core->anal->esil->trap || core->anal->esil->trap_code) {
 					break;
 				}
@@ -3823,6 +3819,9 @@ static void cmd_anal_esil(RCore *core, const char *input) {
 				} else {
 					addr = newaddr;
 				}
+			}
+			if (op) {
+				r_anal_op_free (op);
 			}
 		} else {
 			// "aec"  -> continue until ^C
@@ -4351,20 +4350,7 @@ static void cmd_anal_calls(RCore *core, const char *input) {
 			m->to = addr + len;
 			r_list_append (ranges, m);
 		} else {
-			RIOSection *s;
-			SdbListIter *iter;
-			ranges = r_list_newf ((RListFree)free);
-			ls_foreach (core->io->sections, iter, s) {
-				if (s->flags & 1) {
-					RIOMap *m = R_NEW0 (RIOMap);
-					if (!m) {
-						continue;
-					}
-					m->from = s->vaddr;
-					m->to = s->vaddr + s->size;
-					r_list_append (ranges, m);
-				}
-			}
+			ranges = r_core_get_boundaries_prot (core, R_IO_EXEC, "io.sections", NULL, NULL);
 		}
 		addr_end = addr + len;
 	}
@@ -4912,8 +4898,8 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 		} else if (input[1] == ' ') {
 		// You can either specify immbase with letters, or numbers
 			const int base =
-				(input[2] == 'b') ? 1 :
-				(input[2] == 's') ? 2 :
+				(input[2] == 's') ? 1 :
+				(input[2] == 'b') ? 2 :
 				(input[2] == 'o') ? 8 :
 				(input[2] == 'd') ? 10 :
 				(input[2] == 'h') ? 16 :
@@ -5546,6 +5532,9 @@ static void cmd_anal_aad(RCore *core, const char *input) {
 static bool archIsArmOrThumb(RCore *core) {
 	RAsm *as = core ? core->assembler : NULL;
 	if (as && as->cur && as->cur->arch) {
+		if (r_str_startswith (as->cur->arch, "mips")) {
+			return true;
+		}
 		if (r_str_startswith (as->cur->arch, "arm")) {
 			if (as->cur->bits < 64) {
 				return true;
@@ -5572,11 +5561,11 @@ void _CbInRangeAav(RCore *core, ut64 from, ut64 to, int vsize, bool asterisk, in
 	if (asterisk) {
 		r_cons_printf ("ax 0x%"PFMT64x " 0x%"PFMT64x "\n", to, from);
 		r_cons_printf ("Cd %d @ 0x%"PFMT64x "\n", vsize, from);
-		r_cons_printf ("f+ sym.0x%08"PFMT64x "= 0x%08"PFMT64x, to, to);
+		r_cons_printf ("f+ aav.0x%08"PFMT64x "= 0x%08"PFMT64x, to, to);
 	} else {
 		r_core_cmdf (core, "ax 0x%"PFMT64x " 0x%"PFMT64x, to, from);
 		r_core_cmdf (core, "Cd %d @ 0x%"PFMT64x, vsize, from);
-		r_core_cmdf (core, "f+ sym.0x%08"PFMT64x "= 0x%08"PFMT64x, to, to);
+		r_core_cmdf (core, "f+ aav.0x%08"PFMT64x "= 0x%08"PFMT64x, to, to);
 	}
 }
 

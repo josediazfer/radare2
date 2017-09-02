@@ -201,6 +201,14 @@ static int gdbr_parse_target_xml(libgdbr_t *g, char *xml_data, ut64 len) {
 			g->target.bits = 32;
 		}
 		// TODO others
+	} else {
+		// apple's debugserver on ios9
+		if (strstr (xml_data, "com.apple.debugserver.arm64")) {
+			g->target.arch = R_SYS_ARCH_ARM;
+			g->target.bits = 64;
+		} else {
+			eprintf ("Unknown architecture parsing XML (%s)\n", xml_data);
+		}
 	}
 	// Features
 	feature = xml_data;
@@ -352,10 +360,9 @@ static int gdbr_parse_target_xml(libgdbr_t *g, char *xml_data, ut64 len) {
 				if (r_str_startswith (tmp1, "code_ptr")) {
 					if (!is_pc) {
 						is_pc = true;
-						strcpy (pc_alias, "=PC ");
+						strcpy (pc_alias, "=PC\t");
 						strncpy (pc_alias + 4, regname, reg_name_len);
-						pc_alias[reg_name_len + 4] = '\n';
-						pc_alias[reg_name_len + 5] = '\0';
+						strcpy (pc_alias + 4 + reg_name_len, "\n");
 					}
 				}
 				// Check all flags
@@ -447,6 +454,63 @@ static int gdbr_parse_target_xml(libgdbr_t *g, char *xml_data, ut64 len) {
 			profile = tmp2;
 		}
 		strcpy (profile + profile_len, pc_alias);
+	}
+	// Difficult to parse these out from xml. So manually added from gdb's xml files
+	switch (g->target.arch) {
+	case R_SYS_ARCH_ARM:
+		switch (g->target.bits) {
+		case 32:
+			if (!(profile = r_str_prefix (profile,
+							"=PC    r15\n"
+							"=SP    r14\n" // XXX
+							"=A0    r0\n"
+							"=A1    r1\n"
+							"=A2    r2\n"
+							"=A3    r3\n"
+						      ))) {
+				goto exit_err;
+			}
+			break;
+		case 64:
+			if (!(profile = r_str_prefix (profile,
+							"=PC\tpc\n"
+							"=SP\tsp\n"
+							"=BP\tx29\n"
+							"=A0    x0\n"
+							"=A1    x1\n"
+							"=A2    x2\n"
+							"=A3    x3\n"
+							"=ZF    zf\n"
+							"=SF    nf\n"
+							"=OF    vf\n"
+							"=CF    cf\n"
+							"=SN    x8\n"
+						      ))) {
+				goto exit_err;
+			}
+		}
+		break;
+		break;
+	case R_SYS_ARCH_X86:
+		switch (g->target.bits) {
+		case 32:
+			if (!(profile = r_str_prefix (profile,
+						     "=PC\teip\n"
+						     "=SP\tesp\n"
+						     "=BP\tebp\n"))) {
+				goto exit_err;
+			}
+			break;
+		case 64:
+			if (!(profile = r_str_prefix (profile,
+						     "=PC\trip\n"
+						     "=SP\trsp\n"
+						     "=BP\trbp\n"))) {
+				goto exit_err;
+			}
+		}
+		break;
+		// TODO others
 	}
 	free (g->target.regprofile);
 	free (flags);

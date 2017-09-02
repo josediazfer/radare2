@@ -1,9 +1,9 @@
 /* radare2 - LGPL - Copyright 2017 - condret, MaskRay */
 
+#include <r_io.h>
 #include <stdlib.h>
 #include <sdb.h>
 #include "r_binheap.h"
-#include "r_io.h"
 #include "r_util.h"
 #include "r_vector.h"
 
@@ -232,7 +232,8 @@ R_API RIOMap* r_io_map_add(RIO* io, int fd, int flags, ut64 delta, ut64 addr, ut
 		SdbListIter* iter;
 		RIOMap* map;
 		ls_foreach (io->maps, iter, map) {
-			if (map->fd == fd && map->from == addr) {
+			if (map->fd == fd && map->from == addr &&
+			    map->to == addr + size - 1 && map->delta == delta) {
 				return NULL;
 			}
 		}

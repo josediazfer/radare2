@@ -237,9 +237,11 @@ static int cb_analnoncode(void *user, void *data) {
 static void update_analarch_options(RCore *core, RConfigNode *node) {
 	RAnalPlugin *h;
 	RListIter *it;
-	r_list_purge (node->options);
-	r_list_foreach (core->anal->plugins, it, h) {
-		SETOPTIONS (node, h->name, NULL);
+	if (core && core->anal && node) {
+		r_list_purge (node->options);
+		r_list_foreach (core->anal->plugins, it, h) {
+			SETOPTIONS (node, h->name, NULL);
+		}
 	}
 }
 
@@ -288,6 +290,18 @@ static int cb_asmminvalsub(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->parser->minval = node->i_value;
+	return true;
+}
+
+static int cb_scrrainbow(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	if (node->i_value) {
+		core->print->flags |= R_PRINT_FLAGS_RAINBOW;
+	} else {
+		core->print->flags &= (~R_PRINT_FLAGS_RAINBOW);
+	}
+	r_print_set_flags (core->print, core->print->flags);
 	return true;
 }
 
@@ -350,9 +364,11 @@ static int cb_asmcpu(void *user, void *data) {
 static void update_asmarch_options(RCore *core, RConfigNode *node) {
 	RAsmPlugin *h;
 	RListIter *iter;
-	r_list_purge (node->options);
-	r_list_foreach (core->assembler->plugins, iter, h) {
-		SETOPTIONS (node, h->name, NULL);
+	if (core && node && core->assembler) {
+		r_list_purge (node->options);
+		r_list_foreach (core->assembler->plugins, iter, h) {
+			SETOPTIONS (node, h->name, NULL);
+		}
 	}
 }
 
@@ -861,13 +877,8 @@ static int cb_cfgdebug(void *user, void *data) {
 		if (!strcmp (dbgbackend, "bf"))
 			r_config_set (core->config, "asm.arch", "bf");
 		if (core->file) {
-// regression!
-#if __WINDOWS__
-                       r_debug_select (core->dbg, core->dbg->pid, core->dbg->tid);             //XXX use desc-api here for pid and tid
-#else
-                       r_debug_select (core->dbg, r_io_desc_get_pid (core->file->desc),
-                                       r_io_desc_get_tid (core->file->desc));
-#endif
+			r_debug_select (core->dbg, r_io_fd_get_pid (core->io, core->file->fd),
+					r_io_fd_get_tid (core->io, core->file->fd));
 		}
 	} else {
 		if (core->dbg) {
@@ -2175,6 +2186,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("asm.middle", "false", "Allow disassembling jumps in the middle of an instruction");
 	SETPREF ("asm.noisy", "true", "Show comments considered noisy but possibly useful");
 	SETPREF ("asm.offset", "true", "Show offsets at disassembly");
+	SETCB ("scr.rainbow", "false", &cb_scrrainbow, "Shows rainbow colors depending of address");
 	SETPREF ("asm.reloff", "false", "Show relative offsets instead of absolute address in disasm");
 	SETPREF ("asm.reloff.flags", "false", "Show relative offsets to flags (not only functions)");
 	SETPREF ("asm.section", "false", "Show section name before offset");

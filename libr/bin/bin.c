@@ -1505,6 +1505,9 @@ static RBinFile *r_bin_file_new_from_bytes(RBin *bin, const char *file,
 	RBinXtrPlugin *xtr = NULL;
 	RBinObject *o = NULL;
 	RBinFile *bf = NULL;
+	if (sz == UT64_MAX) {
+		return NULL;
+	}
 
 	if (xtrname) {
 		xtr = r_bin_get_xtrplugin_by_name (bin, xtrname);
@@ -2398,11 +2401,17 @@ R_API void r_bin_set_user_ptr(RBin *bin, void *user) {
 	bin->user = user;
 }
 
+static RBinSection* _get_vsection_at(RBin *bin, ut64 vaddr) {
+	RBinObject *cur = r_bin_object_get_cur (bin);
+	return r_bin_get_section_at (cur, vaddr, true);
+}
 R_API void r_bin_bind(RBin *bin, RBinBind *b) {
 	if (b) {
 		b->bin = bin;
 		b->get_offset = getoffset;
 		b->get_name = getname;
+		b->get_sections = r_bin_get_sections;
+		b->get_vsect_at = _get_vsection_at;
 	}
 }
 

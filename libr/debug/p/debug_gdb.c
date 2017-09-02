@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2016 - pancake, defragger */
+/* radare - LGPL - Copyright 2009-2017 - pancake, defragger */
 
 #include <r_asm.h>
 #include <r_debug.h>
@@ -235,7 +235,7 @@ static int r_debug_gdb_reg_write(RDebug *dbg, int type, const ut8 *buf, int size
 	free (r_reg_get_bytes (dbg->reg, type, &buflen));
 	// some implementations of the gdb protocol are acting weird.
 	// so winedbg is not able to write registers through the <G> packet
-	// and also it does not return the whole gdb register profile after
+	// and also it does not return the whole gdb register profile after\n"
 	// calling <g>
 	// so this workaround resizes the small register profile buffer
 	// to the whole set and fills the rest with 0
@@ -382,7 +382,7 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 				"=A0	eax\n"
 				"=A1	ebx\n"
 				"=A2	ecx\n"
-				"=A3	edi\n"
+				"=A3	edx\n"
 				"=SN	oeax\n"
 				"gpr	eax	.32	0	0\n"
 				"gpr	ecx	.32	4	0\n"
@@ -532,10 +532,16 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 			return strdup (
 			"=PC	pc\n"
 			"=SP	sp\n"
-			"=A0	r0\n"
-			"=A1	r1\n"
-			"=A2	r2\n"
-			"=A3	r3\n"
+			"=BP	x29\n"
+			"=A0	x0\n"
+			"=A1	x1\n"
+			"=A2	x2\n"
+			"=A3	x3\n"
+			"=ZF	zf\n"
+			"=SF	nf\n"
+			"=OF	vf\n"
+			"=CF	cf\n"
+			"=SN	x8\n"
 			"gpr	x0	.64	0	0\n"
 			"gpr	x1	.64	8	0\n"
 			"gpr	x2	.64	16	0\n"
@@ -671,6 +677,7 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 #endif
 			);
 		}
+		break;
 	case R_SYS_ARCH_SH:
 		return strdup (
 			"=PC    pc\n"
@@ -699,6 +706,7 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 			"gpr	mach	.32	80	0\n"
 			"gpr	macl	.32	84	0\n"
 		);
+		break;
 	case R_SYS_ARCH_LM32:
 		return strdup (
 			"=PC    PC\n"
@@ -744,6 +752,7 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 			"gpr	IM	.32	148	0\n"
 			"gpr	IP	.32	152	0\n"
 		);
+		break;
 	case R_SYS_ARCH_MIPS:
 		return strdup (
 			"=PC    pc\n"
@@ -865,14 +874,13 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 			"gpr	pc	.32	35	0\n"
 	/*		"gpr	pc	.32	39	0\n" */
 	);
-
 	}
 	return NULL;
 }
 
-static int r_debug_gdb_breakpoint (RBreakpoint *bp, RBreakpointItem *b, int set) {
-	int ret = false;
-	if (!bp) {
+static int r_debug_gdb_breakpoint (void *bp, RBreakpointItem *b, bool set) {
+	int ret;
+	if (!b) {
 		return false;
 	}
 	// TODO handle rwx and conditions
@@ -944,6 +952,12 @@ static RDebugInfo* r_debug_gdb_info(RDebug *dbg, const char *arg) {
 	return rdi;
 }
 
+#include "native/bt.c"
+
+static RList* r_debug_gdb_frames(RDebug *dbg, ut64 at) {
+	return r_debug_native_frames (dbg, at);
+}
+
 RDebugPlugin r_debug_plugin_gdb = {
 	.name = "gdb",
 	/* TODO: Add support for more architectures here */
@@ -965,6 +979,7 @@ RDebugPlugin r_debug_plugin_gdb = {
 	.kill = &r_debug_gdb_kill,
 	.info = &r_debug_gdb_info,
 	.select = &r_debug_gdb_select,
+	.frames = &r_debug_gdb_frames,
 	//.bp_write = &r_debug_gdb_bp_write,
 	//.bp_read = &r_debug_gdb_bp_read,
 };

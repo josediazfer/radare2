@@ -333,12 +333,8 @@ static int r_core_file_do_load_for_debug(RCore *r, ut64 baseaddr, const char *fi
 		return false;
 	}
 	if (cf) {
-#if __WINDOWS__
-		r_debug_select (r->dbg, r->dbg->pid, r->dbg->tid);
-#else
 		r_debug_select (r->dbg, r_io_fd_get_pid (r->io, cf->fd),
 				r_io_fd_get_tid (r->io, cf->fd));
-#endif
 	}
 #if !__linux__
 #if !__WINDOWS__
@@ -521,6 +517,7 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 	bool suppress_warning = r_config_get_i (r->config, "file.nowarn");
 	RCoreFile *cf = r_core_file_cur (r);
 	RIODesc *desc = cf ? r_io_desc_get (r->io, cf->fd) : NULL;
+	int va = 1;
 	ut64 laddr = r_config_get_i (r->config, "bin.laddr");
 	RBinFile *binfile = NULL;
 	RBinPlugin *plugin = NULL;
@@ -625,8 +622,14 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 		}
 	}
 	obj = r_bin_cur_object (r->bin);
+	if (obj && plugin && strcmp (plugin->name, "any")) {
+		va = obj->info ? obj->info->has_va : va;
+	}
+	if (!va) {
+		r_config_set_i (r->config, "io.va", 0);
+	}
 	//workaround to map correctly malloc:// and raw binaries
-	if (!plugin || !strcmp (plugin->name, "any") || r_io_desc_is_dbg (desc) || (obj && !obj->sections)) {
+	if (!plugin || !strcmp (plugin->name, "any") || r_io_desc_is_dbg (desc) || (obj && (!obj->sections || !va))) {
 		r_io_map_new (r->io, desc->fd, desc->flags, 0LL, laddr, r_io_desc_size (desc), true);
 	}
 	return true;
@@ -1035,7 +1038,7 @@ R_API int r_core_file_binlist(RCore *core) {
 	return count;
 }
 
-R_API int r_core_file_close_fd(RCore *core, int fd) {
+R_API bool r_core_file_close_fd(RCore *core, int fd) {
 	RCoreFile *file;
 	RListIter *iter;
 	if (fd == -1) {
@@ -1053,7 +1056,7 @@ R_API int r_core_file_close_fd(RCore *core, int fd) {
 			return true;
 		}
 	}
-	return false;
+	return r_io_fd_close (core->io, fd);
 }
 
 R_API int r_core_hash_load(RCore *r, const char *file) {

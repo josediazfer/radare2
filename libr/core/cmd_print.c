@@ -1933,7 +1933,6 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 	char *ox, *qo, *string = NULL;
 	char *line, *s, *str, *string2 = NULL;
 	int i, count, use_color = r_config_get_i (core->config, "scr.color");
-	bool is_free_pending = false;
 	bool show_comments = r_config_get_i (core->config, "asm.comments");
 
 	r_config_set_i (core->config, "scr.color", 0);
@@ -2019,6 +2018,7 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 		// XXX leak
 		str = strstr (line, " str.");
 		if (str) {
+			str = strdup (str);
 			char *qoe = NULL;
 			if (!qoe) {
 				qoe = strchr (str + 1, '\x1b');
@@ -2030,23 +2030,19 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 				qoe = strchr (str + 1, ' ');
 			}
 			if (qoe) {
+				free (string2);
 				string2 = r_str_ndup (str + 1, qoe - str - 1);
 			} else {
+				free (string2);
 				string2 = strdup (str + 1);
 			}
 			if (string2) {
-				/* the str.* flag will win over naked "string",
-				 * since it's generally more accurate */
-				if (string) {
-					R_FREE (string);
-				}
+				R_FREE (string);
 				string = string2;
 				string2 = NULL;
 			}
 		}
-		if (string2) {
-			R_FREE (string2);
-		}
+		R_FREE (string2);
 		_handle_call (core, line, &str);
 		if (!str) {
 			str = strstr (line, "sym.");
@@ -2055,11 +2051,12 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 			}
 		}
 		if (str) {
+			str = strdup (str);
 			char *qoe = strstr (str, ";");
 			if (qoe) {
-				// XXX str leaks
+				char* t = str;
 				str = r_str_ndup (str, qoe - str);
-				is_free_pending = true;
+				free (t);
 			}
 		}
 		if (str) {
@@ -2161,9 +2158,7 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 	free (string2);
 	free (string);
 	free (s);
-	if (is_free_pending) {
-		free (str);
-	}
+	free (str);
 }
 
 static void algolist(int mode) {
@@ -2444,7 +2439,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 	int totalsize = -1;
 	int skipblocks = -1;
 
-	int blocksize = -1;
+	ut64 blocksize = 0;
 	int mode = 'b'; // e, p, b, ...
 	int submode = 0; // q, j, ...
 
@@ -2487,7 +2482,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 	}
 	blocksize = (blocksize > 0)? (totalsize / blocksize): (core->blocksize);
 	if (blocksize < 1) {
-		eprintf ("Invalid block size: %d\n", blocksize);
+		eprintf ("Invalid block size: %d\n", (int)blocksize);
 		return;
 	}
 	if (nblocks < 1) {
@@ -2512,7 +2507,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 		case 'z': // zero terminated strings
 			{
 				ut8 *p;
-				int i, j, k;
+				ut64 i, j, k;
 				ptr = calloc (1, nblocks);
 				if (!ptr) {
 					eprintf ("Error: failed to malloc memory");
@@ -2526,7 +2521,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 				}
 				int len = 0;
 				for (i = 0; i < nblocks; i++) {
-					ut64 off = (i + skipblocks) * blocksize;
+					ut64 off = blocksize * (i + skipblocks);
 					r_core_read_at (core, off, p, blocksize);
 					for (j = k = 0; j < blocksize; j++) {
 						switch (submode) {
@@ -2582,7 +2577,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 				goto beach;
 			}
 			for (i = 0; i < nblocks; i++) {
-				ut64 off = core->offset + (i + skipblocks) * blocksize;
+				ut64 off = core->offset + (blocksize * (i + skipblocks));
 				r_core_read_at (core, off, p, blocksize);
 				ptr[i] = (ut8) (256 * r_hash_entropy_fraction (p, blocksize));
 			}
@@ -2650,7 +2645,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 			goto beach;
 		}
 		for (i = 0; i < nblocks; i++) {
-			ut64 off = core->offset + (i + skipblocks) * blocksize;
+			ut64 off = core->offset + (blocksize * (i + skipblocks));
 			for (j = 0; j < blocksize; j++) {
 				if (r_flag_get_at (core->flags, off + j, false)) {
 					matchBar (ptr, i);
@@ -2677,7 +2672,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 			goto beach;
 		}
 		for (i = 0; i < nblocks; i++) {
-			ut64 off = core->offset + (i + skipblocks) * blocksize;
+			ut64 off = core->offset + (blocksize * (i + skipblocks));
 			r_core_read_at (core, off, p, blocksize);
 			ptr[i] = (ut8) (256 * r_hash_entropy_fraction (p, blocksize));
 		}
@@ -2691,7 +2686,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 	case 'z': // zero terminated strings
 	{
 		ut8 *p;
-		int i, j, k;
+		ut64 i, j, k;
 		ptr = calloc (1, nblocks);
 		if (!ptr) {
 			eprintf ("Error: failed to malloc memory");
@@ -2705,7 +2700,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 		}
 		int len = 0;
 		for (i = 0; i < nblocks; i++) {
-			ut64 off = (i + skipblocks) * blocksize;
+			ut64 off = blocksize * (i + skipblocks);
 			r_core_read_at (core, off, p, blocksize);
 			for (j = k = 0; j < blocksize; j++) {
 				switch (mode) {
@@ -2792,6 +2787,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 		}
 	}
 beach:
+	free (ptr);
 	return;
 }
 
@@ -2806,6 +2802,10 @@ static void _pointer_table(RCore *core, ut64 origin, ut64 offset, const ut8 *buf
 	st32 *delta; // only for step == 4
 	if (step < 1) {
 		step = 4;
+	}
+	if (!r_io_is_valid_offset (core->io, origin, 0) ||
+	    !r_io_is_valid_offset (core->io, offset, 0)) {	
+		return;
 	}
 	if (origin != offset) {
 		switch (mode) {
@@ -4262,7 +4262,8 @@ static int cmd_print(void *data, const char *input) {
 			if (l > 0) {
 				char *str, *type;
 				ut64 vaddr = UT64_MAX;
-				RIOSection *section = NULL;
+				RBinObject *obj = r_bin_cur_object (core->bin);
+				RBinSection *section = NULL;
 
 				if (input[2] == ' ' && input[3]) {
 					len = r_num_math (core->num, input + 3);
@@ -4272,14 +4273,9 @@ static int cmd_print(void *data, const char *input) {
 				* string, by considering current offset as
 				* paddr and if it isn't, trying to consider it
 				* as vaddr. */
-				if ((section = r_io_section_get (core->io, core->offset))) {
+				if ((section = r_bin_get_section_at (obj, core->offset, true))) {
 					vaddr = core->offset + section->vaddr - section->paddr;
-				} else {
-					section = r_io_section_vget (core->io, core->offset);
-					if (section) {
-						vaddr = core->offset;
-					}
-				}
+				} 
 
 				r_cons_printf ("{\"string\":");
 				str = r_str_utf16_encode ((const char *) core->block, len);
@@ -5417,7 +5413,11 @@ R_API void r_print_offset(RPrint *p, ut64 off, int invert, int offseg, int offde
 	const char *white;
 	bool show_color = p->flags & R_PRINT_FLAGS_COLOR;
 	if (show_color) {
+		char rgbstr[32];
 		const char *k = r_cons_singleton ()->pal.offset; // TODO etooslow. must cache
+		if (p->flags & R_PRINT_FLAGS_RAINBOW) {
+			k = r_cons_rgb_str_off (rgbstr, off);
+		}
 		if (invert) {
 			r_cons_invert (true, true);
 		}

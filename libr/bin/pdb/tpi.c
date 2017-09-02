@@ -1310,7 +1310,7 @@ static void get_nesttype_print_type(void *type, char **name) {
 			//	this is possible because there is no support for
 			// parsing METHODLIST...
 			// need to investigate for this theme
-			eprintf ("warning: strange for nesttype\n");
+			//eprintf ("warning: strange for nesttype\n");
 		}
 	}
 
@@ -2126,7 +2126,7 @@ static int parse_lf_vtshape(SLF_VTSHAPE *lf_vtshape, unsigned char *leaf_data, u
 
 #define PARSE_LF(lf_type, lf_func) { \
 	lf_type *lf = (lf_type *) malloc(sizeof(lf_type)); \
-	if (!lf) return 0; \
+	if (!lf) { free (leaf_data); return 0; }\
 	parse_##lf_func(lf, leaf_data + 2, &read_bytes, type->length); \
 	type->type_data.type_info = (void *) lf; \
 	init_stype_info(&type->type_data); \

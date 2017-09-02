@@ -1009,7 +1009,7 @@ static char* r_debug_native_get_map_info (RDebug *dbg, RDebugMap *map, int type)
 	ret = w32_get_map_info (dbg, map, type);
 #else
 	if (type == R_DEBUG_MAP_INFO_PERMS) {
-		ret = strdup(r_str_rwx_i (map->perms));
+		ret = strdup(r_str_rwx_i (map->perm));
 	}
 #endif
 	return ret;

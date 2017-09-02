@@ -895,8 +895,7 @@ int send_vcont(libgdbr_t *g, const char *command, const char *thread_id) {
 #elif __UNIX__ || __CYGWIN__
 	signal (SIGINT, _sigint_handler);
 #endif
-
-	while ((ret = read_packet (g)) < 0);
+	while ((ret = read_packet (g)) < 0 && r_socket_is_connected (g->sock));
 
 	// Unset signal handler
 #if __WINDOWS__ && !__CYGWIN__
