@@ -272,7 +272,7 @@ static const char *help_msg_pi[] = {
 };
 
 static const char *help_msg_ps[] = {
-	"Usage:", "ps[zpw] [N]", "Print String",
+	"Usage:", "ps[zpw+] [N]", "Print String",
 	"ps", "", "print string",
 	"psb", "", "print strings in current block",
 	"psi", "", "print string inside curseek",
@@ -283,7 +283,8 @@ static const char *help_msg_ps[] = {
 	"psw", "", "print 16bit wide string",
 	"psW", "", "print 32bit wide string",
 	"psx", "", "show string with escaped chars",
-	"psz", "", "print zero terminated string",
+	"psz", "", "print zero-terminated string",
+	"ps+", "", "print libc++ std::string (same-endian, ascii, zero-terminated)",
 	NULL
 };
 
@@ -689,14 +690,11 @@ static void cmd_print_eq_dict(RCore *core, const ut8 *block, int bsz) {
 	int max = 0;
 	int dict = 0;
 	int range = 0;
-	bool histogram[0xff + 1];
-	for (i = 0; i < 0xff; i++) {
-		histogram[i] = false;
-	}
+	bool histogram[256] = {0};
 	for (i = 0; i < bsz; i++) {
 		histogram[block[i]] = true;
 	}
-	for (i = 0; i < 0xff; i++) {
+	for (i = 0; i < 256; i++) {
 		if (histogram[i]) {
 			if (min == 0) {
 				min = i;
@@ -2591,7 +2589,8 @@ static void cmd_print_bars(RCore *core, const char *input) {
 		}
 		break;
 	case 'd': // "p=d"
-		if (input[1]) {
+		ptr = NULL;
+		if (input[2]) {
 			ut64 bufsz = r_num_math (core->num, input + 3);
 			ut64 curbsz = core->blocksize;
 			if (bufsz < 1) {
@@ -4441,6 +4440,25 @@ static int cmd_print(void *data, const char *input) {
 				r_print_string (core->print, core->offset, core->block,
 						len, R_PRINT_STRING_WRAP);
 				r_core_block_size (core, bs);
+			}
+			break;
+		case '+': // "ps+"
+			if (l > 0) {
+				ut64 bitness = r_config_get_i (core->config, "asm.bits");
+				if (bitness != 32 && bitness != 64) {
+					eprintf ("Error: bitness of %" PFMT64u " not supported", bitness);
+					break;
+				}
+				if (*core->block & 0x1) { // "long" string
+					if (bitness == 64) {
+						r_core_cmdf (core, "ps @ 0x%" PFMT64x, *((ut64 *)core->block + 2));
+					} else {
+						r_core_cmdf (core, "ps @ 0x%" PFMT32x, *((ut32 *)core->block + 2));
+					}
+				} else {
+					r_print_string (core->print, core->offset, core->block + 1,
+					                len, R_PRINT_STRING_ZEROEND);
+				}
 			}
 			break;
 		default:
