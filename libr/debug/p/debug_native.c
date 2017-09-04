@@ -79,6 +79,7 @@ static RList *r_debug_egg_cache;
 # warning No debugger support for SunOS yet
 
 #elif __linux__
+#include <sys/mman.h>
 #include "native/linux/linux_debug.h"
 #include "native/procfs.h"
 # ifdef __ANDROID__
@@ -224,7 +225,9 @@ static RDebugEggCache* r_debug_native_find_egg_code(ut64 *k, int n_k, RListIter 
 				}
 			}
 			if (i == n_k) {
-				*ret_it = it;
+				if (ret_it) {
+					*ret_it = it;
+				}
 				return ec;
 			}
 		}
@@ -1690,6 +1693,24 @@ static RList *r_debug_desc_native_list (int pid) {
 #endif
 }
 
+#if __linux__
+static int perms2map(int perms)
+{
+	int map_perms = 0;
+
+	if (R_IO_PERM (perms, R_IO_READ)) {
+		map_perms |= PROT_READ;
+	}
+	if (R_IO_PERM (perms, R_IO_WRITE)) {
+		map_perms |= PROT_WRITE;
+	}
+	if (R_IO_PERM (perms, R_IO_EXEC)) {
+		map_perms |= PROT_EXEC;
+	}
+	return map_perms;
+}
+#endif
+
 static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int perms) {
 #if __WINDOWS__ && !__CYGWIN__
 	return w32_map_protect (dbg, addr, size, perms);
@@ -1710,7 +1731,7 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 			"sc@syscall(%d);\n"
 			"main@global(0) { sc(%p,%d,%d);\n"
 			":int3\n"
-			"}\n", num, (void*)addr, size, perms);
+			"}\n", num, (void*)addr, size, perms2map (perms));
 
 		r_egg_reset (dbg->egg);
 		r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
