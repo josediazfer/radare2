@@ -1018,6 +1018,41 @@ static char* r_debug_native_get_map_info (RDebug *dbg, RDebugMap *map, int type)
 	return ret;
 }
 
+#if __linux__
+static RDebugMap* nix_map_alloc (RDebug *dbg, ut64 addr, int size) {
+	RBuffer *buf = NULL;
+	char code[1024];
+	int num;
+
+	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
+	snprintf (code, sizeof (code),
+		"sc@syscall(%d);\n"
+		"main@global(0) { sc(%p,%d,%d,%d,%d,%d);\n"
+		":int3\n"
+	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
+
+	r_egg_reset (dbg->egg);
+	r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
+	r_egg_load (dbg->egg, code, 0);
+	if (!r_egg_compile (dbg->egg)) {
+		eprintf ("Cannot compile.\n");
+		return false;
+	}	
+	if (!r_egg_assemble (dbg->egg)) {
+		eprintf ("r_egg_assemble: invalid assembly\n");
+		return NULL;
+	}
+	buf = r_egg_get_bin (dbg->egg);
+	if (buf) {
+		r_reg_arena_push (dbg->reg);
+		r_debug_execute (dbg, buf->buf, buf->length , 1);
+		r_reg_arena_pop (dbg->reg);
+		return true;
+	}
+	return NULL;
+}
+#endif
+
 static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 
 #if __APPLE__
@@ -1041,6 +1076,8 @@ static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	r_debug_map_sync (dbg);
 	map = r_debug_map_get (dbg, (ut64)(size_t)base);
 	return map;
+#elif __linux__
+	nix_map_alloc (dbg, addr, size);	
 #else
 	// malloc not implemented for this platform
 	return NULL;
