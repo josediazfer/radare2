@@ -253,11 +253,15 @@ R_API void r_egg_printf(REgg *egg, const char *fmt, ...) {
 }
 
 R_API int r_egg_assemble(REgg *egg) {
+	return r_egg_assemble_v2(egg, "x86.nz");
+}
+
+R_API int r_egg_assemble_v2(REgg *egg, char *name) {
 	RAsmCode *asmcode = NULL;
 	char *code = NULL;
 	int ret = false;
 	if (egg->remit == &emit_x86 || egg->remit == &emit_x64) {
-		r_asm_use (egg->rasm, "x86.nz");
+		r_asm_use (egg->rasm, name);
 		r_asm_set_bits (egg->rasm, egg->bits);
 		r_asm_set_big_endian (egg->rasm, egg->endian);
 		r_asm_set_syntax (egg->rasm, R_ASM_SYNTAX_INTEL);

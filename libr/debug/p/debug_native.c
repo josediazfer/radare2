@@ -1019,37 +1019,74 @@ static char* r_debug_native_get_map_info (RDebug *dbg, RDebugMap *map, int type)
 }
 
 #if __linux__
-static RDebugMap* nix_map_alloc (RDebug *dbg, ut64 addr, int size) {
+static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	RBuffer *buf = NULL;
+	RDebugMap* map = NULL;
 	char code[1024];
 	int num;
+	ut64 map_addr;
 
 	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
 	snprintf (code, sizeof (code),
-		"sc@syscall(%d);\n"
-		"main@global(0) { sc(%p,%d,%d,%d,%d,%d);\n"
+		"sc_mmap@syscall(%d);\n"
+		"main@global(0) { sc_mmap(%p,%d,%d,%d,%d,%d,%d);\n"
 		":int3\n"
-	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
-
+	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0, MAP_ANONYMOUS | MAP_PRIVATE);
 	r_egg_reset (dbg->egg);
-	r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
+	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
 	r_egg_load (dbg->egg, code, 0);
 	if (!r_egg_compile (dbg->egg)) {
 		eprintf ("Cannot compile.\n");
-		return false;
+		goto err_linux_map_alloc;
 	}	
-	if (!r_egg_assemble (dbg->egg)) {
+	if (!r_egg_assemble_v2 (dbg->egg, "x86.as")) {
 		eprintf ("r_egg_assemble: invalid assembly\n");
-		return NULL;
+		goto err_linux_map_alloc;
 	}
 	buf = r_egg_get_bin (dbg->egg);
 	if (buf) {
 		r_reg_arena_push (dbg->reg);
-		r_debug_execute (dbg, buf->buf, buf->length , 1);
+		map_addr = r_debug_execute (dbg, buf->buf, buf->length , 1);
 		r_reg_arena_pop (dbg->reg);
-		return true;
+		if (map_addr != (ut64)-1) {
+			r_debug_map_sync (dbg);
+			map = r_debug_map_get (dbg, map_addr);
+		}
 	}
-	return NULL;
+err_linux_map_alloc:
+	return map;
+}
+
+static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
+	RBuffer *buf = NULL;
+	char code[1024];
+	int ret = 0, num;
+
+	num = r_syscall_get_num (dbg->anal->syscall, "munmap");
+	snprintf (code, sizeof (code),
+		"sc_munmap@syscall(%d);\n"
+		"main@global(0) { sc_munmap(%p,%d);\n"
+		":int3\n"
+	"}\n", num, (void*)addr, size);
+	r_egg_reset (dbg->egg);
+	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
+	r_egg_load (dbg->egg, code, 0);
+	if (!r_egg_compile (dbg->egg)) {
+		eprintf ("Cannot compile.\n");
+		goto err_linux_map_dealloc;
+	}	
+	if (!r_egg_assemble_v2 (dbg->egg, "x86.as")) {
+		eprintf ("r_egg_assemble: invalid assembly\n");
+		goto err_linux_map_dealloc;
+	}
+	buf = r_egg_get_bin (dbg->egg);
+	if (buf) {
+		r_reg_arena_push (dbg->reg);
+		ret = r_debug_execute (dbg, buf->buf, buf->length , 1) == 0;
+		r_reg_arena_pop (dbg->reg);
+	}
+err_linux_map_dealloc:
+	return ret;
 }
 #endif
 
@@ -1077,9 +1114,9 @@ static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	map = r_debug_map_get (dbg, (ut64)(size_t)base);
 	return map;
 #elif __linux__
-	nix_map_alloc (dbg, addr, size);	
+	linux_map_alloc (dbg, addr, size);	
 #else
-	// malloc not implemented for this platform
+	// map_alloc not implemented for this platform
 	return NULL;
 #endif
 }
@@ -1102,8 +1139,10 @@ static int r_debug_native_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	}
 	CloseHandle (process);
 	return ret;
+#elif __linux__
+	return linux_map_dealloc(dbg, addr, size);
 #else
-    // mdealloc not implemented for this platform
+	// map_dealloc not implemented for this platform
 	return false;
 #endif
 }
@@ -1765,8 +1804,8 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 	ec = r_debug_native_find_egg_code(k, 4, NULL);
 	if (!ec) {
 		snprintf (code, sizeof (code),
-			"sc@syscall(%d);\n"
-			"main@global(0) { sc(%p,%d,%d);\n"
+			"sc_mprotect@syscall(%d);\n"
+			"main@global(0) { sc_mprotect(%p,%d,%d);\n"
 			":int3\n"
 			"}\n", num, (void*)addr, size, perms2map (perms));
 
