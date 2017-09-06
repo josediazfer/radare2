@@ -1724,12 +1724,7 @@ static int cmd_debug_map(RCore *core, const char *input) {
 				addr = r_num_math (core->num, input + 1);
 				size = r_num_math (core->num, p);
 				if ((map = r_debug_map_alloc (core->dbg, addr, size))) {
-					int bits = core->assembler->bits;
-					if (bits == 64) {
-						eprintf("map allocated at 0x%"PFMT64x"\n", map->addr); 
-					} else {
-						eprintf("map allocated at 0x%"PFMT32x"\n", (ut32)map->addr); 
-					}
+					eprintf("map allocated at 0x%08"PFMT64x"\n", map->addr); 
 				} else {
 					eprintf("Can not allocate memory\n");
 				}
