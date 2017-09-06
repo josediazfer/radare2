@@ -3,6 +3,16 @@
 #include <r_egg.h>
 #include <r_types.h>
 
+/*
+   mov    $0x0,%r9d
+   0x000000000040116e <+10>:    mov    $0x0,%r8d
+   0x0000000000401174 <+16>:    mov    $0x4,%ecx
+   0x0000000000401179 <+21>:    mov    $0x3,%edx
+   0x000000000040117e <+26>:    mov    $0x2,%esi
+   0x0000000000401183 <+31>:    mov    $0x1,%edi
+
+*/
+
 /* hardcoded */
 #define attsyntax 0
 
@@ -13,10 +23,9 @@
 # define R_SP "rsp"
 # define R_BP "rbp"
 # define R_AX "rax"
-# define R_GP { "rax", "rdi", "rsi", "rdx" }
-# define R_NGP 4
 # define SYSCALL_ATT "syscall"
 # define SYSCALL_INTEL "syscall"
+static char *regs[] = { "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10" };
 #else
 # define EMIT_NAME emit_x86
 # define R_ARCH "x86"
@@ -24,13 +33,12 @@
 # define R_SP "esp"
 # define R_BP "ebp"
 # define R_AX "eax"
-# define R_GP { "eax", "ebx", "ecx", "edx" }
-# define R_NGP 4
 # define SYSCALL_ATT "int $0x80"
 # define SYSCALL_INTEL "int 0x80"
+static char *regs[] = { "eax", "ebx", "ecx", "edx" };
 #endif
 
-static char *regs[] = R_GP;
+# define R_NGP (sizeof (regs)/sizeof (char *))
 
 static void emit_init (REgg *egg) {
 // TODO: add 'andb rsp, 0xf0'
