@@ -129,7 +129,7 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	dbg->reason.bp_addr = b->addr;
 
 	/* inform the user of what happened */
-	if (dbg->hitinfo) {
+	if (dbg->hitinfo && !b->silent) {
 		if (b->type == R_BP_TYPE_MEM) {
 			if (!*ign) {
 				eprintf ("hit memory breakpoint at: %"PFMT64x ", ptr %"PFMT64x "\n",
@@ -487,6 +487,8 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 	ripc = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], R_REG_TYPE_GPR);
 	risp = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_SP], R_REG_TYPE_GPR);
 	if (ripc) {
+		RBreakpointItem *b;
+
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
 		orig = r_reg_get_bytes (dbg->reg, -1, &orig_sz);
 		if (!orig) {
@@ -504,8 +506,11 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 		dbg->iob.read_at (dbg->iob.io, rpc, backup, len);
 		dbg->iob.read_at (dbg->iob.io, rsp, stackbackup, len);
 
-		r_bp_add_sw (dbg->bp, rpc+len, dbg->bpsize, R_BP_PROT_EXEC);
-
+		b = r_bp_add_sw (dbg->bp, rpc+len, dbg->bpsize, R_BP_PROT_EXEC);
+		if (b) {
+			/* force not show hit breakpoint message */
+			b->silent = true;
+		} 
 		/* execute code here */
 		dbg->iob.write_at (dbg->iob.io, rpc, buf, len);
 		//r_bp_add_sw (dbg->bp, rpc+len, 4, R_BP_PROT_EXEC);

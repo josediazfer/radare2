@@ -1029,8 +1029,7 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
 	snprintf (code, sizeof (code),
 		"sc_mmap@syscall(%d);\n"
-		"main@global(0) { sc_mmap(%p,%d,%d,%d,%d,%d,%d);\n"
-		":int3\n"
+		"main@naked(0) { sc_mmap(%p,%d,%d,%d,%d,%d,%d);\n"
 	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0, MAP_ANONYMOUS | MAP_PRIVATE);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
@@ -1065,8 +1064,7 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	num = r_syscall_get_num (dbg->anal->syscall, "munmap");
 	snprintf (code, sizeof (code),
 		"sc_munmap@syscall(%d);\n"
-		"main@global(0) { sc_munmap(%p,%d);\n"
-		":int3\n"
+		"main@naked(0) { sc_munmap(%p,%d);\n"
 	"}\n", num, (void*)addr, size);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
@@ -1805,8 +1803,7 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 	if (!ec) {
 		snprintf (code, sizeof (code),
 			"sc_mprotect@syscall(%d);\n"
-			"main@global(0) { sc_mprotect(%p,%d,%d);\n"
-			":int3\n"
+			"main@naked(0) { sc_mprotect(%p,%d,%d);\n"
 			"}\n", num, (void*)addr, size, perms2map (perms));
 
 		r_egg_reset (dbg->egg);

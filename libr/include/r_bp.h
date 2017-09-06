@@ -58,6 +58,7 @@ typedef struct r_bp_item_t {
 	char *data;
 	char *cond; /* used for conditional breakpoints */
 	bool ign;   /* ignore if set/unset breakpoint (currently only for memory breakpoints) */
+	bool silent; /* silent breakpoint: not show hit breakpoint messages */
 	RList *omap; /* memory breakpoint: original pages that were changed */
 	ut64 r_addr; /* memory breakpoint: real addr (unaligned) */
 	int r_size; /* memory breakpoint: real size (unaligned) */
