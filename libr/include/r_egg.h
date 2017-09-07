@@ -105,6 +105,7 @@ typedef struct r_egg_emit_t {
 	void (*restore_stack)(REgg *egg, int size);
 	void (*syscall_args)(REgg *egg, int nargs);
 	void (*get_var)(REgg *egg, int type, char *out, int idx);
+	void (*get_ar)(REgg *egg, char *out, int idx);
 	void (*while_end)(REgg *egg, const char *label);
 	void (*load)(REgg *egg, const char *str, int sz);
 	void (*load_ptr)(REgg *egg, const char *str);

@@ -1029,8 +1029,8 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
 	snprintf (code, sizeof (code),
 		"sc_mmap@syscall(%d);\n"
-		"main@naked(0) { sc_mmap(%p,%d,%d,%d,%d,%d,%d);\n"
-	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0, MAP_ANONYMOUS | MAP_PRIVATE);
+		"main@naked(0) { ._ar0 = sc_mmap(0x%08"PFMT64x",%d,%d,%d,%d,%d);\n"
+	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
 	r_egg_load (dbg->egg, code, 0);
@@ -1064,7 +1064,7 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	num = r_syscall_get_num (dbg->anal->syscall, "munmap");
 	snprintf (code, sizeof (code),
 		"sc_munmap@syscall(%d);\n"
-		"main@naked(0) { sc_munmap(%p,%d);\n"
+		"main@naked(0) { ._ar0 = sc_munmap(0x%08"PFMT64x",%d);\n"
 	"}\n", num, (void*)addr, size);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);

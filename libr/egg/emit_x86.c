@@ -25,7 +25,8 @@
 # define R_AX "rax"
 # define SYSCALL_ATT "syscall"
 # define SYSCALL_INTEL "syscall"
-static char *regs[] = { "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10" };
+# define R_REG_AR_OFF 1
+static char *regs[] = { "rax", "rdi", "rsi", "rdx", "r10", "r8", "r9" };
 #else
 # define EMIT_NAME emit_x86
 # define R_ARCH "x86"
@@ -35,6 +36,7 @@ static char *regs[] = { "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10" };
 # define R_AX "eax"
 # define SYSCALL_ATT "int $0x80"
 # define SYSCALL_INTEL "int 0x80"
+# define R_REG_AR_OFF 0
 static char *regs[] = { "eax", "ebx", "ecx", "edx" };
 #endif
 
@@ -430,6 +432,14 @@ static const char* emit_regs(REgg *egg, int idx) {
 	return regs[idx%R_NGP];
 }
 
+static void emit_get_ar (REgg *egg, char *out, int idx) {
+	char *reg = emit_regs (egg, R_REG_AR_OFF + idx);
+
+	if (reg) {
+		strcpy (out, reg);
+	}	
+}
+
 REggEmit EMIT_NAME = {
 	.retvar = R_AX,
 	.arch = R_ARCH,
@@ -449,6 +459,7 @@ REggEmit EMIT_NAME = {
 	.get_result = emit_get_result,
 	.syscall_args = emit_syscall_args,
 	.set_string = emit_string,
+	.get_ar = emit_get_ar,
 	.get_var = emit_get_var,
 	.while_end = emit_while_end,
 	.get_while_end = emit_get_while_end,
