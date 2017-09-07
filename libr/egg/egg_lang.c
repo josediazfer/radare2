@@ -590,7 +590,7 @@ R_API char *r_egg_mkvar(REgg *egg, char *out, const char *_str, int delta) {
 		} else if (!strncmp (str + 1, "var", 3)) {
 			e->get_var (egg, 0, out, idx);
 			// sprintf(out, "%d(%%"R_BP")", -(atoi(str+4)+delta+R_SZ));
-		} else if (!strncmp (str + 1, "_ar", 3)) {
+		} else if (!strncmp (str + 1, "_ra", 3)) {
 			if (e->get_ar) {
 				e->get_ar (egg, out, atoi(str+ 4));
 			}
