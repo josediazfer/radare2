@@ -4407,8 +4407,8 @@ static int cmd_debug(void *data, const char *input) {
 					acode = r_asm_massemble (core->assembler, input + 2);
 					if (acode && *acode->buf_hex) {
 						r_reg_arena_push (core->dbg->reg);
-						r_debug_execute (core->dbg, acode->buf,
-								acode->len, 0);
+						r_debug_execute (core->dbg, acode->buf, 
+								acode->len, 0, 0);
 						r_reg_arena_pop (core->dbg->reg);
 					}
 					r_asm_code_free (acode);
@@ -4428,7 +4428,7 @@ static int cmd_debug(void *data, const char *input) {
 					b = r_egg_get_bin (egg);
 					r_asm_set_pc (core->assembler, core->offset);
 					r_reg_arena_push (core->dbg->reg);
-					r_debug_execute (core->dbg, b->buf, b->length, 0);
+					r_debug_execute (core->dbg, b->buf, b->length, 0, 0);
 					r_reg_arena_pop (core->dbg->reg);
 				}
 				break;
@@ -4453,8 +4453,7 @@ static int cmd_debug(void *data, const char *input) {
 								bytes);
 						if (bytes_len > 0) {
 							r_debug_execute (core->dbg,
-									bytes, bytes_len,
-									0);
+									bytes, bytes_len, 0, 0);
 						} else {
 							eprintf ("Invalid hexpairs\n");
 						}
@@ -4468,7 +4467,7 @@ static int cmd_debug(void *data, const char *input) {
 					if (strlen (input + 2) < 4096){
 						int bytes_len = r_hex_str2bin (input + 2, bytes);
 						if (bytes_len>0) r_debug_execute (core->dbg,
-								bytes, bytes_len, 0);
+								bytes, bytes_len, 0, 0);
 						else eprintf ("Invalid hexpairs\n");
 					} else eprintf ("Injection opcodes so long\n");
 				}

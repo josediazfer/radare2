@@ -19,15 +19,28 @@ static int r_debug_native_continue (RDebug *dbg, int pid, int tid, int sig);
 static int r_debug_native_reg_read (RDebug *dbg, int type, ut8 *buf, int size);
 static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int size);
 static void r_debug_native_stop(RDebug *dbg);
-static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int perms);
+static int r_debug_native_map_protect(RDebug *dbg, ut64 addr, int size, int perms);
+static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int perms, bool use_arena);
 
 #if __linux__
+/* TODO: MEMORY CACHE IN THE PROCESS DEBUGGED */
+#define DEFAULT_DEBUG_NATIVE_ARENA_SIZE 8192
+
 typedef struct {
 	RBuffer *buf;
 	ut64 *k;
+	ut64 arena_ptr;
 	int n_k;
 } RDebugEggCache;
 
+typedef struct {
+	ut64 arena;
+	ut64 next_ptr;
+	int free_sz;
+	int sz;
+} RDebugNativeArena;
+
+static RDebugNativeArena r_debug_native_arena;
 static RList *r_debug_egg_cache;
 #endif
 
@@ -61,7 +74,7 @@ static RList *r_debug_egg_cache;
 #include <kvm.h>
 #include <limits.h>
 #define R_DEBUG_REG_T struct reg
-#include "native/procfs.h"
+_include "native/procfs.h"
 #if __KFBSD__
 #include <sys/user.h>
 #endif
@@ -246,7 +259,7 @@ static void r_debug_native_del_egg_code(ut64 *k, int n_k)
 	}
 }
 
-static void r_debug_native_add_egg_code(ut64 *k, int n_k, RBuffer *buf)
+static RDebugEggCache* r_debug_native_add_egg_code(ut64 *k, int n_k, RBuffer *buf)
 {
 	ut64 *k_v;
 	RDebugEggCache *ec;
@@ -265,6 +278,7 @@ static void r_debug_native_add_egg_code(ut64 *k, int n_k, RBuffer *buf)
 	ec->k = k_v;
 	ec->n_k = n_k;
 	r_list_append (r_debug_egg_cache, ec);
+	return ec;
 }
 #endif
 
@@ -341,7 +355,7 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 		r_cons_break_push ((RConsBreak)r_debug_native_stop, dbg);
 	}
 
-	int ret = ptrace (PTRACE_CONT, pid, NULL, contsig);
+	ptrace (PTRACE_CONT, pid, NULL, contsig);
 	if (dbg->continue_all_threads && dbg->n_threads) {
 		RList *list = dbg->threads;
 		RDebugPid *th;
@@ -1026,6 +1040,8 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	int num;
 	ut64 map_addr;
 
+	eprintf("MAP: %llx %d\n", addr, size);
+
 	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
 	snprintf (code, sizeof (code),
 		"sc_mmap@syscall(%d);\n"
@@ -1045,7 +1061,7 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	buf = r_egg_get_bin (dbg->egg);
 	if (buf) {
 		r_reg_arena_push (dbg->reg);
-		map_addr = r_debug_execute (dbg, buf->buf, buf->length , 1);
+		map_addr = r_debug_execute (dbg, buf->buf, buf->length , 0, 1);
 		r_reg_arena_pop (dbg->reg);
 		if (map_addr != (ut64)-1) {
 			r_debug_map_sync (dbg);
@@ -1080,7 +1096,7 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	buf = r_egg_get_bin (dbg->egg);
 	if (buf) {
 		r_reg_arena_push (dbg->reg);
-		ret = r_debug_execute (dbg, buf->buf, buf->length , 1) == 0;
+		ret = r_debug_execute (dbg, buf->buf, buf->length , 0, 1) == 0;
 		r_reg_arena_pop (dbg->reg);
 	}
 err_linux_map_dealloc:
@@ -1486,7 +1502,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 #if __WINDOWS__
 				ret = w32_set_page_guard (dbg, b->omap, true);		
 #else
-				ret = r_debug_native_map_protect (dbg, b->addr, b->size, 0);
+				ret = r_debug_native_map_protect_ (dbg, b->addr, b->size, 0, true);
 #endif
 				dbg->reason = reason;
 			} 
@@ -1500,7 +1516,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 				ret = w32_set_page_guard (dbg, b->omap, false);		
 #else
 				r_list_foreach (b->omap, iter, map) {
-					ret = r_debug_native_map_protect (dbg, map->addr, map->addr_end - map->addr, map->perm);
+					ret = r_debug_native_map_protect_ (dbg, map->addr, map->addr_end - map->addr, map->perm, true);
 				}
 #endif
 				dbg->reason = reason;
@@ -1785,7 +1801,38 @@ static int perms2map(int perms)
 }
 #endif
 
-static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int perms) {
+static ut64 r_debug_native_alloc_arena(RDebug *dbg, int len)
+{
+	ut64 next_ptr;
+
+	if (len > DEFAULT_DEBUG_NATIVE_ARENA_SIZE) {
+		return 0;
+	}
+	/* init rena are in the process debugged */
+	if (!r_debug_native_arena.arena) {
+		RDebugMap *map;
+
+		map = linux_map_alloc (dbg, 0, DEFAULT_DEBUG_NATIVE_ARENA_SIZE);
+		if (map) {
+			r_debug_native_arena.arena = map->addr;
+			r_debug_native_arena.next_ptr = map->addr;
+			r_debug_native_arena.sz = (int)(map->addr_end - map->addr);
+			r_debug_native_arena.free_sz = r_debug_native_arena.sz;
+		}
+	}
+	if (len > r_debug_native_arena.free_sz) {
+		return 0;	
+	}
+	next_ptr = r_debug_native_arena.next_ptr;
+	r_debug_native_arena.next_ptr += len;	
+	r_debug_native_arena.free_sz -= len;
+	return next_ptr;
+}
+
+static int r_debug_native_map_protect(RDebug *dbg, ut64 addr, int size, int perms) {
+	return r_debug_native_map_protect_ (dbg, addr, size, perms, false);
+}
+static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int perms, bool use_arena) {
 #if __WINDOWS__ && !__CYGWIN__
 	return w32_map_protect (dbg, addr, size, perms);
 #elif __APPLE__
@@ -1794,18 +1841,22 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 	RBuffer *buf = NULL;
 	char code[1024];
 	ut64 k[] = {0, addr, size, perms};
-	int num;
 	RDebugEggCache *ec;
+	int num = r_syscall_get_num (dbg->anal->syscall, "mprotect");
 
-	num = r_syscall_get_num (dbg->anal->syscall, "mprotect");
 	k[0] = num;
 	ec = r_debug_native_find_egg_code(k, 4, NULL);
 	if (!ec) {
+		ut64 addr_alloc;
+
+		addr_alloc = 0;
+		if (use_arena) {
+			addr_alloc = r_debug_native_alloc_arena (dbg, 0x50);
+		}
 		snprintf (code, sizeof (code),
 			"sc_mprotect@syscall(%d);\n"
-			"main@naked(0) { sc_mprotect(%p,%d,%d);\n"
-			"}\n", num, (void*)addr, size, perms2map (perms));
-
+			"main@naked(0) { ._ra0 = sc_mprotect(0x%08"PFMT64x",%d,%d);\n"
+			"}\n", num, addr, size, perms2map (perms));
 		r_egg_reset (dbg->egg);
 		r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
 		r_egg_load (dbg->egg, code, 0);
@@ -1818,21 +1869,17 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 			return false;
 		}
 		buf = r_egg_get_bin (dbg->egg);
-		if (buf) {
-			r_debug_native_add_egg_code(k, 4, buf);
-			r_reg_arena_push (dbg->reg);
-			r_debug_execute (dbg, buf->buf, buf->length , 1);
-			r_reg_arena_pop (dbg->reg);
-			return true;
-		}
+		ec = r_debug_native_add_egg_code(k, 4, buf);
+		ec->arena_ptr = addr_alloc;
+		r_reg_arena_push (dbg->reg);
+		r_debug_execute (dbg, buf->buf, buf->length , ec->arena_ptr, 1);
+		r_reg_arena_pop (dbg->reg);
 	} else {
 		r_reg_arena_push (dbg->reg);
-		r_debug_execute (dbg, ec->buf->buf, ec->buf->length , 1);
+		r_debug_execute (dbg, ec->buf->buf, ec->buf->length , ec->arena_ptr, 1);
 		r_reg_arena_pop (dbg->reg);
-		return true;
-
 	}
-	return false;
+	return true;
 #else
 	// mprotect not implemented for this platform
 	return false;

@@ -520,7 +520,7 @@ R_API ut64 r_debug_reg_get(RDebug *dbg, const char *name);
 R_API ut64 r_debug_reg_get_err(RDebug *dbg, const char *name, int *err, utX *value);
 
 R_API void r_debug_io_bind(RDebug *dbg, RIO *io);
-R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore);
+R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, ut64 code_addr, int restore);
 R_API int r_debug_map_sync(RDebug *dbg);
 
 R_API int r_debug_stop(RDebug *dbg);

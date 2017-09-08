@@ -137,6 +137,7 @@ int linux_handle_signals (RDebug *dbg, int status) {
 				" code=%d ret=%d\n",
 				siginfo.si_signo, siginfo.si_errno,
 				(ut64)siginfo.si_addr, siginfo.si_code, ret);
+			//__asm__("int $3");
 		}
 		if (!bp_mem) {
 			show_sig_stop_info(status);

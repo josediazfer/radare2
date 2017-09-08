@@ -475,12 +475,12 @@ R_API bool r_debug_set_arch(RDebug *dbg, const char *arch, int bits) {
  * TODO: Add support for reverse stack architectures
  * Also known as r_debug_inject()
  */
-R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
+R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, ut64 addr, int restore) {
 	int orig_sz;
 	ut8 stackbackup[4096];
 	ut8 *backup, *orig = NULL;
 	RRegItem *ri, *risp, *ripc;
-	ut64 rsp, rpc, ra0 = 0LL;
+	ut64 rsp, rpc, code_addr, ra0 = 0LL;
 	if (r_debug_is_dead (dbg)) {
 		return false;
 	}
@@ -503,26 +503,33 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 			free (orig);
 			return 0LL;
 		}
-		dbg->iob.read_at (dbg->iob.io, rpc, backup, len);
+		if (addr != 0 && addr != rpc) {	
+			r_reg_set_value (dbg->reg, ripc, addr);
+			r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
+			code_addr = addr;
+		} else {
+			code_addr = rpc;
+		}
+		dbg->iob.read_at (dbg->iob.io, code_addr, backup, len);
 		dbg->iob.read_at (dbg->iob.io, rsp, stackbackup, len);
-
-		b = r_bp_add_sw (dbg->bp, rpc+len, dbg->bpsize, R_BP_PROT_EXEC);
+		b = r_bp_add_sw (dbg->bp, code_addr+len, dbg->bpsize, R_BP_PROT_EXEC);
 		if (b) {
 			/* force not show hit breakpoint message */
 			b->silent = true;
 		} 
 		/* execute code here */
-		dbg->iob.write_at (dbg->iob.io, rpc, buf, len);
+		dbg->iob.write_at (dbg->iob.io, code_addr, buf, len);
 		//r_bp_add_sw (dbg->bp, rpc+len, 4, R_BP_PROT_EXEC);
 		r_debug_continue (dbg);
 		//r_bp_del (dbg->bp, rpc+len);
 		/* TODO: check if stopped in breakpoint or not */
-		r_bp_del (dbg->bp, rpc+len);
-		dbg->iob.write_at (dbg->iob.io, rpc, backup, len);
+		r_bp_del (dbg->bp, code_addr+len);
+		if (addr == 0 || addr == rpc) {
+			dbg->iob.write_at (dbg->iob.io, code_addr, backup, len);
+		}
 		if (restore) {
 			dbg->iob.write_at (dbg->iob.io, rsp, stackbackup, len);
 		}
-
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
 		ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_A0], R_REG_TYPE_GPR);
 		ra0 = r_reg_get_value (dbg->reg, ri);
@@ -534,7 +541,7 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, int restore) {
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
 		free (backup);
 		free (orig);
-		//eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
+		eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
 	} else eprintf ("r_debug_execute: Cannot get program counter\n");
 	return (ra0);
 }
