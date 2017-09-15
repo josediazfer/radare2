@@ -23,7 +23,7 @@ CFLAGS+=-DXNU_USE_PTRACE=$(XNU_USE_PTRACE)
 
 STATIC_OBJS=$(subst ..,p/..,$(subst debug_,p/debug_,$(STATIC_OBJ)))
 
-OBJS=signal.o map.o trace.o arg.o debug.o plugin.o snap.o session.o
+OBJS=signal.o map.o mem.o trace.o arg.o debug.o plugin.o snap.o session.o
 OBJS+=pid.o dreg.o ddesc.o esil.o ${STATIC_OBJS}
 
 ifeq (${OSTYPE},darwin)

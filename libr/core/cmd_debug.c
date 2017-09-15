@@ -2711,6 +2711,9 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 		}
 		}
 		break;
+	case 'z': // "dbz"
+		r_debug_mem_test (core->dbg);
+		break;
 	case 't': // "dbt"
 		switch (input[2]) {
 		case 'v': // "dbtv"

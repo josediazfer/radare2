@@ -303,7 +303,7 @@ R_API RList* r_debug_get_map_pages(RDebug *dbg, ut64 addr, int size, int *unmap_
 			p_addr_end = p_addr + c_size;
 			c_size = 0;
 		}
-		eprintf("map pages %llx %llx\n", p_addr, p_addr_end);
+		//eprintf("map pages %llx %llx\n", p_addr, p_addr_end);
 		map_cp = r_debug_map_new (map->name, p_addr, p_addr_end, map->perm, map->user);
 		if (map_cp)  {
 			if (map->data_sz > 0) {

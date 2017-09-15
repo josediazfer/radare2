@@ -136,6 +136,7 @@ typedef struct r_debug_reason_t {
 	ut64 fault_addr;
 	int bp_type;
 	bool ign;
+	bool step_out;
 } RDebugReason;
 
 typedef struct r_debug_map_t {
@@ -216,6 +217,19 @@ typedef struct r_session_header {
 	ut32 difflist_len;
 } RSessionHeader;
 
+typedef struct {
+        ut64 addr;
+        int sz;
+	bool unify;
+	bool purge;
+} RDebugMemChunk;
+
+typedef struct {
+        RDebugMap map;
+        int free_sz, sz;
+        RList *chunk_free_list, *chunk_alloc_list;
+} RDebugMemArena;
+
 typedef struct r_diff_entry {
 	ut32 base_idx;
 	ut32 pages_len;
@@ -293,6 +307,9 @@ typedef struct r_debug_t {
 	RDebugTrace *trace;
 	Sdb *tracenodes;
 	RTree *tree;
+
+	/* remote process memory */
+	RDebugMemArena *proc_arena;
 
 	RReg *reg;
 	const char *creg; // current register value
@@ -606,6 +623,13 @@ R_API void r_debug_session_save(RDebug *dbg, const char *file);
 R_API void r_debug_session_restore(RDebug *dbg, const char *file);
 R_API int r_debug_step_back(RDebug *dbg);
 R_API bool r_debug_continue_back(RDebug *dbg);
+
+/* remote process memory managment */
+R_API void r_debug_mem_proc_info(RDebug *dbg);
+R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz);
+R_API bool r_debug_mem_proc_free(RDebug *dbg, ut64 addr);
+R_API void r_debug_mem_proc_destroy(RDebug *dbg);
+R_API void r_debug_mem_test (RDebug *dbg);
 
 /* plugin pointers */
 extern RDebugPlugin r_debug_plugin_native;

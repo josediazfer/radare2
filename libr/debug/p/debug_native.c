@@ -21,6 +21,10 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 static void r_debug_native_stop(RDebug *dbg);
 static int r_debug_native_map_protect(RDebug *dbg, ut64 addr, int size, int perms);
 static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int perms, bool use_arena);
+static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size);
+
+/* tiny remote process memory managment */
+#define DEBUG_NATIVE_VERBOSE 1
 
 #if __linux__
 /* TODO: MEMORY CACHE IN THE PROCESS DEBUGGED */
@@ -33,14 +37,6 @@ typedef struct {
 	int n_k;
 } RDebugEggCache;
 
-typedef struct {
-	ut64 arena;
-	ut64 next_ptr;
-	int free_sz;
-	int sz;
-} RDebugNativeArena;
-
-static RDebugNativeArena r_debug_native_arena;
 static RList *r_debug_egg_cache;
 #endif
 
@@ -1040,12 +1036,10 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	int num;
 	ut64 map_addr;
 
-	eprintf("MAP: %llx %d\n", addr, size);
-
 	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
 	snprintf (code, sizeof (code),
 		"sc_mmap@syscall(%d);\n"
-		"main@naked(0) { ._ra0 = sc_mmap(0x%08"PFMT64x",%d,%d,%d,%d,%d);\n"
+		"main@global(0) { ._ra0 = sc_mmap(0x%08"PFMT64x",%d,%d,%d,%d,%d);break;\n"
 	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
@@ -1080,7 +1074,7 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	num = r_syscall_get_num (dbg->anal->syscall, "munmap");
 	snprintf (code, sizeof (code),
 		"sc_munmap@syscall(%d);\n"
-		"main@naked(0) { ._ra0 = sc_munmap(0x%08"PFMT64x",%d);\n"
+		"main@global(0) { ._ra0 = sc_munmap(0x%08"PFMT64x",%d);break;\n"
 	"}\n", num, (void*)addr, size);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
@@ -1801,34 +1795,6 @@ static int perms2map(int perms)
 }
 #endif
 
-static ut64 r_debug_native_alloc_arena(RDebug *dbg, int len)
-{
-	ut64 next_ptr;
-
-	if (len > DEFAULT_DEBUG_NATIVE_ARENA_SIZE) {
-		return 0;
-	}
-	/* init rena are in the process debugged */
-	if (!r_debug_native_arena.arena) {
-		RDebugMap *map;
-
-		map = linux_map_alloc (dbg, 0, DEFAULT_DEBUG_NATIVE_ARENA_SIZE);
-		if (map) {
-			r_debug_native_arena.arena = map->addr;
-			r_debug_native_arena.next_ptr = map->addr;
-			r_debug_native_arena.sz = (int)(map->addr_end - map->addr);
-			r_debug_native_arena.free_sz = r_debug_native_arena.sz;
-		}
-	}
-	if (len > r_debug_native_arena.free_sz) {
-		return 0;	
-	}
-	next_ptr = r_debug_native_arena.next_ptr;
-	r_debug_native_arena.next_ptr += len;	
-	r_debug_native_arena.free_sz -= len;
-	return next_ptr;
-}
-
 static int r_debug_native_map_protect(RDebug *dbg, ut64 addr, int size, int perms) {
 	return r_debug_native_map_protect_ (dbg, addr, size, perms, false);
 }
@@ -1851,11 +1817,11 @@ static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int per
 
 		addr_alloc = 0;
 		if (use_arena) {
-			addr_alloc = r_debug_native_alloc_arena (dbg, 0x50);
+			addr_alloc = r_debug_mem_proc_alloc (dbg, 0x50);
 		}
 		snprintf (code, sizeof (code),
 			"sc_mprotect@syscall(%d);\n"
-			"main@naked(0) { ._ra0 = sc_mprotect(0x%08"PFMT64x",%d,%d);\n"
+			"main@global(0) { ._ra0 = sc_mprotect(0x%08"PFMT64x",%d,%d);break;\n"
 			"}\n", num, addr, size, perms2map (perms));
 		r_egg_reset (dbg->egg);
 		r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);

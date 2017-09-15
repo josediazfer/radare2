@@ -4,6 +4,8 @@
 #include <r_core.h>
 #include <signal.h>
 
+static bool r_debug_step_block_out (RDebug *dbg);
+
 #if __WINDOWS__
 void w32_break_process(void *);
 #endif
@@ -12,6 +14,8 @@ R_LIB_VERSION(r_debug);
 
 // Size of the lookahead buffers used in r_debug functions
 #define DBG_BUF_SIZE 512
+
+static int r_debug_bps_enable(RDebug *dbg);
 
 R_API RDebugInfo *r_debug_info(RDebug *dbg, const char *arg) {
 	if (!dbg || !dbg->h || !dbg->h->info) {
@@ -28,6 +32,76 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 		free (rdi->libname);
 	}
 	free (rdi);
+}
+
+static bool r_debug_step_block_out (RDebug *dbg)
+{
+	ut8 buf[32];
+	ut64 pc;
+	RAnalOp op;
+	ut64 addr;
+	bool ret = false;
+
+	if (dbg->reason.bp_type != R_BP_TYPE_MEM) {
+		return false;
+	}
+	pc = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
+	if (pc != dbg->reason.fault_addr) {
+		return false;
+	}
+	if (!dbg->iob.read_at ||
+		(!dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf))) ||
+		!r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf)) ||
+		op.type == R_ANAL_OP_TYPE_ILL) {
+		return false;
+	}
+	switch (op.type) {
+	case R_ANAL_OP_TYPE_RET:
+	case R_ANAL_OP_TYPE_CJMP:
+	case R_ANAL_OP_TYPE_CCALL:
+	case R_ANAL_OP_TYPE_CALL:
+	case R_ANAL_OP_TYPE_JMP:
+	case R_ANAL_OP_TYPE_RJMP:
+	case R_ANAL_OP_TYPE_RCALL:
+	case R_ANAL_OP_TYPE_IRCALL:
+	case R_ANAL_OP_TYPE_IRJMP:
+	case R_ANAL_OP_TYPE_UCALL:
+	case R_ANAL_OP_TYPE_MJMP:
+	case R_ANAL_OP_TYPE_UJMP:
+		eprintf ("Ignore step out: %llx\n", pc);
+		break;
+	default: 
+		{
+		 RCore *core = r_core_new ();
+			addr = r_debug_mem_proc_alloc (dbg, sizeof (buf));
+			if (addr && dbg->iob.write_at (dbg->iob.io, addr, buf, sizeof (buf))) {
+				RRegItem *ripc;
+				ut64 rpc;
+				eprintf ("step out %llx %llx\n", addr, pc);
+				/* change pc to addr */
+				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+				ripc = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], R_REG_TYPE_GPR);
+				rpc = r_reg_get_value (dbg->reg, ripc);
+				r_reg_set_value (dbg->reg, ripc, addr);
+				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
+				dbg->reason.bp_addr = 0;
+				dbg->reason.step_out = true;
+				/* do single step */
+				r_debug_step (dbg, 1);
+				dbg->reason.step_out = false;
+				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+				/* change pc to next instr (pc + op.size) */
+				r_reg_set_value (dbg->reg, ripc, rpc + op.size);
+				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
+
+				eprintf ("RETTT step out %llx %llx\n", addr, rpc + op.size);
+				r_debug_bps_enable (dbg);
+				ret = true;
+			}
+			r_debug_mem_proc_free (dbg, addr);
+		}
+	}
+	return ret;
 }
 
 /*
@@ -135,6 +209,9 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 				eprintf ("hit memory breakpoint at: %"PFMT64x ", ptr %"PFMT64x "\n",
 					pc, dbg->reason.fault_addr);
 			}
+			if(dbg->reason.step_out) {
+				eprintf("STEP OUTT!!\n");exit(1);
+			}
 		} else {
 			eprintf ("hit %spoint at: %"PFMT64x "\n",
 					b->trace ? "trace" : "break", pc);
@@ -200,6 +277,9 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 
 	/* we have entered recoil! */
 	dbg->recoil_mode = rc_mode;
+	if (r_debug_step_block_out (dbg)) {
+		return true;
+	}
 
 	/* step over the place with the breakpoint and let the caller resume */
 	if (r_debug_step (dbg, 1) != 1) {
@@ -403,6 +483,7 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->plugins);
 		free (dbg->btalgo);
 		r_debug_trace_free (dbg->trace);
+		r_debug_mem_proc_destroy (dbg);
 		dbg->trace = NULL;
 		r_egg_free (dbg->egg);
 		free (dbg->arch);
@@ -510,6 +591,7 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, ut64 addr, int 
 		} else {
 			code_addr = rpc;
 		}
+
 		dbg->iob.read_at (dbg->iob.io, code_addr, backup, len);
 		dbg->iob.read_at (dbg->iob.io, rsp, stackbackup, len);
 		b = r_bp_add_sw (dbg->bp, code_addr+len, dbg->bpsize, R_BP_PROT_EXEC);
@@ -541,7 +623,7 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, ut64 addr, int 
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
 		free (backup);
 		free (orig);
-		eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
+		//eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
 	} else eprintf ("r_debug_execute: Cannot get program counter\n");
 	return (ra0);
 }
@@ -856,7 +938,6 @@ R_API int r_debug_step_hard(RDebug *dbg) {
 			return true;
 		}
 	}
-
 	if (!dbg->h->step (dbg)) {
 		return false;
 	}
