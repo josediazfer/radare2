@@ -239,8 +239,14 @@ static char *getarg(struct Getarg* gop, int n, int set, char *setop, int sel) {
 		const char *index = cs_reg_name (handle, op.mem.index);
 		int scale = op.mem.scale;
 		st64 disp = op.mem.disp;
+		const char *pc = (gop->bits==16)?"ip":
+			(gop->bits==32)?"eip":"rip";
 
-		if (disp != 0) {
+		if (base && !strcmp(base, pc)) {
+			snprintf (out, BUF_SZ, "0x%"PFMT64x",", (disp < 0) ? -disp + insn->size : disp + insn->size);
+			component_count++;
+
+		} else if (disp != 0) {
 			snprintf (out, BUF_SZ, "0x%"PFMT64x",", (disp < 0) ? -disp : disp);
 			component_count++;
 		}

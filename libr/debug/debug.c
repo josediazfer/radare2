@@ -4,8 +4,6 @@
 #include <r_core.h>
 #include <signal.h>
 
-static bool r_debug_step_block_out (RDebug *dbg);
-
 #if __WINDOWS__
 void w32_break_process(void *);
 #endif
@@ -16,6 +14,17 @@ R_LIB_VERSION(r_debug);
 #define DBG_BUF_SIZE 512
 
 static int r_debug_bps_enable(RDebug *dbg);
+
+typedef struct {
+	ut64 addr;
+	int sz;
+} RDebugEsilMemRef;
+
+typedef struct {
+	RList *rd_list;
+	RList *wr_list;
+	RDebug *dbg;
+} RDebugEsilTraceMem;
 
 R_API RDebugInfo *r_debug_info(RDebug *dbg, const char *arg) {
 	if (!dbg || !dbg->h || !dbg->h->info) {
@@ -34,74 +43,80 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 	free (rdi);
 }
 
-static bool r_debug_step_block_out (RDebug *dbg)
-{
+static void add_esil_mem_ref (RAnalEsil *esil, ut64 addr, int len, bool rd) {
+	RDebugEsilTraceMem *trace_mem = (RDebugEsilTraceMem *)esil->user;
+        RDebugEsilMemRef *mem_ref = R_NEW0 (RDebugEsilMemRef);
+
+        if (!mem_ref) {
+                return;
+        }
+        mem_ref->addr = addr;
+        mem_ref->sz = len;
+	if (rd) {
+		r_list_append (trace_mem->rd_list, mem_ref);
+	} else {
+		r_list_append (trace_mem->wr_list, mem_ref);
+	}
+}
+
+static int hook_esil_mem_write(RAnalEsil *esil, ut64 addr, const ut8 *buf, int len) {
+	add_esil_mem_ref (esil, addr, len, false);
+	//eprintf ("mem write: %llx %d\n", addr, len);
+	return 1;
+}
+
+static int hook_esil_mem_read(RAnalEsil *esil, ut64 addr, ut8 *buf, int len) {
+	add_esil_mem_ref (esil, addr, len, true);
+	//eprintf ("mem read: %llx %d\n", addr, len);
+	return 0;
+}
+
+static void r_debug_esil_tmem_free(RDebugEsilTraceMem *trace_mem) {
+	if (!trace_mem) {
+		return;
+	}
+	if (trace_mem->rd_list) {
+		r_list_free (trace_mem->rd_list);	
+	}
+	if (trace_mem->wr_list) {
+		r_list_free (trace_mem->wr_list);	
+	}
+}
+
+static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
 	ut8 buf[32];
-	ut64 pc;
 	RAnalOp op;
-	ut64 addr;
-	bool ret = false;
+	RAnalEsil *esil;
+	RDebugEsilTraceMem *trace_mem;
 
-	if (dbg->reason.bp_type != R_BP_TYPE_MEM) {
-		return false;
-	}
-	pc = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
-	if (pc != dbg->reason.fault_addr) {
-		return false;
-	}
 	if (!dbg->iob.read_at ||
-		(!dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf))) ||
-		!r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf)) ||
+		(!dbg->iob.read_at (dbg->iob.io, addr, buf, sizeof (buf))) ||
+		!r_anal_op (dbg->anal, &op, addr, buf, sizeof (buf)) ||
 		op.type == R_ANAL_OP_TYPE_ILL) {
-		return false;
+		return NULL;
 	}
-	switch (op.type) {
-	case R_ANAL_OP_TYPE_RET:
-	case R_ANAL_OP_TYPE_CJMP:
-	case R_ANAL_OP_TYPE_CCALL:
-	case R_ANAL_OP_TYPE_CALL:
-	case R_ANAL_OP_TYPE_JMP:
-	case R_ANAL_OP_TYPE_RJMP:
-	case R_ANAL_OP_TYPE_RCALL:
-	case R_ANAL_OP_TYPE_IRCALL:
-	case R_ANAL_OP_TYPE_IRJMP:
-	case R_ANAL_OP_TYPE_UCALL:
-	case R_ANAL_OP_TYPE_MJMP:
-	case R_ANAL_OP_TYPE_UJMP:
-		eprintf ("Ignore step out: %llx\n", pc);
-		break;
-	default: 
-		{
-		 RCore *core = r_core_new ();
-			addr = r_debug_mem_proc_alloc (dbg, sizeof (buf));
-			if (addr && dbg->iob.write_at (dbg->iob.io, addr, buf, sizeof (buf))) {
-				RRegItem *ripc;
-				ut64 rpc;
-				eprintf ("step out %llx %llx\n", addr, pc);
-				/* change pc to addr */
-				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
-				ripc = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], R_REG_TYPE_GPR);
-				rpc = r_reg_get_value (dbg->reg, ripc);
-				r_reg_set_value (dbg->reg, ripc, addr);
-				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
-				dbg->reason.bp_addr = 0;
-				dbg->reason.step_out = true;
-				/* do single step */
-				r_debug_step (dbg, 1);
-				dbg->reason.step_out = false;
-				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
-				/* change pc to next instr (pc + op.size) */
-				r_reg_set_value (dbg->reg, ripc, rpc + op.size);
-				r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
+	bool iotrap = dbg->corebind.cfggeti (dbg->corebind.core, "esil.iotrap");
+	int stacksize = dbg->corebind.cfggeti (dbg->corebind.core, "esil.stack.depth");
+	esil = r_anal_esil_new (stacksize, iotrap);
+	r_anal_esil_setup (esil, dbg->anal, 0, 0, 0);
+	trace_mem = calloc (sizeof (RDebugEsilTraceMem), 1);
+	if (!trace_mem) {
+		goto err_r_debug_anal_memrefs;
+	}
+	trace_mem->rd_list = r_list_new();
+	trace_mem->wr_list = r_list_new();
+	trace_mem->dbg = dbg;
+	esil->user = trace_mem;
+	esil->cb.hook_mem_write = hook_esil_mem_write;
+	esil->cb.hook_mem_read = hook_esil_mem_read;
+	const char *esilstr = R_STRBUF_SAFEGET (&op.esil);
+	r_anal_esil_parse (esil, esilstr);
 
-				eprintf ("RETTT step out %llx %llx\n", addr, rpc + op.size);
-				r_debug_bps_enable (dbg);
-				ret = true;
-			}
-			r_debug_mem_proc_free (dbg, addr);
-		}
-	}
-	return ret;
+err_r_debug_anal_memrefs:
+	r_anal_op_fini (&op);
+	r_anal_esil_stack_free (esil);
+	r_anal_esil_free (esil);
+	return trace_mem;
 }
 
 /*
@@ -115,6 +130,7 @@ static bool r_debug_step_block_out (RDebug *dbg)
  */
 static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb, bool *ign) {
 	RBreakpointItem *b;
+	RDebugEsilTraceMem *trace_mem = NULL;
 
 	*ign = false;
 	if (!pb) {
@@ -150,10 +166,6 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 		if (!b) {
 			return true;
 		}
-		if (dbg->reason.fault_addr < b->r_addr || 
-			dbg->reason.fault_addr >= (b->r_addr + b->r_size)) {
-			*ign = true;
-		} 
 	} else {
 		/* The MIPS ptrace has a different behaviour */
 # if __mips__
@@ -205,12 +217,45 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	/* inform the user of what happened */
 	if (dbg->hitinfo && !b->silent) {
 		if (b->type == R_BP_TYPE_MEM) {
-			if (!*ign) {
-				eprintf ("hit memory breakpoint at: %"PFMT64x ", ptr %"PFMT64x "\n",
-					pc, dbg->reason.fault_addr);
+			bool pr_hit_memory = true;
+			*ign = true;
+
+			if (dbg->reason.fault_addr == pc) {
+				RDebugEsilMemRef *mem_ref;
+				RListIter *iter;
+
+				trace_mem = r_debug_anal_memrefs(dbg, pc);
+				r_list_foreach (trace_mem->rd_list, iter, mem_ref) {
+					if (R_IO_PERM (b->rwx, R_IO_READ) && mem_ref->addr >= b->r_addr && (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
+						if (pr_hit_memory) {
+							eprintf ("hit memory breakpoint at: %"PFMT64x ",", dbg->reason.fault_addr);
+							pr_hit_memory = false;
+						}
+						eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, mem_ref->sz);
+						*ign = false;
+					}
+				}
+				r_list_foreach (trace_mem->wr_list, iter, mem_ref) {
+					if (R_IO_PERM (b->rwx, R_IO_WRITE) && mem_ref->addr >= b->r_addr &&  (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
+						if (pr_hit_memory) {
+							eprintf ("hit memory breakpoint at: %"PFMT64x ",", dbg->reason.fault_addr);
+							pr_hit_memory = false;
+						}
+						eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, mem_ref->sz);
+						*ign = false;
+					}
+				}
 			}
-			if(dbg->reason.step_out) {
-				eprintf("STEP OUTT!!\n");exit(1);
+			if (R_IO_PERM (b->rwx, R_IO_EXEC) && dbg->reason.fault_addr >= b->r_addr
+				&& dbg->reason.fault_addr <= (b->r_addr + b->r_size)) {
+				if (pr_hit_memory) {
+					eprintf ("hit memory breakpoint at: %"PFMT64x ",", dbg->reason.fault_addr);
+				}
+				*ign = false;
+				eprintf (" ptr [%"PFMT64x "] execute access", dbg->reason.fault_addr);
+			}
+			if (!*ign) {
+				eprintf("\n");
 			}
 		} else {
 			eprintf ("hit %spoint at: %"PFMT64x "\n",
@@ -224,6 +269,7 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	if (dbg->corebind.core && dbg->corebind.bphit && !*ign) {
 		dbg->corebind.bphit (dbg->corebind.core, b);
 	}
+	r_debug_esil_tmem_free (trace_mem);
 	return true;
 }
 
@@ -277,9 +323,6 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 
 	/* we have entered recoil! */
 	dbg->recoil_mode = rc_mode;
-	if (r_debug_step_block_out (dbg)) {
-		return true;
-	}
 
 	/* step over the place with the breakpoint and let the caller resume */
 	if (r_debug_step (dbg, 1) != 1) {

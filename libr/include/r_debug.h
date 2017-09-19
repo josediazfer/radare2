@@ -136,7 +136,6 @@ typedef struct r_debug_reason_t {
 	ut64 fault_addr;
 	int bp_type;
 	bool ign;
-	bool step_out;
 } RDebugReason;
 
 typedef struct r_debug_map_t {
