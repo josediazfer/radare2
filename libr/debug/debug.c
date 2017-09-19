@@ -119,6 +119,52 @@ err_r_debug_anal_memrefs:
 	return trace_mem;
 }
 
+static bool r_debug_mem_bp_hit (RDebug *dbg, RBreakpointItem *b, ut64 pc) {
+	bool pr_hit = true;
+	bool bp_found = false;
+	RDebugEsilMemRef *mem_ref;
+	RDebugEsilTraceMem *trace_mem = r_debug_anal_memrefs(dbg, pc);
+	RListIter *iter;
+
+	if (!trace_mem) {
+		/* invalid instruction? */
+		return NULL;
+	}
+	r_list_foreach (trace_mem->rd_list, iter, mem_ref) {
+		if (R_IO_PERM (b->rwx, R_IO_READ) && mem_ref->addr >= b->r_addr && (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
+			if (pr_hit) {
+				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
+				pr_hit = false;
+			}
+			eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, mem_ref->sz);
+			bp_found = true;
+		}
+	}
+	r_list_foreach (trace_mem->wr_list, iter, mem_ref) {
+		if (R_IO_PERM (b->rwx, R_IO_WRITE) && mem_ref->addr >= b->r_addr &&  (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
+			if (pr_hit) {
+				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
+				pr_hit = false;
+			}
+			eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, mem_ref->sz);
+			bp_found = true;
+		}
+	}
+	if (R_IO_PERM (b->rwx, R_IO_EXEC) && pc >= b->r_addr
+		&& pc <= (b->r_addr + b->r_size)) {
+		if (pr_hit) {
+			eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
+		}
+		bp_found = true;
+		eprintf (" ptr [%"PFMT64x "] execute access", pc);
+	}
+	if (bp_found) {
+		eprintf("\n");
+	}
+	r_debug_esil_tmem_free (trace_mem);
+	return bp_found;
+}
+
 /*
  * Recoiling after a breakpoint has two stages:
  * 1. remove the breakpoint and fix the program counter.
@@ -130,7 +176,6 @@ err_r_debug_anal_memrefs:
  */
 static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb, bool *ign) {
 	RBreakpointItem *b;
-	RDebugEsilTraceMem *trace_mem = NULL;
 
 	*ign = false;
 	if (!pb) {
@@ -217,45 +262,8 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	/* inform the user of what happened */
 	if (dbg->hitinfo && !b->silent) {
 		if (b->type == R_BP_TYPE_MEM) {
-			bool pr_hit_memory = true;
-			*ign = true;
-
-			if (dbg->reason.fault_addr == pc) {
-				RDebugEsilMemRef *mem_ref;
-				RListIter *iter;
-
-				trace_mem = r_debug_anal_memrefs(dbg, pc);
-				r_list_foreach (trace_mem->rd_list, iter, mem_ref) {
-					if (R_IO_PERM (b->rwx, R_IO_READ) && mem_ref->addr >= b->r_addr && (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
-						if (pr_hit_memory) {
-							eprintf ("hit memory breakpoint at: %"PFMT64x ",", dbg->reason.fault_addr);
-							pr_hit_memory = false;
-						}
-						eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, mem_ref->sz);
-						*ign = false;
-					}
-				}
-				r_list_foreach (trace_mem->wr_list, iter, mem_ref) {
-					if (R_IO_PERM (b->rwx, R_IO_WRITE) && mem_ref->addr >= b->r_addr &&  (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
-						if (pr_hit_memory) {
-							eprintf ("hit memory breakpoint at: %"PFMT64x ",", dbg->reason.fault_addr);
-							pr_hit_memory = false;
-						}
-						eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, mem_ref->sz);
-						*ign = false;
-					}
-				}
-			}
-			if (R_IO_PERM (b->rwx, R_IO_EXEC) && dbg->reason.fault_addr >= b->r_addr
-				&& dbg->reason.fault_addr <= (b->r_addr + b->r_size)) {
-				if (pr_hit_memory) {
-					eprintf ("hit memory breakpoint at: %"PFMT64x ",", dbg->reason.fault_addr);
-				}
-				*ign = false;
-				eprintf (" ptr [%"PFMT64x "] execute access", dbg->reason.fault_addr);
-			}
-			if (!*ign) {
-				eprintf("\n");
+			if (!r_debug_mem_bp_hit (dbg, b, pc)) {
+				*ign = true;
 			}
 		} else {
 			eprintf ("hit %spoint at: %"PFMT64x "\n",
@@ -269,7 +277,6 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	if (dbg->corebind.core && dbg->corebind.bphit && !*ign) {
 		dbg->corebind.bphit (dbg->corebind.core, b);
 	}
-	r_debug_esil_tmem_free (trace_mem);
 	return true;
 }
 
