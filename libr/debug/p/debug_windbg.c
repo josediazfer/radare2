@@ -80,10 +80,10 @@ static RDebugReasonType r_debug_windbg_wait(RDebug *dbg, int pid) {
 		stc = (kd_stc_64 *) pkt->data;
 		if (stc->state == DbgKdExceptionStateChange) {
 			windbg_set_cpu (wctx, stc->cpu);
-			dbg->reason.type = R_DEBUG_REASON_INT;
-			dbg->reason.addr = stc->pc;
-			dbg->reason.tid = stc->kthread;
-			dbg->reason.signum = stc->state;
+			dbg->reason->type = R_DEBUG_REASON_INT;
+			dbg->reason->addr = stc->pc;
+			dbg->reason->tid = stc->kthread;
+			dbg->reason->signum = stc->state;
 			reason = R_DEBUG_REASON_INT;
 			break;
 		}

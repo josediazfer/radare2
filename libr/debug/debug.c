@@ -14,6 +14,7 @@ R_LIB_VERSION(r_debug);
 #define DBG_BUF_SIZE 512
 
 static int r_debug_bps_enable(RDebug *dbg);
+RDebugReason *r_debug_new_reason(RDebug *dbg);
 
 typedef struct {
 	ut64 addr;
@@ -41,6 +42,26 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 		free (rdi->libname);
 	}
 	free (rdi);
+}
+
+RDebugReason *r_debug_new_reason(RDebug *dbg) {
+	int idx;
+
+	if ((dbg->reason_idx + 1) > MAX_DBG_REASON_COUNT) {
+		return NULL;
+	}
+	idx = dbg->reason_idx + 1;
+	memset(&dbg->reason_stack[idx], 0, sizeof (RDebugReason));
+	dbg->reason_idx = idx;
+	dbg->reason = &dbg->reason_stack[idx];
+	return dbg->reason;
+}
+
+void r_debug_free_reason(RDebug *dbg) {
+	if (dbg->reason_idx > 0) {
+		dbg->reason_idx--;
+		dbg->reason = &dbg->reason_stack[dbg->reason_idx];
+	}
 }
 
 static void add_esil_mem_ref (RAnalEsil *esil, ut64 addr, int len, bool rd) {
@@ -202,12 +223,12 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	/* if we are recoiling, tell r_debug_step that we ignored a breakpoint
 	 * event */
 	if (!dbg->swstep && dbg->recoil_mode != R_DBG_RECOIL_NONE) {
-		dbg->reason.bp_addr = 0;
+		dbg->reason->bp_addr = 0;
 		return true;
 	}
 
-	if (dbg->reason.bp_type == R_BP_TYPE_MEM) {
-		b = r_bp_mem_get_in (dbg->bp, dbg->reason.fault_addr, 1);
+	if (dbg->reason->bp_type == R_BP_TYPE_MEM) {
+		b = r_bp_mem_get_in (dbg->bp, dbg->reason->fault_addr, 1);
 		if (!b) {
 			return true;
 		}
@@ -252,12 +273,12 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 
 	/* if we are on a software stepping breakpoint, we hide what is going on... */
 	if (b->swstep) {
-		dbg->reason.bp_addr = 0;
+		dbg->reason->bp_addr = 0;
 		return true;
 	}
 
 	/* setup our stage 2 */
-	dbg->reason.bp_addr = b->addr;
+	dbg->reason->bp_addr = b->addr;
 
 	/* inform the user of what happened */
 	if (dbg->hitinfo && !b->silent) {
@@ -306,7 +327,7 @@ static int r_debug_bps_enable(RDebug *dbg) {
  */
 static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 	/* if bp_addr is not set, we must not have actually hit a breakpoint */
-	if (!dbg->reason.bp_addr) {
+	if (!dbg->reason->bp_addr) {
 		return r_debug_bps_enable (dbg);
 	}
 
@@ -318,7 +339,7 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 		 * so we just restore all except what we originally hit and reset.
 		 */
 		if (dbg->swstep) {
-			if (!r_bp_restore_except (dbg->bp, true, dbg->reason.bp_addr)) {
+			if (!r_bp_restore_except (dbg->bp, true, dbg->reason->bp_addr)) {
 				return false;
 			}
 			return true;
@@ -342,7 +363,7 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 	 * is still set. we use this condition to know not to proceed but
 	 * pretend as if we had.
 	 */
-	if (!dbg->reason.bp_addr && dbg->recoil_mode == R_DBG_RECOIL_STEP) {
+	if (!dbg->reason->bp_addr && dbg->recoil_mode == R_DBG_RECOIL_STEP) {
 		return true;
 	}
 
@@ -490,6 +511,8 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->h = NULL;
 	dbg->threads = NULL;
 	dbg->hitinfo = 1;
+	dbg->reason_idx = -1;
+	dbg->reason = r_debug_new_reason (dbg);
 	/* TODO: needs a redesign? */
 	dbg->maps = r_debug_map_list_new ();
 	dbg->maps_user = r_debug_map_list_new ();
@@ -760,7 +783,7 @@ R_API RDebugReasonType r_debug_stop_reason(RDebug *dbg) {
 	// - illegal instruction
 	// - fpu exception
 	// return dbg->reason
-	return dbg->reason.type;
+	return dbg->reason->type;
 }
 
 /*
@@ -778,7 +801,7 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 		*bp = NULL;
 	}
 	/* default to unknown */
-	dbg->reason.type = R_DEBUG_REASON_UNKNOWN;
+	dbg->reason->type = R_DEBUG_REASON_UNKNOWN;
 	if (r_debug_is_dead (dbg)) {
 		return R_DEBUG_REASON_DEAD;
 	}
@@ -843,15 +866,15 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			}
 		}
 
-		dbg->reason.type = reason;
-		if (reason == R_DEBUG_REASON_SIGNAL && dbg->reason.signum != -1) {
+		dbg->reason->type = reason;
+		if (reason == R_DEBUG_REASON_SIGNAL && dbg->reason->signum != -1) {
 			/* handle signal on continuations here */
 			eprintf ("got signal...\n");
-			int what = r_debug_signal_what (dbg, dbg->reason.signum);
-			const char *name = r_signal_to_string (dbg->reason.signum);
+			int what = r_debug_signal_what (dbg, dbg->reason->signum);
+			const char *name = r_signal_to_string (dbg->reason->signum);
 			if (name && strcmp ("SIGTRAP", name)) {
 				r_cons_printf ("[+] signal %d aka %s received %d\n",
-						dbg->reason.signum, name, what);
+						dbg->reason->signum, name, what);
 			}
 		}
 	}
@@ -970,7 +993,7 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 R_API int r_debug_step_hard(RDebug *dbg) {
 	RDebugReasonType reason;
 
-	dbg->reason.type = R_DEBUG_REASON_STEP;
+	dbg->reason->type = R_DEBUG_REASON_STEP;
 	if (r_debug_is_dead (dbg)) {
 		return false;
 	}
@@ -1018,7 +1041,7 @@ R_API int r_debug_step(RDebug *dbg, int steps) {
 		return steps_taken;
 	}
 
-	dbg->reason.type = R_DEBUG_REASON_STEP;
+	dbg->reason->type = R_DEBUG_REASON_STEP;
 
 	for (; steps_taken < steps; steps_taken++) {
 		if (dbg->swstep) {
@@ -1031,7 +1054,7 @@ R_API int r_debug_step(RDebug *dbg, int steps) {
 			return steps_taken;
 		}
 		dbg->steps++;
-		dbg->reason.type = R_DEBUG_REASON_STEP;
+		dbg->reason->type = R_DEBUG_REASON_STEP;
 	}
 
 	return steps_taken;
@@ -1197,7 +1220,7 @@ repeat:
 		}
 		/* tell the inferior to go! */
 		ret = dbg->h->cont (dbg, dbg->pid, dbg->tid, sig);
-		//XXX(jjd): why? //dbg->reason.signum = 0;
+		//XXX(jjd): why? //dbg->reason->signum = 0;
 
 		reason = r_debug_wait (dbg, &bp);
 		if (reason == R_DEBUG_REASON_IGN) {
@@ -1286,10 +1309,10 @@ repeat:
 
 		/* handle general signals here based on the return from the wait
 		 * function */
-		if (dbg->reason.signum != -1) {
-			int what = r_debug_signal_what (dbg, dbg->reason.signum);
+		if (dbg->reason->signum != -1) {
+			int what = r_debug_signal_what (dbg, dbg->reason->signum);
 			if (what & R_DBG_SIGNAL_CONT) {
-				sig = dbg->reason.signum;
+				sig = dbg->reason->signum;
 				eprintf ("Continue into the signal %d handler\n", sig);
 				goto repeat;
 			} else if (what & R_DBG_SIGNAL_SKIP) {
@@ -1300,10 +1323,10 @@ repeat:
 				dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
 				r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf));
 				if (op.size > 0) {
-					const char *signame = r_signal_to_string (dbg->reason.signum);
+					const char *signame = r_signal_to_string (dbg->reason->signum);
 					r_debug_reg_set (dbg, "PC", pc+op.size);
 					eprintf ("Skip signal %d handler %s\n",
-						dbg->reason.signum, signame);
+						dbg->reason->signum, signame);
 					goto repeat;
 				} else {
 					ut64 pc = r_debug_reg_get (dbg, "PC");
@@ -1320,7 +1343,7 @@ repeat:
 }
 
 R_API int r_debug_continue(RDebug *dbg) {
-	return r_debug_continue_kill (dbg, 0); //dbg->reason.signum);
+	return r_debug_continue_kill (dbg, 0); //dbg->reason->signum);
 }
 
 #if __WINDOWS__ && !__CYGWIN__
@@ -1641,7 +1664,7 @@ R_API int r_debug_child_clone(RDebug *dbg) {
 }
 
 R_API bool r_debug_is_dead (RDebug *dbg) {
-	bool is_dead = (dbg->pid == -1 && strncmp (dbg->h->name, "gdb", 3)) || (dbg->reason.type == R_DEBUG_REASON_DEAD);
+	bool is_dead = (dbg->pid == -1 && strncmp (dbg->h->name, "gdb", 3)) || (dbg->reason->type == R_DEBUG_REASON_DEAD);
 	if (dbg->pid > 0) {
 		is_dead = !dbg->h->kill (dbg, dbg->pid, false, 0);
 	}
@@ -1651,7 +1674,7 @@ R_API bool r_debug_is_dead (RDebug *dbg) {
 	}
 #endif
 	if (is_dead) {
-		dbg->reason.type = R_DEBUG_REASON_DEAD;
+		dbg->reason->type = R_DEBUG_REASON_DEAD;
 	}
 	return is_dead;
 }

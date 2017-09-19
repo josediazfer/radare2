@@ -154,7 +154,7 @@ static int windows_step (RDebug *dbg) {
 	r_debug_native_reg_read (dbg, R_REG_TYPE_GPR, (ut8 *)&regs, sizeof (regs));
 	regs.EFlags |= 0x100;
 	r_debug_native_reg_write (dbg, R_REG_TYPE_GPR, (ut8 *)&regs, sizeof (regs));
-	r_debug_native_continue (dbg, dbg->pid, dbg->tid, dbg->reason.signum);
+	r_debug_native_continue (dbg, dbg->pid, dbg->tid, dbg->reason->signum);
 	r_debug_handle_signals (dbg);
 	return true;
 }
@@ -334,14 +334,14 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 	}
 	return tid;
 #elif __BSD__
-	void *data = (void*)(size_t)((sig != -1) ? sig : dbg->reason.signum);
+	void *data = (void*)(size_t)((sig != -1) ? sig : dbg->reason->signum);
 	ut64 pc = r_debug_reg_get (dbg, "PC");
 	return ptrace (PTRACE_CONT, pid, (void*)(size_t)pc, (int)(size_t)data) == 0;
 #elif __CYGWIN__
 	#warning "r_debug_native_continue not supported on this platform"
 	return -1;
 #else
-	int contsig = dbg->reason.signum;
+	int contsig = dbg->reason->signum;
 
 	if (sig != -1) {
 		contsig = sig;
@@ -559,11 +559,11 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 			/* the ptrace documentation says GETSIGINFO is only necessary for
 			 * differentiating the various stops.
 			 *
-			 * this might modify dbg->reason.signum
+			 * this might modify dbg->reason->signum
 			 */
 			if (!r_debug_handle_signals (dbg))
 				return R_DEBUG_REASON_ERROR;
-			reason = dbg->reason.type;
+			reason = dbg->reason->type;
 		} else if (WIFCONTINUED (status)) {
 			eprintf ("child continued...\n");
 			reason = R_DEBUG_REASON_NONE;
@@ -593,8 +593,8 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 #endif // __linux__ && !defined (WAIT_ON_ALL_CHILDREN)
 #endif // __APPLE__
 #endif // __WINDOWS__ && !__CYGWIN__
-	dbg->reason.tid = pid;
-	dbg->reason.type = reason;
+	dbg->reason->tid = pid;
+	dbg->reason->type = reason;
 	return reason;
 }
 
@@ -1475,7 +1475,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 #endif
 #if __WINDOWS__ || __linux__
 	if (b && !b->ign && b->type == R_BP_TYPE_MEM &&
-		!r_debug_is_dead(dbg) && dbg->reason.type != R_DEBUG_REASON_EXIT_PID) {
+		!r_debug_is_dead(dbg) && dbg->reason->type != R_DEBUG_REASON_EXIT_PID) {
 		b->ign = true;
 		if (set) {
 			int unmap_len;
@@ -1487,7 +1487,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 				r_list_free (b->omap);
 				b->omap = NULL;
 			} else {
-				RDebugReason reason = dbg->reason;
+				RDebugReason reason = *dbg->reason;
 
 				if (unmap_len > 0) {
 					b->size -= unmap_len;
@@ -1498,11 +1498,11 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 #else
 				ret = r_debug_native_map_protect_ (dbg, b->addr, b->size, 0, true);
 #endif
-				dbg->reason = reason;
+				*dbg->reason = reason;
 			} 
 		} else {
 			if (b->omap) {
-				RDebugReason reason = dbg->reason;
+				RDebugReason reason = *dbg->reason;
 				RListIter *iter;
 				RDebugMap *map;
 
@@ -1513,7 +1513,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 					ret = r_debug_native_map_protect_ (dbg, map->addr, map->addr_end - map->addr, map->perm, true);
 				}
 #endif
-				dbg->reason = reason;
+				*dbg->reason = reason;
 			}
 		}
 		b->ign = false;

@@ -58,12 +58,12 @@ int linux_handle_signals (RDebug *dbg, int status) {
 	bool show_siginfo = true;
 	bool bp_mem = false;
 
-	dbg->reason.bp_type = R_BP_TYPE_UK;
+	dbg->reason->bp_type = R_BP_TYPE_UK;
 	if (ret == -1) {
 		/* ESRCH means the process already went away :-/ */
 		if (errno == ESRCH) {
 			show_sig_stop_info(status);
-			dbg->reason.type = R_DEBUG_REASON_DEAD;
+			dbg->reason->type = R_DEBUG_REASON_DEAD;
 			return true;
 		}
 		show_sig_stop_info(status);
@@ -73,13 +73,13 @@ int linux_handle_signals (RDebug *dbg, int status) {
 	if (siginfo.si_signo > 0) {
 		//siginfo_t newsiginfo = {0};
 		//ptrace (PTRACE_SETSIGINFO, dbg->pid, 0, &siginfo);
-		dbg->reason.type = R_DEBUG_REASON_SIGNAL;
-		dbg->reason.signum = siginfo.si_signo;
+		dbg->reason->type = R_DEBUG_REASON_SIGNAL;
+		dbg->reason->signum = siginfo.si_signo;
 		//dbg->stopaddr = siginfo.si_addr;
 		//dbg->errno = siginfo.si_errno;
 		// siginfo.si_code -> HWBKPT, USER, KERNEL or WHAT
 #warning DO MORE RDEBUGREASON HERE
-		switch (dbg->reason.signum) {
+		switch (dbg->reason->signum) {
 			case SIGTRAP:
 			{
 				if (dbg->glob_libs || dbg->glob_unlibs) {
@@ -96,43 +96,43 @@ int linux_handle_signals (RDebug *dbg, int status) {
 									name = r_reg_get_name (dbg->reg, R_REG_NAME_A1);
 								}
 								b->data = r_str_appendf (b->data, ";ps@r:%s", name);
-								dbg->reason.type = R_DEBUG_REASON_NEW_LIB;
+								dbg->reason->type = R_DEBUG_REASON_NEW_LIB;
 							} else if (r_str_startswith (p, "dbg.unlibs")) {
-								dbg->reason.type = R_DEBUG_REASON_EXIT_LIB;
+								dbg->reason->type = R_DEBUG_REASON_EXIT_LIB;
 							}
 						}
 					}
 				}
-				if (dbg->reason.type != R_DEBUG_REASON_NEW_LIB &&
-					dbg->reason.type != R_DEBUG_REASON_EXIT_LIB) {
-					dbg->reason.bp_addr = (ut64)siginfo.si_addr;
-					dbg->reason.type = R_DEBUG_REASON_BREAKPOINT;
+				if (dbg->reason->type != R_DEBUG_REASON_NEW_LIB &&
+					dbg->reason->type != R_DEBUG_REASON_EXIT_LIB) {
+					dbg->reason->bp_addr = (ut64)siginfo.si_addr;
+					dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
 				}
 			}
 				break;
 			case SIGABRT: // 6 / SIGIOT // SIGABRT
-				dbg->reason.type = R_DEBUG_REASON_ABORT;
+				dbg->reason->type = R_DEBUG_REASON_ABORT;
 				break;
 			case SIGSEGV:
 			{
 				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, (ut64)siginfo.si_addr, 1);
-				dbg->reason.fault_addr = (ut64)siginfo.si_addr;
+				dbg->reason->fault_addr = (ut64)siginfo.si_addr;
 				if (b) {
-					dbg->reason.bp_type = R_BP_TYPE_MEM;
-					dbg->reason.type = R_DEBUG_REASON_BREAKPOINT;
+					dbg->reason->bp_type = R_BP_TYPE_MEM;
+					dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
 					show_siginfo = false;
 					bp_mem = true;
 				} else { 
-					dbg->reason.type = R_DEBUG_REASON_SEGFAULT;
+					dbg->reason->type = R_DEBUG_REASON_SEGFAULT;
 				}
 				break;
 			}
 			case SIGCHLD:
-				dbg->reason.type = R_DEBUG_REASON_SIGNAL;
+				dbg->reason->type = R_DEBUG_REASON_SIGNAL;
 			default:
 				break;
 		}
-		if (show_siginfo && dbg->reason.signum != SIGTRAP) {
+		if (show_siginfo && dbg->reason->signum != SIGTRAP) {
 			eprintf ("[+] SIGNAL %d errno=%d addr=0x%08"PFMT64x
 				" code=%d ret=%d\n",
 				siginfo.si_signo, siginfo.si_errno,
@@ -378,7 +378,7 @@ repeat:
 					eprintf ("can't handle signals\n");
 					return R_DEBUG_REASON_ERROR;
 				}
-				reason = dbg->reason.type;
+				reason = dbg->reason->type;
 #ifdef WIFCONTINUED
 			} else if (WIFCONTINUED (status)) {
 				eprintf ("child continued...\n");

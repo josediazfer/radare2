@@ -156,7 +156,7 @@ static int r_debug_qnx_step (RDebug *dbg) {
 static int r_debug_qnx_wait (RDebug *dbg, int pid) {
 	ptid_t ptid = qnxr_wait (desc, pid);
 	if (!ptid_equal (ptid, null_ptid)) {
-		dbg->reason.signum = desc->signal;
+		dbg->reason->signum = desc->signal;
 		return desc->notify_type;
 	}
 	return 0;

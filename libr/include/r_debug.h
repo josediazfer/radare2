@@ -47,6 +47,7 @@ R_LIB_VERSION_HEADER(r_debug);
 
 #define SNAP_PAGE_SIZE 4096
 #define CHECK_POINT_LIMIT 0x100000 //TODO: take the benchmark
+#define MAX_DBG_REASON_COUNT 10 //stackable dbg reasons
 /*
  * states that a process can be in
  */
@@ -299,7 +300,9 @@ typedef struct r_debug_t {
 
 	/* tracking debugger state */
 	int steps; /* counter of steps done */
-	RDebugReason reason; /* stop reason */
+	RDebugReason reason_stack[MAX_DBG_REASON_COUNT]; /* stop reason */
+	int reason_idx;
+	RDebugReason *reason; /* current reason */
 	RDebugRecoilMode recoil_mode; /* what did the user want to do? */
 
 	/* tracing vars */
@@ -629,6 +632,8 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz);
 R_API bool r_debug_mem_proc_free(RDebug *dbg, ut64 addr);
 R_API void r_debug_mem_proc_destroy(RDebug *dbg);
 R_API void r_debug_mem_test (RDebug *dbg);
+
+RDebugReason *r_debug_get_reason(RDebug *dbg);
 
 /* plugin pointers */
 extern RDebugPlugin r_debug_plugin_native;

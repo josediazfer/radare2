@@ -1016,9 +1016,9 @@ static int r_core_rtr_gdb_cb(libgdbr_t *g, void *core_ptr, const char *cmd,
 		if (!out_buf) {
 			return -1;
 		}
-		// dbg->reason.signum and dbg->reason.tid are not correct for native
+		// dbg->reason->signum and dbg->reason->tid are not correct for native
 		// debugger. This is a hack
-		switch (core->dbg->reason.type) {
+		switch (core->dbg->reason->type) {
 		case R_DEBUG_REASON_BREAKPOINT:
 		case R_DEBUG_REASON_STEP:
 		case R_DEBUG_REASON_TRAP:
@@ -1029,7 +1029,7 @@ static int r_core_rtr_gdb_cb(libgdbr_t *g, void *core_ptr, const char *cmd,
 		// Fallback for when it's fixed
 		/*
 		return snprintf (out_buf, max_len - 1, "T%02xthread:%x;",
-				 core->dbg->reason.type, core->dbg->reason.tid);
+				 core->dbg->reason->type, core->dbg->reason->tid);
 		*/
 	case 'd':
 		switch (cmd[1]) {
