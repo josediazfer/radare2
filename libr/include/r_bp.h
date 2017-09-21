@@ -52,6 +52,7 @@ typedef struct r_bp_item_t {
 	int internal; /* used for internal purposes */
 	int enabled;
 	int hits;
+	int depth;
 	ut8 *obytes; /* original bytes */
 	ut8 *bbytes; /* breakpoint bytes */
 	int pids[R_BP_MAXPIDS];
@@ -108,6 +109,7 @@ R_API RBreakpoint *r_bp_new(void);
 R_API RBreakpoint *r_bp_free(RBreakpoint *bp);
 
 R_API int r_bp_del(RBreakpoint *bp, ut64 addr);
+R_API int r_bp_del_depth(RBreakpoint *bp, int depth);
 R_API int r_bp_del_all(RBreakpoint *bp);
 
 R_API int r_bp_plugin_add(RBreakpoint *bp, RBreakpointPlugin *foo);
@@ -139,12 +141,12 @@ R_API int r_bp_add_cond(RBreakpoint *bp, const char *cond);
 R_API int r_bp_del_cond(RBreakpoint *bp, int idx);
 R_API int r_bp_add_fault(RBreakpoint *bp, ut64 addr, int size, int rwx);
 
-R_API RBreakpointItem *r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx);
-R_API RBreakpointItem *r_bp_add_hw(RBreakpoint *bp, ut64 addr, int size, int rwx);
-R_API RBreakpointItem* r_bp_add_mem(RBreakpoint *bp, ut64 addr, int size, int rwx);
+R_API RBreakpointItem *r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx, int depth);
+R_API RBreakpointItem *r_bp_add_hw(RBreakpoint *bp, ut64 addr, int size, int rwx, int depth);
+R_API RBreakpointItem* r_bp_add_mem(RBreakpoint *bp, ut64 addr, int size, int rwx, int depth);
 R_API void r_bp_restore_one(RBreakpoint *bp, RBreakpointItem *b, bool set);
-R_API int r_bp_restore(RBreakpoint *bp, bool set);
-R_API bool r_bp_restore_except(RBreakpoint *bp, bool set, ut64 addr);
+R_API int r_bp_restore(RBreakpoint *bp, int depth, bool set);
+R_API bool r_bp_restore_except(RBreakpoint *bp, int depth, bool set, ut64 addr);
 
 /* traptrace */
 R_API void r_bp_traptrace_free(void *ptr);
@@ -159,7 +161,7 @@ R_API RList *r_bp_traptrace_new(void);
 R_API void r_bp_traptrace_enable(RBreakpoint *bp, int enable);
 
 /* watchpoint */
-R_API RBreakpointItem *r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int type, int rw);
+R_API RBreakpointItem *r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int type, int rw, int depth);
 
 /* plugin pointers */
 extern RBreakpointPlugin r_bp_plugin_x86;

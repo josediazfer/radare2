@@ -137,7 +137,9 @@ typedef struct r_debug_reason_t {
 	ut64 fault_addr;
 	int bp_type;
 	bool ign;
-} RDebugReason;
+	RList *bps;
+	RDebugRecoilMode recoil_mode; /* what did the user want to do? */
+} RDebugReason;	/* TODO: rename structure name? */
 
 typedef struct r_debug_map_t {
 	char *name;
@@ -303,7 +305,6 @@ typedef struct r_debug_t {
 	RDebugReason reason_stack[MAX_DBG_REASON_COUNT]; /* stop reason */
 	int reason_idx;
 	RDebugReason *reason; /* current reason */
-	RDebugRecoilMode recoil_mode; /* what did the user want to do? */
 
 	/* tracing vars */
 	RDebugTrace *trace;

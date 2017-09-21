@@ -14,7 +14,6 @@ R_LIB_VERSION(r_debug);
 #define DBG_BUF_SIZE 512
 
 static int r_debug_bps_enable(RDebug *dbg);
-RDebugReason *r_debug_new_reason(RDebug *dbg);
 
 typedef struct {
 	ut64 addr;
@@ -44,10 +43,10 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 	free (rdi);
 }
 
-RDebugReason *r_debug_new_reason(RDebug *dbg) {
+static RDebugReason *r_debug_reason_push(RDebug *dbg) {
 	int idx;
 
-	if ((dbg->reason_idx + 1) > MAX_DBG_REASON_COUNT) {
+	if ((dbg->reason_idx + 1) >= MAX_DBG_REASON_COUNT) {
 		return NULL;
 	}
 	idx = dbg->reason_idx + 1;
@@ -57,8 +56,10 @@ RDebugReason *r_debug_new_reason(RDebug *dbg) {
 	return dbg->reason;
 }
 
-void r_debug_free_reason(RDebug *dbg) {
+static void r_debug_reason_pop(RDebug *dbg) {
 	if (dbg->reason_idx > 0) {
+		/* deleted breakpoints from the current "reason" depth */
+		r_bp_del_depth (dbg->bp, dbg->reason_idx);
 		dbg->reason_idx--;
 		dbg->reason = &dbg->reason_stack[dbg->reason_idx];
 	}
@@ -140,7 +141,7 @@ err_r_debug_anal_memrefs:
 	return trace_mem;
 }
 
-static bool r_debug_mem_bp_hit (RDebug *dbg, RBreakpointItem *b, ut64 pc) {
+static bool r_debug_mem_bp_hit (RDebug *dbg, RBreakpointItem *b, ut64 pc, bool show_hitinfo) {
 	bool pr_hit = true;
 	bool bp_found = false;
 	RDebugEsilMemRef *mem_ref;
@@ -153,33 +154,39 @@ static bool r_debug_mem_bp_hit (RDebug *dbg, RBreakpointItem *b, ut64 pc) {
 	}
 	r_list_foreach (trace_mem->rd_list, iter, mem_ref) {
 		if (R_IO_PERM (b->rwx, R_IO_READ) && mem_ref->addr >= b->r_addr && (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
-			if (pr_hit) {
+			if (show_hitinfo && pr_hit) {
 				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
 				pr_hit = false;
 			}
-			eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, mem_ref->sz);
+			if (show_hitinfo) {
+				eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, mem_ref->sz);
+			}
 			bp_found = true;
 		}
 	}
 	r_list_foreach (trace_mem->wr_list, iter, mem_ref) {
 		if (R_IO_PERM (b->rwx, R_IO_WRITE) && mem_ref->addr >= b->r_addr &&  (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
-			if (pr_hit) {
+			if (show_hitinfo && pr_hit) {
 				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
 				pr_hit = false;
 			}
-			eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, mem_ref->sz);
+			if (show_hitinfo) {
+				eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, mem_ref->sz);
+			}
 			bp_found = true;
 		}
 	}
 	if (R_IO_PERM (b->rwx, R_IO_EXEC) && pc >= b->r_addr
 		&& pc <= (b->r_addr + b->r_size)) {
-		if (pr_hit) {
+		if (show_hitinfo && pr_hit) {
 			eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
 		}
 		bp_found = true;
-		eprintf (" ptr [%"PFMT64x "] execute access", pc);
+		if (show_hitinfo) {
+			eprintf (" ptr [%"PFMT64x "] execute access", pc);
+		}
 	}
-	if (bp_found) {
+	if (show_hitinfo && bp_found) {
 		eprintf("\n");
 	}
 	r_debug_esil_tmem_free (trace_mem);
@@ -216,13 +223,13 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	 * this is necessary because while stopped we don't want any breakpoints in
 	 * the code messing up our analysis.
 	 */
-	if (!r_bp_restore (dbg->bp, false)) { // unset sw breakpoints
+	if (!r_bp_restore (dbg->bp, dbg->reason_idx, false)) { // unset sw breakpoints
 		return false;
 	}
 
 	/* if we are recoiling, tell r_debug_step that we ignored a breakpoint
 	 * event */
-	if (!dbg->swstep && dbg->recoil_mode != R_DBG_RECOIL_NONE) {
+	if (!dbg->swstep && dbg->reason->recoil_mode != R_DBG_RECOIL_NONE) {
 		dbg->reason->bp_addr = 0;
 		return true;
 	}
@@ -268,28 +275,25 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 		}
 # endif
 	}
-
+	b->hits++;
 	*pb = b;
-
 	/* if we are on a software stepping breakpoint, we hide what is going on... */
 	if (b->swstep) {
 		dbg->reason->bp_addr = 0;
 		return true;
 	}
-
 	/* setup our stage 2 */
 	dbg->reason->bp_addr = b->addr;
 
 	/* inform the user of what happened */
-	if (dbg->hitinfo && !b->silent) {
-		if (b->type == R_BP_TYPE_MEM) {
-			if (!r_debug_mem_bp_hit (dbg, b, pc)) {
-				*ign = true;
-			}
-		} else {
-			eprintf ("hit %spoint at: %"PFMT64x "\n",
-					b->trace ? "trace" : "break", pc);
+	bool show_hitinfo = dbg->hitinfo && !b->silent;
+	if (b->type == R_BP_TYPE_MEM) {
+		if (!r_debug_mem_bp_hit (dbg, b, pc, show_hitinfo)) {
+			*ign = true;
 		}
+	} else if (show_hitinfo){
+		eprintf ("hit %spoint at: %"PFMT64x "\n",
+				b->trace ? "trace" : "break", pc);
 	}
 
 	/* now that we've cleaned up after the breakpoint, call the other
@@ -305,11 +309,11 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 static int r_debug_bps_enable(RDebug *dbg) {
 	/* restore all sw breakpoints. we are about to step/continue so these need
 	 * to be in place. */
-	if (!r_bp_restore (dbg->bp, true))
+	if (!r_bp_restore (dbg->bp, dbg->reason_idx, true))
 		return false;
 
 	/* done recoiling... */
-	dbg->recoil_mode = R_DBG_RECOIL_NONE;
+	dbg->reason->recoil_mode = R_DBG_RECOIL_NONE;
 	return true;
 }
 
@@ -332,14 +336,14 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 	}
 
 	/* don't do anything if we already are recoiling */
-	if (dbg->recoil_mode != R_DBG_RECOIL_NONE) {
+	if (dbg->reason->recoil_mode != R_DBG_RECOIL_NONE) {
 		/* the first time recoil is called with swstep, we just need to
 		 * look up the bp and step past it.
 		 * the second time it's called, the new sw breakpoint should exist
 		 * so we just restore all except what we originally hit and reset.
 		 */
 		if (dbg->swstep) {
-			if (!r_bp_restore_except (dbg->bp, true, dbg->reason->bp_addr)) {
+			if (!r_bp_restore_except (dbg->bp, dbg->reason_idx, true, dbg->reason->bp_addr)) {
 				return false;
 			}
 			return true;
@@ -350,7 +354,7 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 	}
 
 	/* we have entered recoil! */
-	dbg->recoil_mode = rc_mode;
+	dbg->reason->recoil_mode = rc_mode;
 
 	/* step over the place with the breakpoint and let the caller resume */
 	if (r_debug_step (dbg, 1) != 1) {
@@ -363,7 +367,7 @@ static int r_debug_recoil(RDebug *dbg, RDebugRecoilMode rc_mode) {
 	 * is still set. we use this condition to know not to proceed but
 	 * pretend as if we had.
 	 */
-	if (!dbg->reason->bp_addr && dbg->recoil_mode == R_DBG_RECOIL_STEP) {
+	if (!dbg->reason->bp_addr && dbg->reason->recoil_mode == R_DBG_RECOIL_STEP) {
 		return true;
 	}
 
@@ -452,11 +456,11 @@ R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, bool watch
 	}
 	if (watch) {
 		hw = 1; //XXX
-		bpi = r_bp_watch_add (dbg->bp, addr, bpsz, hw, rw);
+		bpi = r_bp_watch_add (dbg->bp, addr, bpsz, hw, rw, dbg->reason_idx);
 	} else {
 		bpi = hw
-			? r_bp_add_hw (dbg->bp, addr, bpsz, R_BP_PROT_EXEC)
-			: r_bp_add_sw (dbg->bp, addr, bpsz, R_BP_PROT_EXEC);
+			? r_bp_add_hw (dbg->bp, addr, bpsz, R_BP_PROT_EXEC, dbg->reason_idx)
+			: r_bp_add_sw (dbg->bp, addr, bpsz, R_BP_PROT_EXEC, dbg->reason_idx);
 	}
 	if (bpi) {
 		if (module_name) {
@@ -512,7 +516,7 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->threads = NULL;
 	dbg->hitinfo = 1;
 	dbg->reason_idx = -1;
-	dbg->reason = r_debug_new_reason (dbg);
+	dbg->reason = r_debug_reason_push (dbg);
 	/* TODO: needs a redesign? */
 	dbg->maps = r_debug_map_list_new ();
 	dbg->maps_user = r_debug_map_list_new ();
@@ -664,21 +668,20 @@ R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, ut64 addr, int 
 		} else {
 			code_addr = rpc;
 		}
-
 		dbg->iob.read_at (dbg->iob.io, code_addr, backup, len);
 		dbg->iob.read_at (dbg->iob.io, rsp, stackbackup, len);
-		b = r_bp_add_sw (dbg->bp, code_addr+len, dbg->bpsize, R_BP_PROT_EXEC);
+		r_debug_reason_push (dbg);	
+		b = r_bp_add_sw (dbg->bp, code_addr+len, dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
 		if (b) {
 			/* force not show hit breakpoint message */
 			b->silent = true;
 		} 
 		/* execute code here */
 		dbg->iob.write_at (dbg->iob.io, code_addr, buf, len);
-		//r_bp_add_sw (dbg->bp, rpc+len, 4, R_BP_PROT_EXEC);
 		r_debug_continue (dbg);
-		//r_bp_del (dbg->bp, rpc+len);
+		r_debug_reason_pop (dbg);	
 		/* TODO: check if stopped in breakpoint or not */
-		r_bp_del (dbg->bp, code_addr+len);
+		// r_bp_del (dbg->bp, code_addr+len); 
 		if (addr == 0 || addr == rpc) {
 			dbg->iob.write_at (dbg->iob.io, code_addr, backup, len);
 		}
@@ -896,8 +899,8 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 		ut32 r32[2];
 	} memval;
 
-	if (dbg->recoil_mode == R_DBG_RECOIL_NONE) {
-		dbg->recoil_mode = R_DBG_RECOIL_STEP;
+	if (dbg->reason->recoil_mode == R_DBG_RECOIL_NONE) {
+		dbg->reason->recoil_mode = R_DBG_RECOIL_STEP;
 	}
 
 	if (r_debug_is_dead (dbg)) {
@@ -975,7 +978,7 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 	}
 
 	for (i = 0; i < br; i++) {
-		RBreakpointItem *bpi = r_bp_add_sw (dbg->bp, next[i], dbg->bpsize, R_BP_PROT_EXEC);
+		RBreakpointItem *bpi = r_bp_add_sw (dbg->bp, next[i], dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
 		if (bpi) {
 			bpi->swstep = true;
 		}
@@ -999,15 +1002,15 @@ R_API int r_debug_step_hard(RDebug *dbg) {
 	}
 
 	/* only handle recoils when not already in recoil mode. */
-	if (dbg->recoil_mode == R_DBG_RECOIL_NONE) {
+	if (dbg->reason->recoil_mode == R_DBG_RECOIL_NONE) {
 		/* handle the stage-2 of breakpoints */
 		if (!r_debug_recoil (dbg, R_DBG_RECOIL_STEP)) {
 			return false;
 		}
 
 		/* recoil already stepped once, so we don't step again. */
-		if (dbg->recoil_mode == R_DBG_RECOIL_STEP) {
-			dbg->recoil_mode = R_DBG_RECOIL_NONE;
+		if (dbg->reason->recoil_mode == R_DBG_RECOIL_STEP) {
+			dbg->reason->recoil_mode = R_DBG_RECOIL_NONE;
 			return true;
 		}
 	}
@@ -1422,7 +1425,7 @@ static int r_debug_continue_until_internal(RDebug *dbg, ut64 addr, bool block) {
 	// Check if there was another breakpoint set at addr
 	has_bp = r_bp_get_in (dbg->bp, addr, R_BP_PROT_EXEC) != NULL;
 	if (!has_bp)
-		r_bp_add_sw (dbg->bp, addr, dbg->bpsize, R_BP_PROT_EXEC);
+		r_bp_add_sw (dbg->bp, addr, dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
 
 	// Continue until the bp is reached
 	for (;;) {
@@ -1481,7 +1484,7 @@ R_API bool r_debug_continue_back(RDebug *dbg) {
 	// Firstly set the breakpoint at end address
 	has_bp = r_bp_get_in (dbg->bp, end_addr, R_BP_PROT_EXEC) != NULL;
 	if (!has_bp) {
-		r_bp_add_sw (dbg->bp, end_addr, dbg->bpsize, R_BP_PROT_EXEC);
+		r_bp_add_sw (dbg->bp, end_addr, dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
 	}
 
 	// Continue until end_addr

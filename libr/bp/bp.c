@@ -169,7 +169,7 @@ R_API int r_bp_stepy_continuation(RBreakpoint *bp) {
 }
 
 /* TODO: detect overlapping of breakpoints */
-static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, int size, int type, int rwx) {
+static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, int size, int type, int rwx, int depth) {
 	int ret;
 	RBreakpointItem *b;
 
@@ -203,6 +203,8 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	b->enabled = true;
 	b->rwx = rwx;
 	b->type = type;
+	b->hits = 0;
+	b->depth = depth;
 	// NOTE: for hw breakpoints there are no bytes to save/restore
 	if (type == R_BP_TYPE_SW) {
 		b->bbytes = calloc (size + 16, 1);
@@ -226,11 +228,11 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	return b;
 }
 
-R_API RBreakpointItem* r_bp_add_mem(RBreakpoint *bp, ut64 addr, int size, int rwx) {
-	return r_bp_add (bp, NULL, addr, size, R_BP_TYPE_MEM, rwx);
+R_API RBreakpointItem* r_bp_add_mem(RBreakpoint *bp, ut64 addr, int size, int rwx, int depth) {
+	return r_bp_add (bp, NULL, addr, size, R_BP_TYPE_MEM, rwx, depth);
 }
 
-R_API RBreakpointItem* r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx) {
+R_API RBreakpointItem* r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx, int depth) {
 	RBreakpointItem *item;
 	ut8 *bytes;
 	if (size < 1) {
@@ -243,13 +245,13 @@ R_API RBreakpointItem* r_bp_add_sw(RBreakpoint *bp, ut64 addr, int size, int rwx
 	if (bp->iob.read_at) {
 		bp->iob.read_at (bp->iob.io, addr, bytes, size);
 	}
-	item = r_bp_add (bp, bytes, addr, size, R_BP_TYPE_SW, rwx);
+	item = r_bp_add (bp, bytes, addr, size, R_BP_TYPE_SW, rwx, depth);
 	free (bytes);
 	return item;
 }
 
-R_API RBreakpointItem* r_bp_add_hw(RBreakpoint *bp, ut64 addr, int size, int rwx) {
-	return r_bp_add (bp, NULL, addr, size, R_BP_TYPE_HW, rwx);
+R_API RBreakpointItem* r_bp_add_hw(RBreakpoint *bp, ut64 addr, int size, int rwx, int depth) {
+	return r_bp_add (bp, NULL, addr, size, R_BP_TYPE_HW, rwx, depth);
 }
 
 R_API int r_bp_del_all(RBreakpoint *bp) {
@@ -258,6 +260,21 @@ R_API int r_bp_del_all(RBreakpoint *bp) {
 		return true;
 	}
 	return false;
+}
+
+R_API int r_bp_del_depth(RBreakpoint *bp, int depth) {
+	RListIter *iter, *iter2;
+	RBreakpointItem *b;
+	int bps;
+
+	bps = 0;
+	r_list_foreach_safe (bp->bps, iter, iter2, b) {
+		if (b->depth == depth) {
+			r_list_delete (bp->bps, iter);
+			bps++;
+		}
+	}
+	return bps;
 }
 
 R_API int r_bp_del(RBreakpoint *bp, ut64 addr) {

@@ -303,7 +303,7 @@ static bool setbpint(RCore *r, const char *mode, const char *sym) {
 	if (!fi) {
 		return false;
 	}
-	bp = r_bp_add_sw (r->dbg->bp, fi->offset, 1, R_BP_PROT_EXEC);
+	bp = r_bp_add_sw (r->dbg->bp, fi->offset, 1, R_BP_PROT_EXEC, r->dbg->reason_idx);
 	if (bp) {
 		bp->internal = true;
 #if __linux__

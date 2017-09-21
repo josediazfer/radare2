@@ -1474,9 +1474,8 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 	}
 #endif
 #if __WINDOWS__ || __linux__
-	if (b && !b->ign && b->type == R_BP_TYPE_MEM &&
+	if (b && b->type == R_BP_TYPE_MEM &&
 		!r_debug_is_dead(dbg) && dbg->reason->type != R_DEBUG_REASON_EXIT_PID) {
-		b->ign = true;
 		if (set) {
 			int unmap_len;
 
@@ -1487,7 +1486,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 				r_list_free (b->omap);
 				b->omap = NULL;
 			} else {
-				RDebugReason reason = *dbg->reason;
+				//RDebugReason reason = *dbg->reason;
 
 				if (unmap_len > 0) {
 					b->size -= unmap_len;
@@ -1498,11 +1497,11 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 #else
 				ret = r_debug_native_map_protect_ (dbg, b->addr, b->size, 0, true);
 #endif
-				*dbg->reason = reason;
+				//*dbg->reason = reason;
 			} 
 		} else {
 			if (b->omap) {
-				RDebugReason reason = *dbg->reason;
+				//RDebugReason reason = *dbg->reason;
 				RListIter *iter;
 				RDebugMap *map;
 
@@ -1513,10 +1512,9 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 					ret = r_debug_native_map_protect_ (dbg, map->addr, map->addr_end - map->addr, map->perm, true);
 				}
 #endif
-				*dbg->reason = reason;
+				//*dbg->reason = reason;
 			}
 		}
-		b->ign = false;
 	}
 #endif
 	return ret;

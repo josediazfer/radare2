@@ -8,7 +8,7 @@ static void r_bp_watch_add_hw(RBreakpoint *bp, RBreakpointItem *b) {
 	}
 }
 
-R_API RBreakpointItem* r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int type, int rw) {
+R_API RBreakpointItem* r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int type, int rw, int depth) {
 	RBreakpointItem *b;
 	if (addr == UT64_MAX || size < 1) {
 		return NULL;
@@ -23,6 +23,7 @@ R_API RBreakpointItem* r_bp_watch_add(RBreakpoint *bp, ut64 addr, int size, int 
 	b->enabled = true;
 	b->rwx = rw;
 	b->type = type;
+	b->depth = depth;
 	if (type == R_BP_TYPE_HW) {
 		r_bp_watch_add_hw (bp, b);
 	} else {

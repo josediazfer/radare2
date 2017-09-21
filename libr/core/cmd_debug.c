@@ -2927,7 +2927,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						size = r_num_math (core->num, p);
 						perms = r_str_rwx (q);
 						eprintf("0x%lx %d %d\n", addr, size, perms);
-						r_bp_add_mem (core->dbg->bp, addr, size, perms);
+						r_bp_add_mem (core->dbg->bp, addr, size, perms, core->dbg->reason_idx);
 					}
 				} else {
 					eprintf ("See dbmr?\n");
@@ -3667,7 +3667,7 @@ static bool cmd_dcu (RCore *core, const char *input) {
 		ut64 addr = from;
 		eprintf ("Continue until 0x%08"PFMT64x" using %d bpsize\n", addr, core->dbg->bpsize);
 		r_reg_arena_swap (core->dbg->reg, true);
-		r_bp_add_sw (core->dbg->bp, addr, core->dbg->bpsize, R_BP_PROT_EXEC);
+		r_bp_add_sw (core->dbg->bp, addr, core->dbg->bpsize, R_BP_PROT_EXEC, core->dbg->reason_idx);
 		r_debug_continue (core->dbg);
 		r_bp_del (core->dbg->bp, addr);
 	}
