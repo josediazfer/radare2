@@ -23,6 +23,7 @@ static void r_bp_item_free (RBreakpointItem *b) {
 	free (b->module_name);
 	free (b->data);
 	free (b->cond);
+	r_list_free (b->omap);
 	free (b);
 }
 

@@ -1490,7 +1490,8 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 
 				if (unmap_len > 0) {
 					b->size -= unmap_len;
-					eprintf("warning memory breakpoint %llx: unmapped length %d, changed breakpoint size to %d\n", b->addr, unmap_len, b->size);
+					eprintf("warning memory breakpoint %llx: unmapped length %d, changed " \
+						"breakpoint size to %d\n", b->addr, unmap_len, b->size);
 				}
 #if __WINDOWS__
 				ret = w32_set_page_guard (dbg, b->omap, true);		

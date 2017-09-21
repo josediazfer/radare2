@@ -281,7 +281,7 @@ R_API int r_debug_map_sync(RDebug *dbg) {
 R_API RList* r_debug_get_map_pages(RDebug *dbg, ut64 addr, int size, int *unmap_len) {
 	RListIter *iter;
 	RDebugMap *map;
-        RList *list = r_list_new ();
+        RList *list = r_list_newf ((RListFree)r_debug_map_free);
 	ut64 p_addr = addr;
 	int c_size = size;
 
