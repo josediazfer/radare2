@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2017 - josediazfer */
+/* radare - LGPL - Copyright 2017 - josediazfer */
 /* This is a tiny process memory manager, it´s used to write some code/data in the debugged process memory.
 */
 #include <r_debug.h>
@@ -7,7 +7,6 @@ static RDebugMemChunk* r_debug_mem_chunk_new(ut64 addr, int sz);
 static RListIter* r_debug_mem_find_chunk(RDebugMemArena *proc_arena, ut64 addr, int sz, bool need_alloc);
 
 #define DEBUG_MEM_PROC_VERBOSE 0
-
 #define DEFAULT_DEBUG_MEM_ARENA_SIZE 8192
 
 static int mem_addr_cmp(RDebugMemChunk *a, RDebugMemChunk *b) {
@@ -188,8 +187,8 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz) {
 		}
 		proc_arena->sz = map->size;
 		proc_arena->free_sz = proc_arena->sz;
-		proc_arena->chunk_free_list = r_list_new ();
-		proc_arena->chunk_alloc_list = r_list_new ();
+		proc_arena->chunk_free_list = r_list_newf ((RListFree)free);
+		proc_arena->chunk_alloc_list = r_list_newf ((RListFree)free);
 		r_list_append (proc_arena->chunk_free_list, chunk);
 		dbg->proc_arena = proc_arena;
         }
@@ -204,7 +203,6 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz) {
 	if (chunk_it) {
 		chunk = chunk_it->data;
 		if (chunk->sz > sz) {
-
                         chunk1 = r_debug_mem_chunk_new (chunk->addr, sz);
 			if (!chunk1) {
 				goto err_r_debug_proc_alloc;
@@ -221,8 +219,14 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz) {
 			r_list_add_sorted (proc_arena->chunk_free_list, chunk2, ((RListComparator)mem_addr_cmp));
 			chunk = chunk1;
 		} else if (chunk->sz == sz) {
+			RDebugMemChunk *aux;
+
+			aux = r_debug_mem_chunk_new (chunk->addr, chunk->sz);
+			if (!aux) {
+				goto err_r_debug_proc_alloc;
+			}
 			r_list_delete (proc_arena->chunk_free_list, chunk_it);
-			r_list_add_sorted (proc_arena->chunk_alloc_list, chunk, ((RListComparator)mem_addr_cmp));
+			r_list_add_sorted (proc_arena->chunk_alloc_list, aux, ((RListComparator)mem_addr_cmp));
 			eprintf("chunk allocated 0x%08"PFMT64x ":%d\n", chunk->addr, chunk->sz);
 		} 
                 proc_arena->free_sz -= sz;
@@ -253,26 +257,29 @@ err_r_debug_proc_alloc:
 R_API bool r_debug_mem_proc_free(RDebug *dbg, ut64 addr) {
 	RListIter *chunk_it = NULL;
 	RDebugMemArena *proc_arena = dbg->proc_arena;
-	bool freed;
+	bool freed = false;
 
 	if (!proc_arena || addr == 0) {
 		return false;
 	}
 	chunk_it = r_debug_mem_find_chunk (proc_arena, addr, 0, false);
 	if (chunk_it) {
-		RDebugMemChunk *chunk = NULL;
+		RDebugMemChunk *chunk, *aux;
 
-		chunk = chunk_it->data;
+		chunk = chunk_it->data; 
+		aux = r_debug_mem_chunk_new (chunk->addr, chunk->sz);
+		if (!aux) {
+			goto err_r_debug_mem_proc_free;
+		}
 		r_list_delete (proc_arena->chunk_alloc_list, chunk_it);
-		r_list_add_sorted (proc_arena->chunk_free_list, chunk, ((RListComparator)mem_addr_cmp));
+		r_list_add_sorted (proc_arena->chunk_free_list, aux, ((RListComparator)mem_addr_cmp));
 		proc_arena->free_sz += chunk->sz;
 		freed = true;
 #if DEBUG_MEM_PROC_VERBOSE
 		eprintf("chunk freed 0x%08"PFMT64x ":%d\n", chunk->addr, chunk->sz);
 #endif
-	} else {
-		freed = false;
 	}
+err_r_debug_mem_proc_free:
 #if DEBUG_MEM_PROC_VERBOSE
 	r_debug_mem_proc_info (dbg);
 	if (!freed) {

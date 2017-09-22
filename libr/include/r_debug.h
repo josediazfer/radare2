@@ -338,6 +338,7 @@ typedef struct r_debug_t {
 	int _mode;
 	RNum *num;
 	REgg *egg;
+	RList *egg_cache;
 } RDebug;
 
 typedef struct r_debug_desc_plugin_t {
@@ -431,6 +432,13 @@ typedef struct r_debug_pid_t {
 	int gid;
 	ut64 pc;
 } RDebugPid;
+
+typedef struct {
+        RBuffer *buf;
+        ut64 *key;
+        int values;
+	void *user;
+} RDebugCacheBuf;
 
 /*
  * Radare's debugger has both an external and internal API.
@@ -633,6 +641,12 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz);
 R_API bool r_debug_mem_proc_free(RDebug *dbg, ut64 addr);
 R_API void r_debug_mem_proc_destroy(RDebug *dbg);
 R_API void r_debug_mem_test (RDebug *dbg);
+
+/* simple memory cache */
+R_API RDebugCacheBuf* r_debug_cache_find(RList *cache_list, ut64 *key, int values, RListIter **ret_it);
+R_API void r_debug_cache_delete(RList *cache_list, ut64 *key, int values);
+R_API void r_debug_cache_init(RList **cache_list);
+R_API RDebugCacheBuf* r_debug_cache_add(RList *cache_list, ut64 *key, int values, const char *buf, int len);
 
 RDebugReason *r_debug_get_reason(RDebug *dbg);
 

@@ -6,6 +6,7 @@ files=[
 'esil.c',
 'map.c',
 'mem.c',
+'cache.c',
 'p/bfvm.c',
 'p/debug_bf.c',
 #'p/debug_bochs.c',

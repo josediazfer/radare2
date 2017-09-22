@@ -65,7 +65,7 @@ static void r_debug_reason_pop(RDebug *dbg) {
 	}
 }
 
-static void add_esil_mem_ref (RAnalEsil *esil, ut64 addr, int len, bool rd) {
+static void add_esil_memref (RAnalEsil *esil, ut64 addr, int len, bool rd) {
 	RDebugEsilTraceMem *trace_mem = (RDebugEsilTraceMem *)esil->user;
         RDebugEsilMemRef *mem_ref = R_NEW0 (RDebugEsilMemRef);
 
@@ -82,13 +82,13 @@ static void add_esil_mem_ref (RAnalEsil *esil, ut64 addr, int len, bool rd) {
 }
 
 static int hook_esil_mem_write(RAnalEsil *esil, ut64 addr, const ut8 *buf, int len) {
-	add_esil_mem_ref (esil, addr, len, false);
+	add_esil_memref (esil, addr, len, false);
 	//eprintf ("mem write: %llx %d\n", addr, len);
 	return 1;
 }
 
 static int hook_esil_mem_read(RAnalEsil *esil, ut64 addr, ut8 *buf, int len) {
-	add_esil_mem_ref (esil, addr, len, true);
+	add_esil_memref (esil, addr, len, true);
 	//eprintf ("mem read: %llx %d\n", addr, len);
 	return 0;
 }
@@ -103,6 +103,7 @@ static void r_debug_esil_tmem_free(RDebugEsilTraceMem *trace_mem) {
 	if (trace_mem->wr_list) {
 		r_list_free (trace_mem->wr_list);	
 	}
+	free (trace_mem);
 }
 
 static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
@@ -125,8 +126,8 @@ static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
 	if (!trace_mem) {
 		goto err_r_debug_anal_memrefs;
 	}
-	trace_mem->rd_list = r_list_new();
-	trace_mem->wr_list = r_list_new();
+	trace_mem->rd_list = r_list_newf ((RListFree)free);
+	trace_mem->wr_list = r_list_newf ((RListFree)free);
 	trace_mem->dbg = dbg;
 	esil->user = trace_mem;
 	esil->cb.hook_mem_write = hook_esil_mem_write;
@@ -141,7 +142,7 @@ err_r_debug_anal_memrefs:
 	return trace_mem;
 }
 
-static bool r_debug_mem_bp_hit (RDebug *dbg, RBreakpointItem *b, ut64 pc, bool show_hitinfo) {
+static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool show_hitinfo) {
 	bool pr_hit = true;
 	bool bp_found = false;
 	RDebugEsilMemRef *mem_ref;
@@ -520,6 +521,7 @@ R_API RDebug *r_debug_new(int hard) {
 	/* TODO: needs a redesign? */
 	dbg->maps = r_debug_map_list_new ();
 	dbg->maps_user = r_debug_map_list_new ();
+	r_debug_cache_init (&dbg->egg_cache);
 	r_debug_signal_init (dbg);
 	if (hard) {
 		dbg->bp = r_bp_new ();
