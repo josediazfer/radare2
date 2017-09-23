@@ -1797,7 +1797,7 @@ static int perms2map(int perms)
 static int r_debug_native_map_protect(RDebug *dbg, ut64 addr, int size, int perms) {
 	return r_debug_native_map_protect_ (dbg, addr, size, perms, false);
 }
-static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int perms, bool use_arena) {
+static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int perms, bool cache) {
 #if __WINDOWS__ && !__CYGWIN__
 	return w32_map_protect (dbg, addr, size, perms);
 #elif __APPLE__
@@ -1805,27 +1805,32 @@ static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int per
 #elif __linux__
 	RBuffer *buf = NULL;
 	char code[1024];
-	ut64 k[] = {0, addr, size, perms};
-	RDebugEggCache *ec;
 	int num = r_syscall_get_num (dbg->anal->syscall, "mprotect");
+	ut64 key[] = {num, addr, size, perms};
+	ut64 addr_alloc;
+	bool compile = true;
 
-	k[0] = num;
-	ec = r_debug_native_find_egg_code(k, 4, NULL);
-	if (!ec) {
-		ut64 addr_alloc;
+	snprintf (code, sizeof (code),
+		"sc_mprotect@syscall(%d);\n"
+		"main@global(0) { ._ra0 = sc_mprotect(0x%08"PFMT64x",%d,%d);break;\n"
+		"}\n", num, addr, size, perms2map (perms));
+	if (cache) {
+		RDebugCacheBuf *cache_buf;
 
-		addr_alloc = 0;
-		if (use_arena) {
-			addr_alloc = r_debug_mem_proc_alloc (dbg, 0x50);
+		addr_alloc = r_debug_mem_proc_alloc (dbg, 0x100);
+		cache_buf = r_debug_cache_find(dbg->egg_cache, key, sizeof (key) / sizeof (ut64), NULL);
+		if (cache_buf) {
+			compile = false;
+			buf = cache_buf->buf;
 		}
-		snprintf (code, sizeof (code),
-			"sc_mprotect@syscall(%d);\n"
-			"main@global(0) { ._ra0 = sc_mprotect(0x%08"PFMT64x",%d,%d);break;\n"
-			"}\n", num, addr, size, perms2map (perms));
+	} else {
+		addr_alloc = 0;
+	}
+	if (compile) {
 		r_egg_reset (dbg->egg);
 		r_egg_setup(dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
 		r_egg_load (dbg->egg, code, 0);
-		if (!r_egg_compile (dbg->egg)) {
+		if (!r_egg_compile (dbg->egg)) {	
 			eprintf ("Cannot compile.\n");
 			return false;
 		}	
@@ -1834,16 +1839,15 @@ static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int per
 			return false;
 		}
 		buf = r_egg_get_bin (dbg->egg);
-		ec = r_debug_native_add_egg_code(k, 4, buf);
-		ec->arena_ptr = addr_alloc;
-		r_reg_arena_push (dbg->reg);
-		r_debug_execute (dbg, buf->buf, buf->length , ec->arena_ptr, 1);
-		r_reg_arena_pop (dbg->reg);
-	} else {
-		r_reg_arena_push (dbg->reg);
-		r_debug_execute (dbg, ec->buf->buf, ec->buf->length , ec->arena_ptr, 1);
-		r_reg_arena_pop (dbg->reg);
+		if (cache) {
+			r_debug_cache_add(dbg->egg_cache, key, sizeof (key) / sizeof (ut64), buf->buf, buf->length);
+		}
 	}
+	r_reg_arena_push (dbg->reg);
+	r_debug_execute (dbg, buf->buf, buf->length , addr_alloc, 1);
+	r_reg_arena_pop (dbg->reg);
+
+	r_debug_mem_proc_free (dbg, addr_alloc);
 	return true;
 #else
 	// mprotect not implemented for this platform

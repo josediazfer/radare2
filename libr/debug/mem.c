@@ -227,7 +227,10 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz) {
 			}
 			r_list_delete (proc_arena->chunk_free_list, chunk_it);
 			r_list_add_sorted (proc_arena->chunk_alloc_list, aux, ((RListComparator)mem_addr_cmp));
-			eprintf("chunk allocated 0x%08"PFMT64x ":%d\n", chunk->addr, chunk->sz);
+			chunk = aux;
+#if DEBUG_MEM_PROC_VERBOSE
+			eprintf("chunk allocated 0x%08"PFMT64x ":%d\n", aux->addr, aux->sz);
+#endif
 		} 
                 proc_arena->free_sz -= sz;
 		fail = false;
@@ -276,7 +279,7 @@ R_API bool r_debug_mem_proc_free(RDebug *dbg, ut64 addr) {
 		proc_arena->free_sz += chunk->sz;
 		freed = true;
 #if DEBUG_MEM_PROC_VERBOSE
-		eprintf("chunk freed 0x%08"PFMT64x ":%d\n", chunk->addr, chunk->sz);
+		eprintf("chunk freed 0x%08"PFMT64x ":%d\n", aux->addr, aux->sz);
 #endif
 	}
 err_r_debug_mem_proc_free:
