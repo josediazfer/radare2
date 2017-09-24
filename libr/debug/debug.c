@@ -554,7 +554,9 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->maps);
 		r_list_free (dbg->maps_user);
 		r_list_free (dbg->threads);
+		r_list_free (dbg->egg_cache);
 		r_num_free (dbg->num);
+		r_debug_mem_proc_destroy (dbg);
 		sdb_free (dbg->sgnls);
 		r_tree_free (dbg->tree);
 		sdb_foreach (dbg->tracenodes, (SdbForeachCallback)free_tracenodes_entry, dbg);
@@ -562,7 +564,6 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->plugins);
 		free (dbg->btalgo);
 		r_debug_trace_free (dbg->trace);
-		r_debug_mem_proc_destroy (dbg);
 		dbg->trace = NULL;
 		r_egg_free (dbg->egg);
 		free (dbg->arch);

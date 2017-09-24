@@ -1475,7 +1475,7 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 #endif
 #if __WINDOWS__ || __linux__
 	if (b && b->type == R_BP_TYPE_MEM &&
-		!r_debug_is_dead(dbg) && dbg->reason->type != R_DEBUG_REASON_EXIT_PID) {
+		!r_debug_is_dead (dbg) && dbg->reason->type != R_DEBUG_REASON_EXIT_PID) {
 		if (set) {
 			int unmap_len;
 
@@ -1505,7 +1505,6 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 				//RDebugReason reason = *dbg->reason;
 				RListIter *iter;
 				RDebugMap *map;
-
 #if __WINDOWS__
 				ret = w32_set_page_guard (dbg, b->omap, false);		
 #else

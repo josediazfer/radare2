@@ -219,17 +219,11 @@ R_API ut64 r_debug_mem_proc_alloc(RDebug *dbg, int sz) {
 			r_list_add_sorted (proc_arena->chunk_free_list, chunk2, ((RListComparator)mem_addr_cmp));
 			chunk = chunk1;
 		} else if (chunk->sz == sz) {
-			RDebugMemChunk *aux;
-
-			aux = r_debug_mem_chunk_new (chunk->addr, chunk->sz);
-			if (!aux) {
-				goto err_r_debug_proc_alloc;
-			}
-			r_list_delete (proc_arena->chunk_free_list, chunk_it);
-			r_list_add_sorted (proc_arena->chunk_alloc_list, aux, ((RListComparator)mem_addr_cmp));
-			chunk = aux;
+			r_list_split_iter (proc_arena->chunk_free_list, chunk_it);
+			free (chunk_it);
+			r_list_add_sorted (proc_arena->chunk_alloc_list, chunk, ((RListComparator)mem_addr_cmp));
 #if DEBUG_MEM_PROC_VERBOSE
-			eprintf("chunk allocated 0x%08"PFMT64x ":%d\n", aux->addr, aux->sz);
+			eprintf("chunk allocated 0x%08"PFMT64x ":%d\n", chunk->addr, chunk->sz);
 #endif
 		} 
                 proc_arena->free_sz -= sz;
@@ -267,19 +261,16 @@ R_API bool r_debug_mem_proc_free(RDebug *dbg, ut64 addr) {
 	}
 	chunk_it = r_debug_mem_find_chunk (proc_arena, addr, 0, false);
 	if (chunk_it) {
-		RDebugMemChunk *chunk, *aux;
+		RDebugMemChunk *chunk;
 
 		chunk = chunk_it->data; 
-		aux = r_debug_mem_chunk_new (chunk->addr, chunk->sz);
-		if (!aux) {
-			goto err_r_debug_mem_proc_free;
-		}
-		r_list_delete (proc_arena->chunk_alloc_list, chunk_it);
-		r_list_add_sorted (proc_arena->chunk_free_list, aux, ((RListComparator)mem_addr_cmp));
+		r_list_split_iter (proc_arena->chunk_alloc_list, chunk_it);
+		free (chunk_it);
+		r_list_add_sorted (proc_arena->chunk_free_list, chunk, ((RListComparator)mem_addr_cmp));
 		proc_arena->free_sz += chunk->sz;
 		freed = true;
 #if DEBUG_MEM_PROC_VERBOSE
-		eprintf("chunk freed 0x%08"PFMT64x ":%d\n", aux->addr, aux->sz);
+		eprintf("chunk freed 0x%08"PFMT64x ":%d\n", chunk->addr, chunk->sz);
 #endif
 	}
 err_r_debug_mem_proc_free:
