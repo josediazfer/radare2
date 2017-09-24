@@ -220,7 +220,18 @@ static void emit_arg (REgg *egg, int xs, int num, const char *str) {
 		str = str +1;
 	switch (xs) {
 	case 0:
+#ifdef ARCH_X86_64
+		/* push imm64 instruction not exist...*/
+		if (attsyntax) {
+			r_egg_printf (egg, "  mov %s, %%"R_AX "\n", str);
+			r_egg_printf (egg, "  push %%"R_AX "\n");
+		} else {
+			r_egg_printf (egg, "  mov "R_AX ", %s\n", str);
+			r_egg_printf (egg, "  push "R_AX "\n");
+		}
+#else
 		r_egg_printf (egg, "  push %s\n", str);
+#endif
 		break;
 	case '*':
 		if (attsyntax) r_egg_printf (egg, "  push (%s)\n", str);
