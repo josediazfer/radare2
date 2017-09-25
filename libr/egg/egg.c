@@ -252,45 +252,43 @@ R_API void r_egg_printf(REgg *egg, const char *fmt, ...) {
 	va_end (ap);
 }
 
-R_API int r_egg_assemble(REgg *egg) {
-	return r_egg_assemble_v2(egg, "x86.nz");
-}
-
 R_API int r_egg_assemble_v2(REgg *egg, char *name) {
 	RAsmCode *asmcode = NULL;
 	char *code = NULL;
 	int ret = false;
+	char *arch;
+
 	if (egg->remit == &emit_x86 || egg->remit == &emit_x64) {
-		r_asm_use (egg->rasm, name);
+		arch = name? name:"x86.nz";
+	} else if (egg->remit == &emit_arm) {
+		arch = name? name:"arm";
+	} else {
+		arch = NULL;
+	}
+	if (arch) {
+		r_asm_use (egg->rasm, arch);
 		r_asm_set_bits (egg->rasm, egg->bits);
 		r_asm_set_big_endian (egg->rasm, egg->endian);
 		r_asm_set_syntax (egg->rasm, R_ASM_SYNTAX_INTEL);
-
 		code = r_buf_to_string (egg->buf);
 		asmcode = r_asm_massemble (egg->rasm, code);
 		if (asmcode) {
 			if (asmcode->len > 0)
 				r_buf_append_bytes (egg->bin, asmcode->buf, asmcode->len);
 			// LEAK r_asm_code_free (asmcode);
-		} else eprintf ("fail assembling\n");
-	} else
-	if (egg->remit == &emit_arm) {
-		r_asm_use (egg->rasm, "arm");
-		r_asm_set_bits (egg->rasm, egg->bits);
-		r_asm_set_big_endian (egg->rasm, egg->endian);
-		r_asm_set_syntax (egg->rasm, R_ASM_SYNTAX_INTEL);
-
-		code = r_buf_to_string (egg->buf);
-		asmcode = r_asm_massemble (egg->rasm, code);
-		if (asmcode) {
-			r_buf_append_bytes (egg->bin, asmcode->buf, asmcode->len);
-			// LEAK r_asm_code_free (asmcode);
+		} else {
+			eprintf ("fail assembling\n");
 		}
 	}
+err_r_egg_assemble_v2:
 	free (code);
 	ret = (asmcode != NULL);
 	r_asm_code_free (asmcode);
 	return ret;
+}
+
+R_API int r_egg_assemble(REgg *egg) {
+	return r_egg_assemble_v2(egg, NULL);
 }
 
 R_API int r_egg_compile(REgg *egg) {
