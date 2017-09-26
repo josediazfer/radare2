@@ -545,6 +545,7 @@ R_API void r_debug_tracenodes_reset (RDebug *dbg) {
 
 R_API RDebug *r_debug_free(RDebug *dbg) {
 	if (dbg) {
+		r_debug_mem_proc_destroy (dbg);
 		// TODO: free it correctly.. we must ensure this is an instance and not a reference..
 		r_bp_free (dbg->bp);
 		//r_reg_free(&dbg->reg);
@@ -556,7 +557,6 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->threads);
 		r_list_free (dbg->egg_cache);
 		r_num_free (dbg->num);
-		r_debug_mem_proc_destroy (dbg);
 		sdb_free (dbg->sgnls);
 		r_tree_free (dbg->tree);
 		sdb_foreach (dbg->tracenodes, (SdbForeachCallback)free_tracenodes_entry, dbg);

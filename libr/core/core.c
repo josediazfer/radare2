@@ -1813,6 +1813,7 @@ R_API RCore *r_core_fini(RCore *c) {
 	/* TODO: it leaks as shit */
 	//update_sdb (c);
 	// avoid double free
+	c->dbg = r_debug_free (c->dbg);
 	r_core_free_autocomplete(c);
 	R_FREE (c->lastsearch);
 	c->cons->pager = NULL;
@@ -1837,7 +1838,6 @@ R_API RCore *r_core_fini(RCore *c) {
 	c->print = r_print_free (c->print);
 	c->bin = r_bin_free (c->bin); // XXX segfaults rabin2 -c
 	c->lang = r_lang_free (c->lang); // XXX segfaults
-	c->dbg = r_debug_free (c->dbg);
 	r_config_free (c->config);
 	/* after r_config_free, the value of I.teefile is trashed */
 	/* rconfig doesnt knows how to deinitialize vars, so we

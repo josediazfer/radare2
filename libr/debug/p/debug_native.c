@@ -955,6 +955,10 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	char code[1024];
 	int num;
 	ut64 map_addr;
+	char *asm_list[] = {
+			"x86", "x86.as",
+			"x64", "x86.as",
+			NULL};
 
 	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
 	snprintf (code, sizeof (code),
@@ -968,7 +972,7 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 		eprintf ("Cannot compile.\n");
 		goto err_linux_map_alloc;
 	}	
-	if (!r_egg_assemble_v2 (dbg->egg, "x86.as")) {
+	if (!r_egg_assemble_asm (dbg->egg, asm_list)) {
 		eprintf ("r_egg_assemble: invalid assembly\n");
 		goto err_linux_map_alloc;
 	}
@@ -990,6 +994,10 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	RBuffer *buf = NULL;
 	char code[1024];
 	int ret = 0, num;
+	char *asm_list[] = {
+			"x86", "x86.as",
+			"x64", "x86.as",
+			NULL};
 
 	num = r_syscall_get_num (dbg->anal->syscall, "munmap");
 	snprintf (code, sizeof (code),
@@ -1003,7 +1011,7 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 		eprintf ("Cannot compile.\n");
 		goto err_linux_map_dealloc;
 	}	
-	if (!r_egg_assemble_v2 (dbg->egg, "x86.as")) {
+	if (!r_egg_assemble_asm (dbg->egg, asm_list)) {
 		eprintf ("r_egg_assemble: invalid assembly\n");
 		goto err_linux_map_dealloc;
 	}
