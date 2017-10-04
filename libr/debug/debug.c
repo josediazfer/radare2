@@ -3,6 +3,7 @@
 #include <r_debug.h>
 #include <r_core.h>
 #include <signal.h>
+#include "r_util/r_addr_interval.h"
 
 #if __WINDOWS__
 void w32_break_process(void *);
@@ -14,11 +15,6 @@ R_LIB_VERSION(r_debug);
 #define DBG_BUF_SIZE 512
 
 static int r_debug_bps_enable(RDebug *dbg);
-
-typedef struct {
-	ut64 addr;
-	int sz;
-} RDebugEsilMemRef;
 
 typedef struct {
 	RList *rd_list;
@@ -67,13 +63,13 @@ static void r_debug_reason_pop(RDebug *dbg) {
 
 static void add_esil_memref (RAnalEsil *esil, ut64 addr, int len, bool rd) {
 	RDebugEsilTraceMem *trace_mem = (RDebugEsilTraceMem *)esil->user;
-        RDebugEsilMemRef *mem_ref = R_NEW0 (RDebugEsilMemRef);
+        RAddrInterval *mem_ref = R_NEW0 (RAddrInterval);
 
         if (!mem_ref) {
                 return;
         }
         mem_ref->addr = addr;
-        mem_ref->sz = len;
+        mem_ref->size = len;
 	if (rd) {
 		r_list_append (trace_mem->rd_list, mem_ref);
 	} else {
@@ -89,7 +85,7 @@ static int hook_esil_mem_write(RAnalEsil *esil, ut64 addr, const ut8 *buf, int l
 
 static int hook_esil_mem_read(RAnalEsil *esil, ut64 addr, ut8 *buf, int len) {
 	add_esil_memref (esil, addr, len, true);
-	//eprintf ("mem read: %llx %d\n", addr, len);
+	//eprintf ("mem read: %llx %llx %d\n", esil->address, addr, len);
 	return 0;
 }
 
@@ -111,6 +107,10 @@ static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
 	RAnalOp op;
 	RAnalEsil *esil;
 	RDebugEsilTraceMem *trace_mem;
+	const char *pc;
+	const char *esilstr;
+	bool iotrap;
+	int esd;
 
 	if (!dbg->iob.read_at ||
 		(!dbg->iob.read_at (dbg->iob.io, addr, buf, sizeof (buf))) ||
@@ -118,10 +118,12 @@ static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
 		op.type == R_ANAL_OP_TYPE_ILL) {
 		return NULL;
 	}
-	bool iotrap = dbg->corebind.cfggeti (dbg->corebind.core, "esil.iotrap");
-	int stacksize = dbg->corebind.cfggeti (dbg->corebind.core, "esil.stack.depth");
-	esil = r_anal_esil_new (stacksize, iotrap);
-	r_anal_esil_setup (esil, dbg->anal, 0, 0, 0);
+	pc = r_reg_get_name (dbg->anal->reg, R_REG_NAME_PC);
+	r_reg_setv (dbg->anal->reg, pc, addr + op.size);
+	iotrap = dbg->corebind.cfggeti (dbg->corebind.core, "esil.iotrap");
+	esd = dbg->corebind.cfggeti (dbg->corebind.core, "esil.stack.depth");
+	esil = r_anal_esil_new (esd, iotrap);
+	r_anal_esil_setup (esil, dbg->anal, 0, 0, 1);
 	trace_mem = calloc (sizeof (RDebugEsilTraceMem), 1);
 	if (!trace_mem) {
 		goto err_r_debug_anal_memrefs;
@@ -132,9 +134,9 @@ static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
 	esil->user = trace_mem;
 	esil->cb.hook_mem_write = hook_esil_mem_write;
 	esil->cb.hook_mem_read = hook_esil_mem_read;
-	const char *esilstr = R_STRBUF_SAFEGET (&op.esil);
+	esilstr = R_STRBUF_SAFEGET (&op.esil);
+	r_anal_esil_set_pc (esil, addr);	
 	r_anal_esil_parse (esil, esilstr);
-
 err_r_debug_anal_memrefs:
 	r_anal_op_fini (&op);
 	r_anal_esil_stack_free (esil);
@@ -142,50 +144,54 @@ err_r_debug_anal_memrefs:
 	return trace_mem;
 }
 
-static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool show_hitinfo) {
-	bool pr_hit = true;
-	bool bp_found = false;
-	RDebugEsilMemRef *mem_ref;
-	RDebugEsilTraceMem *trace_mem = r_debug_anal_memrefs(dbg, pc);
+static bool r_debug_mem_print_refs(RDebug *dbg, RList *mem_refs, RBreakpointItem *b, int perm, ut64 pc, bool show_hitinfo) {
+	RAddrInterval bp_itv = {b->r_addr, b->r_size};
+	RAddrInterval *mem_ref;
 	RListIter *iter;
+	bool bp_found = false;
+
+	if (!(b->rwx & perm)) {
+		return false;
+	}
+	r_list_foreach (mem_refs, iter, mem_ref) {
+		if (r_itv_overlap (bp_itv, *mem_ref) && r_itv_intersect (bp_itv, *mem_ref).size > 0) {
+			if (show_hitinfo) {
+				if (!bp_found) {
+					eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
+				}
+				if (perm == R_IO_READ) {
+					eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, (int)mem_ref->size);
+				} else if (perm == R_IO_WRITE) {
+					eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, (int)mem_ref->size);
+				}
+			}
+			bp_found = true;
+		}
+	}
+	return bp_found;
+}
+
+static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool show_hitinfo) {
+	bool bp_found = false;
+	RDebugEsilTraceMem *trace_mem = r_debug_anal_memrefs(dbg, pc);
 
 	if (!trace_mem) {
 		/* invalid instruction? */
 		return NULL;
 	}
-	r_list_foreach (trace_mem->rd_list, iter, mem_ref) {
-		if (R_IO_PERM (b->rwx, R_IO_READ) && mem_ref->addr >= b->r_addr && (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
-			if (show_hitinfo && pr_hit) {
-				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
-				pr_hit = false;
-			}
-			if (show_hitinfo) {
-				eprintf (" ptr [%"PFMT64x ":%d] read access", mem_ref->addr, mem_ref->sz);
-			}
-			bp_found = true;
-		}
+	if (r_debug_mem_print_refs (dbg, trace_mem->rd_list, b, R_IO_READ, pc, show_hitinfo) ||
+		r_debug_mem_print_refs (dbg, trace_mem->wr_list, b, R_IO_WRITE, pc, show_hitinfo)) {
+		bp_found = true;	
 	}
-	r_list_foreach (trace_mem->wr_list, iter, mem_ref) {
-		if (R_IO_PERM (b->rwx, R_IO_WRITE) && mem_ref->addr >= b->r_addr &&  (mem_ref->addr + mem_ref->sz) <= (b->r_addr + b->r_size)) {
-			if (show_hitinfo && pr_hit) {
-				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
-				pr_hit = false;
-			}
-			if (show_hitinfo) {
-				eprintf (" ptr [%"PFMT64x ":%d] write access", mem_ref->addr, mem_ref->sz);
-			}
-			bp_found = true;
-		}
-	}
-	if (R_IO_PERM (b->rwx, R_IO_EXEC) && pc >= b->r_addr
+	if ((b->rwx & R_IO_EXEC) && pc >= b->r_addr
 		&& pc <= (b->r_addr + b->r_size)) {
-		if (show_hitinfo && pr_hit) {
-			eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
-		}
-		bp_found = true;
 		if (show_hitinfo) {
+			if (!bp_found) {
+				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
+			}
 			eprintf (" ptr [%"PFMT64x "] execute access", pc);
 		}
+		bp_found = true;
 	}
 	if (show_hitinfo && bp_found) {
 		eprintf("\n");

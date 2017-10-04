@@ -239,14 +239,8 @@ static char *getarg(struct Getarg* gop, int n, int set, char *setop, int sel) {
 		const char *index = cs_reg_name (handle, op.mem.index);
 		int scale = op.mem.scale;
 		st64 disp = op.mem.disp;
-		const char *pc = (gop->bits==16)?"ip":
-			(gop->bits==32)?"eip":"rip";
 
-		if (base && !strcmp(base, pc)) {
-			snprintf (out, BUF_SZ, "0x%"PFMT64x",", (disp < 0) ? -disp + insn->size : disp + insn->size);
-			component_count++;
-
-		} else if (disp != 0) {
+		if (disp != 0) {
 			snprintf (out, BUF_SZ, "0x%"PFMT64x",", (disp < 0) ? -disp : disp);
 			component_count++;
 		}
@@ -840,17 +834,13 @@ static void anop_esil (RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len
 		}
 		break;
 	case X86_INS_CBW:
+		esilprintf (op, "al,ax,=,7,ax,>>,?{,0xff00,ax,|=,}");
+		break;
 	case X86_INS_CWDE:
+		esilprintf (op, "ax,eax,=,15,eax,>>,?{,0xffff0000,eax,|=,}");
+		break;
 	case X86_INS_CDQE:
-		{
-			if (a->bits == 64) {
-				esilprintf (op, "32,eax,>>,eax,rax,=,$c,?{,0xffffffff00000000,rax,|=}");
-			} else if (a->bits == 32) {
-				esilprintf (op, "16,ax,>>,ax,eax,=,$c,?{,0xffff0000,eax,|=}");
-			} else {
-				esilprintf (op, "8,al,>>,al,ax,=,$c,?{,0xff00,ax,|=}");
-			}
-		}
+		esilprintf (op, "eax,rax,=,31,rax,>>,?{,0xffffffff00000000,rax,|=,}");
 		break;
 	case X86_INS_CMP:
 	case X86_INS_CMPPD:
@@ -2651,7 +2641,7 @@ static char *get_reg_profile(RAnal *anal) {
 		"=A3	dx\n"
 		"=A4	si\n"
 		"=A5	di\n"
-		"=SN	ax\n"
+		"=SN	ah\n"
 		"gpr	ip	.16	48	0\n"
 		"gpr	ax	.16	24	0\n"
 		"gpr	ah	.8	25	0\n"
