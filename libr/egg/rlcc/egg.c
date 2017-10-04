@@ -40,7 +40,6 @@ R_API REgg *r_egg_new () {
 	for (i=0; egg_static_plugins[i]; i++) {
 		r_egg_add (egg, egg_static_plugins[i]);
 	}
-	r_egg_lang_init (egg);
 	return egg;
 
 beach:
@@ -80,7 +79,6 @@ R_API void r_egg_free (REgg *egg) {
 	sdb_free (egg->db);
 	r_list_free (egg->plugins);
 	r_list_free (egg->patches);
-	r_egg_lang_free (egg);
 	free (egg);
 }
 
