@@ -131,14 +131,15 @@ R_API void r_egg_lang_init(REgg *egg) {
 }
 
 R_API void r_egg_lang_free(REgg *egg) {
-	int i;
+	int i, len;
 
 	for (i = 0; i < egg->lang.nsyscalls; i++) {
  		R_FREE (egg->lang.syscalls[i].name);
  		R_FREE (egg->lang.syscalls[i].arg);
 	}
-	for (i = 0; i < egg->lang.nargs; i++) {
-		R_FREE (egg->lang.ctxpush[CTX]);
+	len = sizeof (egg->lang.ctxpush) / sizeof (char *);
+	for (i = 0; i < len; i++) {
+		R_FREE (egg->lang.ctxpush[i]);
 	}
 }
 
@@ -319,7 +320,6 @@ static void rcc_pusharg(REgg *egg, char *str) {
 	if (!p) {
 		return;
 	}
-	// TODO: free (egg->lang.ctxpush[context]);
 	R_FREE (egg->lang.ctxpush[CTX]);
 	egg->lang.ctxpush[CTX] = strdup (p);	// INDEX IT WITH NARGS OR CONTEXT?!?
 	egg->lang.nargs++;
