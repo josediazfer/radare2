@@ -40,7 +40,6 @@ R_API REgg *r_egg_new () {
 	for (i=0; egg_static_plugins[i]; i++) {
 		r_egg_add (egg, egg_static_plugins[i]);
 	}
-	r_egg_lang_init (egg);
 	return egg;
 
 beach:
@@ -316,6 +315,7 @@ R_API int r_egg_compile(REgg *egg) {
 			egg->remit->init (egg);
 	}
 #endif
+	r_egg_lang_init (egg);
 	if (b && *b) {
 		for (; b[0]; b++) {
 			r_egg_lang_parsechar (egg, *b);

@@ -66,7 +66,7 @@ static const char *help_msg_db[] = {
 	"dbtd", " <addr>", "Disable Breakpoint Trace",
 	"dbts", " <addr>", "Swap Breakpoint Trace",
 	"dbm", " <module> <offset>", "Add a breakpoint at an offset from a module's base",
-	"dbmr", " addr size rwx", "Add a memory breakpoint at address",
+	"dbma", " addr size rwx", "Add a memory breakpoint at address",
 	"dbn", " [<name>]", "Show or set name for current breakpoint",
 	//
 	"dbi", "", "List breakpoint indexes",
@@ -2911,7 +2911,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 		break;
 	case 'm': 
 		switch (input[2]) {
-		case 'r': // "dbmr"
+		case 'a': // "dbma"
 			if (input[3] == ' ' && input[4]) {
 				char *p = strchr (input + 4, ' ');
 				if (p) {
@@ -2926,14 +2926,17 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						*q++ = 0;
 						size = r_num_math (core->num, p);
 						perms = r_str_rwx (q);
-						eprintf("0x%lx %d %d\n", addr, size, perms);
 						r_bp_add_mem (core->dbg->bp, addr, size, perms, core->dbg->reason_idx);
+					} else {
+						eprintf ("Missing arguments\n");
 					}
 				} else {
-					eprintf ("See dbmr?\n");
+					eprintf ("Missing arguments\n");
 				}
+			} else if (input[3] == '?') {
+				eprintf ("Usage: dbma addr size rwx # add a memory breakpoint at address\n");
 			} else {
-				eprintf ("See dbmr?\n");
+				eprintf ("See dbma?\n");
 			}
 			break;
 		case ' ': // "dbm"

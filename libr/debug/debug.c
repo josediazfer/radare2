@@ -154,7 +154,7 @@ static bool r_debug_mem_print_refs(RDebug *dbg, RList *mem_refs, RBreakpointItem
 		return false;
 	}
 	r_list_foreach (mem_refs, iter, mem_ref) {
-		if (r_itv_overlap (bp_itv, *mem_ref) && r_itv_intersect (bp_itv, *mem_ref).size > 0) {
+		if (r_itv_overlap (bp_itv, *mem_ref)/* && r_itv_intersect (bp_itv, *mem_ref).size > 0*/) {
 			if (show_hitinfo) {
 				if (!bp_found) {
 					eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
