@@ -145,7 +145,7 @@ err_r_debug_anal_memrefs:
 }
 
 static bool r_debug_mem_print_refs(RDebug *dbg, RList *mem_refs, RBreakpointItem *b, int perm, ut64 pc, bool show_hitinfo) {
-	RAddrInterval bp_itv = {b->r_addr, b->r_size};
+	RAddrInterval bp_itv = {b->mem.r_addr, b->mem.r_size};
 	RAddrInterval *mem_ref;
 	RListIter *iter;
 	bool bp_found = false;
@@ -183,8 +183,8 @@ static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool sh
 		r_debug_mem_print_refs (dbg, trace_mem->wr_list, b, R_IO_WRITE, pc, show_hitinfo)) {
 		bp_found = true;	
 	}
-	if ((b->rwx & R_IO_EXEC) && pc >= b->r_addr
-		&& pc <= (b->r_addr + b->r_size)) {
+	if ((b->rwx & R_IO_EXEC) && pc >= b->mem.r_addr
+		&& pc <= (b->mem.r_addr + b->mem.r_size)) {
 		if (show_hitinfo) {
 			if (!bp_found) {
 				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
@@ -209,22 +209,13 @@ static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool sh
  * r_debug_bp_hit handles stage 1.
  * r_debug_recoil handles stage 2.
  */
-static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb, bool *ign) {
+static bool r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem **pb) {
 	RBreakpointItem *b;
-
-	*ign = false;
-	if (!pb) {
-		eprintf ("BreakpointItem is NULL!\n");
-		return false;
-	}
-	/* initialize the output parameter */
-	*pb = NULL;
 
 	/* if we are tracing, update the tracing data */
 	if (dbg->trace->enabled) {
 		r_debug_trace_pc (dbg, pc);
 	}
-
 	/* remove all sw breakpoints for now. we'll set them back in stage 2
 	 *
 	 * this is necessary because while stopped we don't want any breakpoints in
@@ -233,19 +224,14 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 	if (!r_bp_restore (dbg->bp, dbg->reason_idx, false)) { // unset sw breakpoints
 		return false;
 	}
-
 	/* if we are recoiling, tell r_debug_step that we ignored a breakpoint
 	 * event */
 	if (!dbg->swstep && dbg->reason->recoil_mode != R_DBG_RECOIL_NONE) {
 		dbg->reason->bp_addr = 0;
 		return true;
 	}
-
-	if (dbg->reason->bp_type == R_BP_TYPE_MEM) {
-		b = r_bp_mem_get_in (dbg->bp, dbg->reason->fault_addr, 1);
-		if (!b) {
-			return true;
-		}
+	if (dbg->reason->b && dbg->reason->b->type == R_BP_TYPE_MEM) {
+		b = dbg->reason->b;
 	} else {
 		/* The MIPS ptrace has a different behaviour */
 # if __mips__
@@ -267,7 +253,6 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 			}	
 			pc_off = 0;
 		}
-
 		/* set the pc value back */
 		if (pc_off) {
 			pc -= pc_off;
@@ -281,32 +266,31 @@ static int r_debug_bp_hit(RDebug *dbg, RRegItem *pc_ri, ut64 pc, RBreakpointItem
 			}
 		}
 # endif
+		b->hits++;
 	}
-	b->hits++;
 	*pb = b;
 	/* if we are on a software stepping breakpoint, we hide what is going on... */
-	if (b->swstep) {
+	if (b->type == R_BP_TYPE_SW && b->sw.swstep) {
 		dbg->reason->bp_addr = 0;
 		return true;
 	}
 	/* setup our stage 2 */
 	dbg->reason->bp_addr = b->addr;
-
 	/* inform the user of what happened */
 	bool show_hitinfo = dbg->hitinfo && !b->silent;
 	if (b->type == R_BP_TYPE_MEM) {
 		if (!r_debug_mem_bp_hit (dbg, b, pc, show_hitinfo)) {
-			*ign = true;
+			return false;	
 		}
+		b->hits++;
 	} else if (show_hitinfo){
 		eprintf ("hit %spoint at: %"PFMT64x "\n",
 				b->trace ? "trace" : "break", pc);
 	}
-
 	/* now that we've cleaned up after the breakpoint, call the other
 	 * potential breakpoint handlers
 	 */
-	if (dbg->corebind.core && dbg->corebind.bphit && !*ign) {
+	if (dbg->corebind.core && dbg->corebind.bphit) {
 		dbg->corebind.bphit (dbg->corebind.core, b);
 	}
 	return true;
@@ -645,71 +629,76 @@ R_API bool r_debug_set_arch(RDebug *dbg, const char *arch, int bits) {
 R_API ut64 r_debug_execute(RDebug *dbg, const ut8 *buf, int len, ut64 addr, int restore) {
 	int orig_sz;
 	ut8 stackbackup[4096];
-	ut8 *backup, *orig = NULL;
+	ut8 *backup = NULL, *orig = NULL;
 	RRegItem *ri, *risp, *ripc;
 	ut64 rsp, rpc, code_addr, ra0 = 0LL;
+	RBreakpointItem *b;
+
 	if (r_debug_is_dead (dbg)) {
-		return false;
+		return 0LL;
 	}
 	ripc = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], R_REG_TYPE_GPR);
 	risp = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_SP], R_REG_TYPE_GPR);
-	if (ripc) {
-		RBreakpointItem *b;
-
-		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
-		orig = r_reg_get_bytes (dbg->reg, -1, &orig_sz);
-		if (!orig) {
-			eprintf ("Cannot get register arena bytes\n");
-			return 0LL;
-		}
-		rpc = r_reg_get_value (dbg->reg, ripc);
-		rsp = r_reg_get_value (dbg->reg, risp);
-
-		backup = malloc (len);
-		if (!backup) {
-			free (orig);
-			return 0LL;
-		}
-		if (addr != 0 && addr != rpc) {	
-			r_reg_set_value (dbg->reg, ripc, addr);
-			r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
-			code_addr = addr;
-		} else {
-			code_addr = rpc;
-		}
-		dbg->iob.read_at (dbg->iob.io, code_addr, backup, len);
-		dbg->iob.read_at (dbg->iob.io, rsp, stackbackup, len);
-		r_debug_reason_push (dbg);	
-		b = r_bp_add_sw (dbg->bp, code_addr+len, dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
-		if (b) {
-			/* force not show hit breakpoint message */
-			b->silent = true;
-		} 
-		/* execute code here */
-		dbg->iob.write_at (dbg->iob.io, code_addr, buf, len);
-		r_debug_continue (dbg);
-		r_debug_reason_pop (dbg);	
-		/* TODO: check if stopped in breakpoint or not */
-		// r_bp_del (dbg->bp, code_addr+len); 
-		if (addr == 0 || addr == rpc) {
-			dbg->iob.write_at (dbg->iob.io, code_addr, backup, len);
-		}
-		if (restore) {
-			dbg->iob.write_at (dbg->iob.io, rsp, stackbackup, len);
-		}
-		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
-		ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_A0], R_REG_TYPE_GPR);
-		ra0 = r_reg_get_value (dbg->reg, ri);
-		if (restore) {
-			r_reg_read_regs (dbg->reg, orig, orig_sz);
-		} else {
-			r_reg_set_value (dbg->reg, ripc, rpc);
-		}
+	if (!ripc) {
+		eprintf ("r_debug_execute: Cannot get program counter\n");
+		return 0LL;
+	}
+	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+	orig = r_reg_get_bytes (dbg->reg, -1, &orig_sz);
+	if (!orig) {
+		eprintf ("r_debug_execute: Cannot get register arena bytes\n");
+		return 0LL;
+	}
+	rpc = r_reg_get_value (dbg->reg, ripc);
+	rsp = r_reg_get_value (dbg->reg, risp);
+	if (addr != 0 && addr != rpc) {	
+		r_reg_set_value (dbg->reg, ripc, addr);
 		r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
-		free (backup);
-		free (orig);
-		//eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
-	} else eprintf ("r_debug_execute: Cannot get program counter\n");
+		code_addr = addr;
+	} else {
+		code_addr = rpc;
+	}
+	backup = malloc (len);
+	if (!backup) {
+		r_sys_perror ("r_debug_execute/malloc");
+		goto err_r_debug_execute;
+	}
+	dbg->iob.read_at (dbg->iob.io, code_addr, backup, len);
+	dbg->iob.read_at (dbg->iob.io, rsp, stackbackup, len);
+	/* save current dbg state */
+	r_debug_reason_push (dbg);	
+	/* set a software breakpoint next to the code block */
+	b = r_bp_add_sw (dbg->bp, code_addr + len, dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
+	if (b) {
+		/* force not show hit breakpoint message */
+		b->silent = true;
+	} 
+	/* write and execute code at code_addr */
+	if (!dbg->iob.write_at (dbg->iob.io, code_addr, buf, len)) {
+		eprintf ("r_debug_execute: Can not write code at 0x%08"PFMT64x"\n", code_addr);
+		goto err_r_debug_execute;
+	}
+	r_debug_continue (dbg);
+	/* restore dbg state */
+	r_debug_reason_pop (dbg);	
+	/* TODO: check if stopped in breakpoint or not */
+	/* r_bp_del not necessary, r_debug_reason_pop() remove bp from the same */
+	//r_bp_del (dbg->bp, code_addr + len); 
+	dbg->iob.write_at (dbg->iob.io, code_addr, backup, len);
+	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+	ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_A0], R_REG_TYPE_GPR);
+	ra0 = r_reg_get_value (dbg->reg, ri);
+	if (restore) {
+		dbg->iob.write_at (dbg->iob.io, rsp, stackbackup, len);
+		r_reg_read_regs (dbg->reg, orig, orig_sz);
+	} else {
+		r_reg_set_value (dbg->reg, ripc, rpc);
+	}
+	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, true);
+err_r_debug_execute:
+	free (backup);
+	free (orig);
+	//eprintf ("ra0=0x%08"PFMT64x"\n", ra0);
 	return (ra0);
 }
 
@@ -808,7 +797,6 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 	if (!dbg) {
 		return reason;
 	}
-
 	if (bp) {
 		*bp = NULL;
 	}
@@ -817,7 +805,6 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 	if (r_debug_is_dead (dbg)) {
 		return R_DEBUG_REASON_DEAD;
 	}
-
 	/* if our debugger plugin has wait */
 	if (dbg->h && dbg->h->wait) {
 		reason = dbg->h->wait (dbg, dbg->pid);
@@ -827,12 +814,10 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			//r_debug_select (dbg, -1, -1);
 			return R_DEBUG_REASON_DEAD;
 		}
-
 		/* propagate errors from the plugin */
 		if (reason == R_DEBUG_REASON_ERROR) {
 			return R_DEBUG_REASON_ERROR;
 		}
-
 		/* read general purpose registers */
 		if (!r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false)) {
 			return R_DEBUG_REASON_ERROR;
@@ -853,18 +838,14 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			if (!pc_ri) { /* couldn't find PC?! */
 				return R_DEBUG_REASON_ERROR;
 			}
-
 			/* get the value */
 			pc = r_reg_get_value (dbg->reg, pc_ri);
-
-			if (!r_debug_bp_hit (dbg, pc_ri, pc, &b, &ign)) {
-				return R_DEBUG_REASON_ERROR;
+			if (!r_debug_bp_hit (dbg, pc_ri, pc, &b)) {
+				return b != NULL && b->type == R_BP_TYPE_MEM ? R_DEBUG_REASON_CONT : R_DEBUG_REASON_ERROR; 
 			}
-
 			if (bp) {
 				*bp = b;
 			}
-
 			/* if we hit a tracing breakpoint, we need to continue in
 			 * whatever mode the user desired. */
 			if (dbg->corebind.core && b && b->cond) {
@@ -873,11 +854,7 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			if (b && b->trace) {
 				reason = R_DEBUG_REASON_TRACEPOINT;
 			}
-			if (ign) {
-				reason = R_DEBUG_REASON_IGN;
-			}
 		}
-
 		dbg->reason->type = reason;
 		if (reason == R_DEBUG_REASON_SIGNAL && dbg->reason->signum != -1) {
 			/* handle signal on continuations here */
@@ -989,7 +966,7 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 	for (i = 0; i < br; i++) {
 		RBreakpointItem *bpi = r_bp_add_sw (dbg->bp, next[i], dbg->bpsize, R_BP_PROT_EXEC, dbg->reason_idx);
 		if (bpi) {
-			bpi->swstep = true;
+			bpi->sw.swstep = true;
 		}
 	}
 
@@ -1210,7 +1187,6 @@ fail:
 
 R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 	RDebugReasonType reason, ret = false;
-	RBreakpointItem *bp = NULL;
 
 	if (!dbg) {
 		return false;
@@ -1223,6 +1199,8 @@ repeat:
 		return false;
 	}
 	if (dbg->h && dbg->h->cont) {
+		RBreakpointItem *bp = NULL;
+
 		/* handle the stage-2 of breakpoints */
 		if (!r_debug_recoil (dbg, R_DBG_RECOIL_CONTINUE)) {
 #if __WINDOWS__
@@ -1233,9 +1211,8 @@ repeat:
 		/* tell the inferior to go! */
 		ret = dbg->h->cont (dbg, dbg->pid, dbg->tid, sig);
 		//XXX(jjd): why? //dbg->reason->signum = 0;
-
 		reason = r_debug_wait (dbg, &bp);
-		if (reason == R_DEBUG_REASON_IGN) {
+		if (reason == R_DEBUG_REASON_CONT) {
 			goto repeat;
 		}
 		if (dbg->corebind.core) {

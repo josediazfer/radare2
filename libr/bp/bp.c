@@ -16,14 +16,28 @@ static inline ut64 pg_align_down(int pgsize, ut64 addr) {
 static struct r_bp_plugin_t *bp_static_plugins[] =
 	{ R_BP_STATIC_PLUGINS };
 
-static void r_bp_item_free (RBreakpointItem *b) {
-	free (b->name);
+static void r_bp_item_sw_free (RBreakpointItemSw *b) {
 	free (b->bbytes);
 	free (b->obytes);
+}
+
+static void r_bp_item_mem_free (RBreakpointItemMem *b) {
+	r_list_free (b->omap);
+}
+
+static void r_bp_item_free (RBreakpointItem *b) {
+	free (b->name);
 	free (b->module_name);
 	free (b->data);
 	free (b->cond);
-	r_list_free (b->omap);
+	switch (b->type) {
+	case R_BP_TYPE_SW:
+		r_bp_item_sw_free (&b->sw);
+		break;
+	case R_BP_TYPE_MEM:
+		r_bp_item_mem_free (&b->mem);
+		break;
+	}
 	free (b);
 }
 
@@ -191,8 +205,8 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 		b = r_bp_item_new (bp);
 		b->addr = _addr;
 		b->size = _size;
-		b->r_addr = addr;
-		b->r_size = size;
+		b->mem.r_addr = addr;
+		b->mem.r_size = size;
 	} else if (r_bp_get_in (bp, addr, rwx)) {
 		eprintf ("Breakpoint already set at this address.\n");
 		return NULL;
@@ -208,15 +222,15 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 	b->depth = depth;
 	// NOTE: for hw breakpoints there are no bytes to save/restore
 	if (type == R_BP_TYPE_SW) {
-		b->bbytes = calloc (size + 16, 1);
+		b->sw.bbytes = calloc (size + 16, 1);
 		if (obytes) {
-			b->obytes = malloc (size);
-			memcpy (b->obytes, obytes, size);
+			b->sw.obytes = malloc (size);
+			memcpy (b->sw.obytes, obytes, size);
 		} else {
-			b->obytes = NULL;
+			b->sw.obytes = NULL;
 		}
 		/* XXX: endian .. use bp->endian */
-		ret = r_bp_get_bytes (bp, b->bbytes, size, bp->endian, 0);
+		ret = r_bp_get_bytes (bp, b->sw.bbytes, size, bp->endian, 0);
 		if (ret != size) {
 			eprintf ("Cannot get breakpoint bytes. No architecture selected?\n");
 			r_bp_item_free (b);

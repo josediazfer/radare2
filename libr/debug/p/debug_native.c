@@ -1408,11 +1408,11 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 			int unmap_len;
 
 			r_debug_map_sync (dbg);
-			r_list_free (b->omap);
-			b->omap = r_debug_get_map_pages (dbg, b->addr, b->size, &unmap_len);
-			if (r_list_empty (b->omap)) {
-				r_list_free (b->omap);
-				b->omap = NULL;
+			r_list_free (b->mem.omap);
+			b->mem.omap = r_debug_get_map_pages (dbg, b->addr, b->size, &unmap_len);
+			if (r_list_empty (b->mem.omap)) {
+				r_list_free (b->mem.omap);
+				b->mem.omap = NULL;
 			} else {
 				//RDebugReason reason = *dbg->reason;
 
@@ -1422,21 +1422,21 @@ static int r_debug_native_bp (void *bp, RBreakpointItem *b, bool set) {
 						"breakpoint size to %d\n", b->addr, unmap_len, b->size);
 				}
 #if __WINDOWS__
-				ret = w32_set_page_guard (dbg, b->omap, true);		
+				ret = w32_set_page_guard (dbg, b->mem.omap, true);		
 #else
 				ret = r_debug_native_map_protect_ (dbg, b->addr, b->size, 0, true);
 #endif
 				//*dbg->reason = reason;
 			} 
 		} else {
-			if (b->omap) {
+			if (b->mem.omap) {
 				//RDebugReason reason = *dbg->reason;
 				RListIter *iter;
 				RDebugMap *map;
 #if __WINDOWS__
-				ret = w32_set_page_guard (dbg, b->omap, false);		
+				ret = w32_set_page_guard (dbg, b->mem.omap, false);		
 #else
-				r_list_foreach (b->omap, iter, map) {
+				r_list_foreach (b->mem.omap, iter, map) {
 					ret = r_debug_native_map_protect_ (dbg, map->addr, map->addr_end - map->addr, map->perm, true);
 				}
 #endif
