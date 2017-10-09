@@ -40,8 +40,8 @@ typedef struct r_bp_plugin_t {
 
 typedef struct r_bp_item_mem_t {
 	RList *omap; /* original pages that were changed */
-	ut64 r_addr; /* real addr (unaligned) */
-	int r_size; /* real size (unaligned) */
+	ut64 addr; /* real addr (unaligned) */
+	int size; /* real size (unaligned) */
 } RBreakpointItemMem;
 
 typedef struct r_bp_item_sw_t {
@@ -56,7 +56,6 @@ typedef struct r_bp_item_t {
 	st64 module_delta; /*delta to apply to module */
 	ut64 addr;
 	int size; /* size of breakpoint area */
-	int recoil; /* recoil */
 	int rwx;
 	int type;
 	int trace;

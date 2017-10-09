@@ -3,6 +3,21 @@
 #include <r_debug.h>
 #include <r_list.h>
 
+R_API RDebugMap *r_debug_map_find(RDebug *dbg, ut64 addr, int perm) {
+	RDebugMap *map;
+	RListIter *iter;
+
+	r_list_foreach (dbg->maps, iter, map) {
+		if (addr != 0 && map->addr != addr) {
+			continue;
+		}
+		if ((map->perm & perm) == perm) {
+			return map;
+		}
+	}
+	return NULL;
+}
+
 R_API void r_debug_map_list(RDebug *dbg, ut64 addr, int rad) {
 	const char *fmtstr;
 	char buf[128];

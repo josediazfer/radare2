@@ -978,8 +978,13 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	}
 	buf = r_egg_get_bin (dbg->egg);
 	if (buf) {
+		RDebugMap *map_tmp;
+
+		r_debug_map_sync (dbg);
+		map_tmp = r_debug_map_find (dbg, 0, R_IO_READ | R_IO_EXEC); 
 		r_reg_arena_push (dbg->reg);
-		map_addr = r_debug_execute (dbg, buf->buf, buf->length , 0, 1);
+		map_addr = r_debug_execute (dbg, buf->buf, buf->length,
+				map_tmp ? map_tmp->addr : 0, 1);
 		r_reg_arena_pop (dbg->reg);
 		if (map_addr != (ut64)-1) {
 			r_debug_map_sync (dbg);

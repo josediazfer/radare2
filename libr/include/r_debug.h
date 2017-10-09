@@ -519,6 +519,7 @@ R_API bool r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo);
 
 /* memory */
 R_API RList *r_debug_modules_list(RDebug*);
+R_API RDebugMap *r_debug_map_find(RDebug *dbg, ut64 addr, int perm);
 R_API RDebugMap *r_debug_map_alloc(RDebug *dbg, ut64 addr, int size);
 R_API char* r_debug_get_map_info(RDebug *dbg, RDebugMap *map, int type);
 R_API int r_debug_map_dealloc(RDebug *dbg, RDebugMap *map);

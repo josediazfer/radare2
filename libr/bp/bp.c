@@ -2,6 +2,7 @@
 
 #include <r_bp.h>
 #include <config.h>
+#include <r_util/r_addr_interval.h>
 
 R_LIB_VERSION (r_bp);
 
@@ -11,6 +12,12 @@ static inline ut64 pg_align_up(int pgsize, ut64 addr) {
 
 static inline ut64 pg_align_down(int pgsize, ut64 addr) {
         return (addr & ~(pgsize - 1));
+}
+
+static int bp_item_cmp(RBreakpointItem *a, RBreakpointItem *b) {
+	if (a->type == b->type) return 0;
+	if (a->type == R_BP_TYPE_MEM) return -1;
+	return 1; 
 }
 
 static struct r_bp_plugin_t *bp_static_plugins[] =
@@ -129,19 +136,17 @@ static inline bool match_prot(RBreakpointItem *b, int rwx) {
 	return (!rwx || (rwx && b->rwx));
 }
 
-static inline bool in_mem_range(RBreakpointItem *b, ut64 addr, int size) {
-	return (addr <= b->addr && (addr + size) > b->addr) ||
-		(addr > b->addr && addr < (b->addr + b->size));
-		
-}
-
 R_API RBreakpointItem *r_bp_mem_get_in(RBreakpoint *bp, ut64 addr, int size) {
 	RBreakpointItem *b;
 	RListIter *iter;
+	RAddrInterval addr_itv = {addr, (ut64)size};
 	r_list_foreach (bp->bps, iter, b) {
 		// Check addr within mem range
-		if (b->type == R_BP_TYPE_MEM && in_mem_range (b, addr, size)) {
-			return b;
+		if (b->type == R_BP_TYPE_MEM) { 
+			RAddrInterval bp_itv = {b->addr, (ut64)b->size};
+			if (r_itv_overlap (addr_itv, bp_itv)) {
+				return b;
+			}
 		}
 	}
 	return NULL;
@@ -205,8 +210,8 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 		b = r_bp_item_new (bp);
 		b->addr = _addr;
 		b->size = _size;
-		b->mem.r_addr = addr;
-		b->mem.r_size = size;
+		b->mem.addr = addr;
+		b->mem.size = size;
 	} else if (r_bp_get_in (bp, addr, rwx)) {
 		eprintf ("Breakpoint already set at this address.\n");
 		return NULL;
@@ -236,10 +241,9 @@ static RBreakpointItem *r_bp_add(RBreakpoint *bp, const ut8 *obytes, ut64 addr, 
 			r_bp_item_free (b);
 			return NULL;
 		}
-		b->recoil = ret;
 	}
 	bp->nbps++;
-	r_list_append (bp->bps, b);
+	r_list_add_sorted (bp->bps, b, ((RListComparator)bp_item_cmp));
 	return b;
 }
 

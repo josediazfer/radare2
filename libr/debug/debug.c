@@ -145,7 +145,7 @@ err_r_debug_anal_memrefs:
 }
 
 static bool r_debug_mem_print_refs(RDebug *dbg, RList *mem_refs, RBreakpointItem *b, int perm, ut64 pc, bool show_hitinfo) {
-	RAddrInterval bp_itv = {b->mem.r_addr, b->mem.r_size};
+	RAddrInterval bp_itv = {b->mem.addr, b->mem.size};
 	RAddrInterval *mem_ref;
 	RListIter *iter;
 	bool bp_found = false;
@@ -183,8 +183,8 @@ static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool sh
 		r_debug_mem_print_refs (dbg, trace_mem->wr_list, b, R_IO_WRITE, pc, show_hitinfo)) {
 		bp_found = true;	
 	}
-	if ((b->rwx & R_IO_EXEC) && pc >= b->mem.r_addr
-		&& pc <= (b->mem.r_addr + b->mem.r_size)) {
+	if ((b->rwx & R_IO_EXEC) && pc >= b->mem.addr
+		&& pc <= (b->mem.addr + b->mem.size)) {
 		if (show_hitinfo) {
 			if (!bp_found) {
 				eprintf ("hit memory breakpoint at: %"PFMT64x ",", pc);
