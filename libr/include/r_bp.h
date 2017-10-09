@@ -38,6 +38,18 @@ typedef struct r_bp_plugin_t {
 	RBreakpointArch *bps;
 } RBreakpointPlugin;
 
+typedef struct r_bp_item_mem_t {
+	RList *omap; /* original pages that were changed */
+	ut64 r_addr; /* real addr (unaligned) */
+	int r_size; /* real size (unaligned) */
+} RBreakpointItemMem;
+
+typedef struct r_bp_item_sw_t {
+	ut8 *obytes; /* original bytes */
+	ut8 *bbytes; /* breakpoint bytes */
+	bool swstep; 	/* is this breakpoint from a swstep? */
+} RBreakpointItemSw;
+
 typedef struct r_bp_item_t {
 	char *name;
 	char *module_name; /*module where you get the base address*/
@@ -45,7 +57,6 @@ typedef struct r_bp_item_t {
 	ut64 addr;
 	int size; /* size of breakpoint area */
 	int recoil; /* recoil */
-	bool swstep; 	/* is this breakpoint from a swstep? */
 	int rwx;
 	int type;
 	int trace;
@@ -53,17 +64,17 @@ typedef struct r_bp_item_t {
 	int enabled;
 	int hits;
 	int depth;
-	ut8 *obytes; /* original bytes */
-	ut8 *bbytes; /* breakpoint bytes */
 	int pids[R_BP_MAXPIDS];
 	char *data;
 	char *cond; /* used for conditional breakpoints */
-	bool ign;   /* ignore if set/unset breakpoint (currently only for memory breakpoints) */
 	bool silent; /* silent breakpoint: not show hit breakpoint messages */
-	RList *omap; /* memory breakpoint: original pages that were changed */
-	ut64 r_addr; /* memory breakpoint: real addr (unaligned) */
-	int r_size; /* memory breakpoint: real size (unaligned) */
+	union {
+		RBreakpointItemMem mem;
+		RBreakpointItemSw sw;
+	};
 } RBreakpointItem;
+
+#define MEM_ITEM(b) 
 
 typedef int (*RBreakpointCallback)(void *bp, RBreakpointItem *b, bool set);
 

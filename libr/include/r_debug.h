@@ -110,7 +110,7 @@ typedef enum {
 	R_DEBUG_REASON_INT,
 	R_DEBUG_REASON_FPU,
 	R_DEBUG_REASON_USERSUSP,
-	R_DEBUG_REASON_IGN,
+	R_DEBUG_REASON_CONT,
 } RDebugReasonType;
 
 typedef enum {
@@ -138,8 +138,9 @@ typedef struct r_debug_reason_t {
 	int bp_type;
 	bool ign;
 	RList *bps;
+	RBreakpointItem *b; /* localized breakpoint */
 	RDebugRecoilMode recoil_mode; /* what did the user want to do? */
-} RDebugReason;	/* TODO: rename structure name? */
+} RDebugReason;	
 
 typedef struct r_debug_map_t {
 	char *name;
@@ -302,9 +303,9 @@ typedef struct r_debug_t {
 
 	/* tracking debugger state */
 	int steps; /* counter of steps done */
-	RDebugReason reason_stack[MAX_DBG_REASON_COUNT]; /* stop reason */
+	RDebugReason reason_stack[MAX_DBG_REASON_COUNT]; /* enable nested dbg states */
 	int reason_idx;
-	RDebugReason *reason; /* current reason */
+	RDebugReason *reason; /* current dbg state */
 
 	/* tracing vars */
 	RDebugTrace *trace;

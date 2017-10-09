@@ -9,14 +9,14 @@ R_API void r_bp_restore_one(RBreakpoint *bp, RBreakpointItem *b, bool set) {
 		if (b->type == R_BP_TYPE_HW) {
 			eprintf ("hw breakpoints not yet supported\n");
 		} else if (b->type == R_BP_TYPE_SW) {
-			bp->iob.write_at (bp->iob.io, b->addr, b->bbytes, b->size);
+			bp->iob.write_at (bp->iob.io, b->addr, b->sw.bbytes, b->size);
 		}
 	} else {
 		//eprintf ("Clearing bp at 0x%08"PFMT64x"\n", b->addr);
 		if (b->type == R_BP_TYPE_HW) {
 			eprintf ("hw breakpoints not yet supported\n");
 		} else if (b->type == R_BP_TYPE_SW) {
-			bp->iob.write_at (bp->iob.io, b->addr, b->obytes, b->size);
+			bp->iob.write_at (bp->iob.io, b->addr, b->sw.obytes, b->size);
 		}
 	}
 }

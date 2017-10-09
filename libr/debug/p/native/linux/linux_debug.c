@@ -58,7 +58,8 @@ int linux_handle_signals (RDebug *dbg, int status) {
 	bool show_siginfo = true;
 	bool bp_mem = false;
 
-	dbg->reason->bp_type = R_BP_TYPE_UK;
+	dbg->reason->b = NULL;
+	dbg->reason->fault_addr = 0;
 	if (ret == -1) {
 		/* ESRCH means the process already went away :-/ */
 		if (errno == ESRCH) {
@@ -118,7 +119,7 @@ int linux_handle_signals (RDebug *dbg, int status) {
 				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, (ut64)siginfo.si_addr, 1);
 				dbg->reason->fault_addr = (ut64)siginfo.si_addr;
 				if (b) {
-					dbg->reason->bp_type = R_BP_TYPE_MEM;
+					dbg->reason->b = b;
 					dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
 					show_siginfo = false;
 					bp_mem = true;
