@@ -772,8 +772,9 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 				break;
 			case STATUS_GUARD_PAGE_VIOLATION:
 			{
-				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, (ut64)siginfo.si_addr, 1);
-                                dbg->reason->fault_addr = (ut64)siginfo.si_addr;
+				ut64 fault_addr = (ut64)de->u.Exception.ExceptionRecord.ExceptionInformation[1];
+				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, fault_addr, 1);
+                                dbg->reason->fault_addr = fault_addr;
                                 if (b) {
                                         dbg->reason->b = b;
                                         dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
