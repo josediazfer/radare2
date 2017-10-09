@@ -668,6 +668,8 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 	static int exited_already = 0;
 	/* handle debug events */
 	do {
+		dbg->reason->b = NULL;
+		dbg->reason->fault_addr = 0;
 		/* do not continue when already exited but still open for examination */
 		if (exited_already == pid) {
 			return -1;
@@ -769,11 +771,17 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 				next_event = 0;
 				break;
 			case STATUS_GUARD_PAGE_VIOLATION:
-				if (fault_by_mem_bp(dbg, &de)) {
-					ret = R_DEBUG_REASON_BREAKPOINT;
+			{
+				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, (ut64)siginfo.si_addr, 1);
+                                dbg->reason->fault_addr = (ut64)siginfo.si_addr;
+                                if (b) {
+                                        dbg->reason->b = b;
+                                        dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
+                                        show_siginfo = false;
 					next_event = 0;
 					break;
-				}
+                                }
+			}
 			default:
 				if (!debug_excep_event (&de)) {
 					ret = R_DEBUG_REASON_TRAP;
