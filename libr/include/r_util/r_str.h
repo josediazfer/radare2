@@ -56,6 +56,7 @@ R_API char *r_str_arg_escape(const char *arg);
 R_API char **r_str_argv(const char *str, int *_argc);
 R_API void r_str_argv_free(char **argv);
 R_API char *r_str_new(const char *str);
+R_API bool r_str_is_ascii(const char *str);
 R_API int r_str_is_printable(const char *str);
 R_API bool r_str_is_printable_incl_newlines(const char *str);
 R_API char *r_str_appendlen(char *ptr, const char *string, int slen);
@@ -105,8 +106,9 @@ typedef void(*str_operation)(char *c);
 
 R_API int r_str_do_until_token(str_operation op, char *str, const char tok);
 
-R_API void r_str_const_free(void);
 R_API const char *r_str_const(const char *ptr);
+R_API const char *r_str_const_at(char ***consts, const char *ptr);
+R_API void r_str_const_free(char ***consts);
 
 R_API void r_str_reverse(char *str);
 R_API int r_str_re_match(const char *str, const char *reg);
@@ -114,7 +116,7 @@ R_API int r_str_re_replace(const char *str, const char *reg, const char *sub);
 R_API int r_str_unescape(char *buf);
 R_API char *r_str_escape(const char *buf);
 R_API char *r_str_escape_dot(const char *buf);
-R_API char *r_str_escape_latin1(const char *buf, bool show_asciidot);
+R_API char *r_str_escape_latin1(const char *buf, bool show_asciidot, bool ign_bslash);
 R_API char *r_str_escape_utf8(const char *buf, bool show_asciidot);
 R_API char *r_str_escape_utf16le(const char *buf, int buf_size, bool show_asciidot);
 R_API char *r_str_escape_utf32le(const char *buf, int buf_size, bool show_asciidot);
@@ -147,8 +149,7 @@ R_API bool r_str_endswith(const char *str, const char *needle);
 R_API bool r_str_isnumber (const char *str);
 R_API const char *r_str_last (const char *in, const char *ch);
 R_API char* r_str_highlight(char *str, const char *word, const char *color);
-R_API char *r_qrcode_gen(const ut8* text, int len, bool utf8);
-
+R_API char *r_qrcode_gen(const ut8 *text, int len, bool utf8, bool inverted);
 #ifdef __cplusplus
 }
 #endif

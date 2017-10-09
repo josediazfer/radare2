@@ -591,7 +591,6 @@ typedef struct r_anal_t {
 	char *cpu;
 	char *os;
 	int bits;
-	int addrbytes;
 	int lineswidth; // wtf
 	int big_endian;
 	int split; // used only from core
@@ -1320,6 +1319,7 @@ R_API int r_anal_fcn_add_bb(RAnal *anal, RAnalFunction *fcn,
 		ut64 addr, ut64 size,
 		ut64 jump, ut64 fail, int type, RAnalDiff *diff);
 R_API bool r_anal_check_fcn(RAnal *anal, ut8 *buf, ut16 bufsz, ut64 addr, ut64 low, ut64 high);
+R_API void r_anal_fcn_update_tinyrange_bbs(RAnalFunction *fcn);
 
 /* locals */
 #if 0
@@ -1499,7 +1499,7 @@ R_API char *r_anal_data_to_string(RAnalData *d, RConsPalette *pal);
 
 R_API void r_meta_free(RAnal *m);
 R_API void r_meta_space_unset_for(RAnal *a, int type);
-R_API int r_meta_space_count_for(RAnal *a, int ctx);
+R_API int r_meta_space_count_for(RAnal *a, int space_idx);
 R_API RList *r_meta_enumerate(RAnal *a, int type);
 R_API int r_meta_count(RAnal *m, int type, ut64 from, ut64 to);
 R_API char *r_meta_get_string(RAnal *m, int type, ut64 addr);

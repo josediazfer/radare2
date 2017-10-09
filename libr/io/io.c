@@ -16,7 +16,7 @@ static int fd_write_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, RIOM
 
 static int al_fd_read_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, RIOMap *map, void *user) {
 	RIOAccessLog *log = (RIOAccessLog *)user;
-	RIOAccessLogElement *ale = R_NEW0(RIOAccessLogElement);
+	RIOAccessLogElement *ale = R_NEW0 (RIOAccessLogElement);
 	int rlen = r_io_fd_read_at (io, fd, addr, buf, len);
 	if (ale) {
 		ale->expect_len = len;
@@ -26,7 +26,7 @@ static int al_fd_read_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, RI
 		ale->fd = fd;
 		ale->mapid = map->id;
 		ale->paddr = addr;
-		ale->vaddr = map->from + (addr - map->delta);
+		ale->vaddr = map->itv.addr + (addr - map->delta);
 		r_list_append (log->log, ale);
 	} else {
 		log->allocation_failed = true;
@@ -36,7 +36,7 @@ static int al_fd_read_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, RI
 
 static int al_fd_write_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, RIOMap *map, void *user) {
 	RIOAccessLog *log = (RIOAccessLog *)user;
-	RIOAccessLogElement *ale = R_NEW0(RIOAccessLogElement);
+	RIOAccessLogElement *ale = R_NEW0 (RIOAccessLogElement);
 	int rlen = r_io_fd_write_at (io, fd, addr, buf, len);
 	if (ale) {
 		ale->expect_len = len;
@@ -46,7 +46,7 @@ static int al_fd_write_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, R
 		ale->fd = fd;
 		ale->mapid = map->id;
 		ale->paddr = addr;
-		ale->vaddr = map->from + (addr - map->delta);
+		ale->vaddr = map->itv.addr + (addr - map->delta);
 		r_list_append (log->log, ale);
 	} else {
 		log->allocation_failed = true;
@@ -56,70 +56,145 @@ static int al_fd_write_at_wrap (RIO *io, int fd, ut64 addr, ut8 *buf, int len, R
 
 typedef int (*cbOnIterMap)(RIO *io, int fd, ut64 addr, ut8 *buf, int len, RIOMap *map, void *user);
 
-// len > 0
-static int onIterMap(SdbListIter *iter, RIO *io, ut64 vaddr, ut8 *buf,
+// If prefix_mode is true, returns the number of bytes of operated prefix; returns < 0 on error.
+// If prefix_mode is false, operates in non-stop mode and returns true iff all IO operations on overlapped maps are complete.
+static st64 on_map_skyline(RIO *io, ut64 vaddr, ut8 *buf, int len, int match_flg, cbOnIterMap op, bool prefix_mode) {
+	const RVector *skyline = &io->map_skyline;
+	ut64 addr = vaddr;
+	int i;
+	bool ret = true, wrap = !prefix_mode && vaddr + len < vaddr;
+#define CMP(addr, part) (addr < r_itv_end (((RIOMapSkyline *)part)->itv) - 1 ? -1 : \
+			addr > r_itv_end (((RIOMapSkyline *)part)->itv) - 1 ? 1 : 0)
+	// Let i be the first skyline part whose right endpoint > addr
+	if (!len) {
+		i = skyline->len;
+	} else {
+		r_vector_lower_bound (skyline, addr, i, CMP);
+		if (i == skyline->len && wrap) {
+			wrap = false;
+			i = 0;
+			addr = 0;
+		}
+	}
+#undef CMP
+	while (i < skyline->len) {
+		const RIOMapSkyline *part = skyline->a[i];
+		// Right endpoint <= addr
+		if (r_itv_end (part->itv) - 1 < addr) {
+			i++;
+			if (wrap && i == skyline->len) {
+				wrap = false;
+				i = 0;
+				addr = 0;
+			}
+			continue;
+		}
+		if (addr < part->itv.addr) {
+			// [addr, part->itv.addr) is a gap
+			if (prefix_mode || len <= part->itv.addr - vaddr) {
+				break;
+			}
+			addr = part->itv.addr;
+		}
+		// Now left endpoint <= addr < right endpoint
+		ut64 len1 = R_MIN (vaddr + len - addr, r_itv_end (part->itv) - addr);
+		// The map satisfies the permission requirement or p_cache is enabled
+		if (((part->map->flags & match_flg) == match_flg || io->p_cache)) {
+			st64 result = op (io, part->map->fd, part->map->delta + addr - part->map->itv.addr,
+					buf + addr - vaddr, len1, part->map, NULL);
+			if (prefix_mode) {
+				if (result < 0) {
+					return result;
+				}
+				addr += result;
+				if (result != len1) {
+					break;
+				}
+			} else {
+				if (result != len1) {
+					ret = false;
+				}
+				addr += len1;
+			}
+		} else if (prefix_mode) {
+			break;
+		} else {
+			addr += len1;
+		}
+		// Reaches the end
+		if (addr == vaddr + len) {
+			break;
+		}
+		// Wrap to the beginning of skyline if address wraps
+		if (!addr) {
+			i = 0;
+		}
+	}
+	return prefix_mode ? addr - vaddr : ret;
+}
+
+// Precondition: len > 0
+// Non-stop IO
+// Returns true iff all reads/writes on overlapped maps are complete.
+static bool onIterMap(SdbListIter *iter, RIO *io, ut64 vaddr, ut8 *buf,
 		int len, int match_flg, cbOnIterMap op, void *user) {
 	// vendaddr may be 0 to denote 2**64
-	ut64 vendaddr = vaddr + len;
-	int t, ret = 0;
+	ut64 vendaddr = vaddr + len, len1;
+	int t;
+	bool ret = true;
 	for (; iter; iter = iter->p) {
 		RIOMap *map = (RIOMap *)iter->data;
-		// [vaddr, vendaddr) [map->from, map->to]
-		if (vaddr <= map->to && map->from <= vendaddr - 1) {
+		ut64 to = r_itv_end (map->itv);
+		if (r_itv_overlap2 (map->itv, vaddr, len)) {
 			if ((map->flags & match_flg) == match_flg || io->p_cache) {
-				t = vaddr < map->from
-					? op (io, map->fd, map->delta, buf + map->from - vaddr,
-								R_MIN (vendaddr - map->from, map->to - map->from + 1), map, user)
-					: op (io, map->fd, map->delta + vaddr - map->from, buf,
-								R_MIN (map->to - vaddr + 1, len), map, user);
-				if (t < 0) {
-					return t;
+				t = vaddr < map->itv.addr
+						? op (io, map->fd, map->delta, buf + map->itv.addr - vaddr,
+								len1 = R_MIN (vendaddr - map->itv.addr, map->itv.size), map, user)
+						: op (io, map->fd, map->delta + vaddr - map->itv.addr, buf,
+								len1 = R_MIN (to - vaddr, len), map, user);
+				if (t != len1) {
+					ret = false;
 				}
-				ret += t;
 			}
-			if (vaddr < map->from) {
-				t = onIterMap (iter->p, io, vaddr, buf, map->from - vaddr, match_flg, op, user);
-				if (t < 0) {
-					return t;
+			if (vaddr < map->itv.addr) {
+				t = onIterMap (iter->p, io, vaddr, buf, map->itv.addr - vaddr, match_flg, op, user);
+				if (!t) {
+					ret = false;
 				}
-				ret += t;
 			}
-			if (map->to < vendaddr - 1) {
-				t = onIterMap (iter->p, io, map->to + 1, buf + map->to - vaddr + 1, vendaddr - map->to - 1, match_flg, op, user);
-				if (t < 0) {
-					return t;
+			if (to - 1 < vendaddr - 1) {
+				t = onIterMap (iter->p, io, to, buf + to - vaddr, vendaddr - to, match_flg, op, user);
+				if (!t) {
+					ret = false;
 				}
-				ret += t;
 			}
-			break;
 		}
 	}
 	return ret;
 }
 
-// len >= 0
-static int onIterMap_wrap(SdbListIter *iter, RIO *io, ut64 vaddr, ut8 *buf,
+// Precondition: len >= 0
+// Non-stop IO supporting address space wraparound
+// Returns true iff all reads/writes on overlapped maps are complete.
+static bool onIterMap_wrap(SdbListIter *iter, RIO *io, ut64 vaddr, ut8 *buf,
 		int len, int match_flg, cbOnIterMap op, void *user) {
+#if 1
+	return on_map_skyline (io, vaddr, buf, len, match_flg, op, false);
+#else
 	if (!len) {
-		return 0;
+		return true;
 	}
-	int len1, t, ret;
+	bool ret = true;
 	// vaddr + len > 2**64
 	if (vaddr > UT64_MAX - len + 1) {
-		len1 = UT64_MAX - vaddr + 1;
-		ret = onIterMap (iter, io, vaddr, buf, len1, match_flg, op, user);
-		if (ret >= 0) {
-			t = onIterMap (iter, io, 0, buf + len1, len - len1, match_flg, op, user);
-			if (t < 0) {
-				ret = t;
-			} else {
-				ret += t;
-			}
-		}
-	} else {
+		ret = onIterMap (iter, io, 0, buf - vaddr, len + vaddr, match_flg, op, user);
+		len = -vaddr;
+	}
+	if (ret) {
 		ret = onIterMap (iter, io, vaddr, buf, len, match_flg, op, user);
 	}
 	return ret;
+#endif
 }
 
 R_API RIO* r_io_new() {
@@ -130,6 +205,7 @@ R_API RIO* r_io_init(RIO* io) {
 	if (!io) {
 		return NULL;
 	}
+	io->addrbytes = 1;
 	r_io_desc_init (io);
 	r_io_map_init (io);
 	r_io_section_init (io);
@@ -216,11 +292,12 @@ R_API RIODesc* r_io_open_at(RIO* io, const char* uri, int flags, int mode, ut64 
 	// second map
 	if (size && ((UT64_MAX - size + 1) < at)) {
 		// split map into 2 maps if only 1 big map results into interger overflow
-		r_io_map_new (io, desc->fd, desc->flags, UT64_MAX - at + 1, 0LL, size - (UT64_MAX - at) - 1, true);
+		r_io_map_new (io, desc->fd, desc->flags, UT64_MAX - at + 1, 0LL, size - (UT64_MAX - at) - 1, false);
 		// someone pls take a look at this confusing stuff
 		size = UT64_MAX - at + 1;
 	}
-	r_io_map_new (io, desc->fd, desc->flags, 0LL, at, size, true); // first map
+	// skyline not updated
+	r_io_map_new (io, desc->fd, desc->flags, 0LL, at, size, false);
 	return desc;
 }
 
@@ -294,7 +371,7 @@ R_API int r_io_pread_at(RIO* io, ut64 paddr, ut8* buf, int len) {
 		return 0;
 	}
 	if (io->ff) {
-		memset (buf, 0xff, len);
+		memset (buf, io->Oxff, len);
 	}
 	return r_io_desc_read_at (io->desc, paddr, buf, len);
 }
@@ -311,13 +388,13 @@ R_API bool r_io_vread_at(RIO* io, ut64 vaddr, ut8* buf, int len) {
 		return false;
 	}
 	if (io->ff) {
-		memset (buf, 0xff, len);
+		memset (buf, io->Oxff, len);
 	}
 	r_io_map_cleanup (io);
 	if (!io->maps) {
 		return false;
 	}
-	return onIterMap_wrap (io->maps->tail, io, vaddr, buf, len, R_IO_READ, fd_read_at_wrap, NULL) == len;
+	return onIterMap_wrap (io->maps->tail, io, vaddr, buf, len, R_IO_READ, fd_read_at_wrap, NULL);
 }
 
 R_API bool r_io_vwrite_at(RIO* io, ut64 vaddr, const ut8* buf, int len) {
@@ -328,7 +405,7 @@ R_API bool r_io_vwrite_at(RIO* io, ut64 vaddr, const ut8* buf, int len) {
 	if (!io->maps) {
 		return false;
 	}
-	return onIterMap_wrap (io->maps->tail, io, vaddr, (ut8*)buf, len, R_IO_WRITE, fd_write_at_wrap, NULL) == len;
+	return onIterMap_wrap (io->maps->tail, io, vaddr, (ut8*)buf, len, R_IO_WRITE, fd_write_at_wrap, NULL);
 }
 
 R_API RIOAccessLog *r_io_al_vread_at(RIO* io, ut64 vaddr, ut8* buf, int len) {
@@ -341,10 +418,10 @@ R_API RIOAccessLog *r_io_al_vread_at(RIO* io, ut64 vaddr, ut8* buf, int len) {
 		return NULL;
 	}
 	if (io->ff) {
-		memset (buf, 0xff, len);
+		memset (buf, io->Oxff, len);
 	}
 	log->buf = buf;
-	(void)onIterMap_wrap (io->maps->tail, io, vaddr, buf, len, R_IO_READ, al_fd_read_at_wrap, log);
+	onIterMap (io->maps->tail, io, vaddr, buf, len, R_IO_READ, al_fd_read_at_wrap, log);
 	return log;
 }
 
@@ -358,7 +435,7 @@ R_API RIOAccessLog *r_io_al_vwrite_at(RIO* io, ut64 vaddr, const ut8* buf, int l
 		return NULL;
 	}
 	log->buf = (ut8*)buf;
-	(void)onIterMap_wrap (io->maps->tail, io, vaddr, (ut8*)buf, len, R_IO_WRITE, al_fd_write_at_wrap, log);
+	(void)onIterMap (io->maps->tail, io, vaddr, (ut8*)buf, len, R_IO_WRITE, al_fd_write_at_wrap, log);
 	return log;
 }
 
@@ -375,7 +452,7 @@ R_API bool r_io_read_at(RIO* io, ut64 addr, ut8* buf, int len) {
 	} else {
 		ret = (r_io_pread_at (io, addr, buf, len) > 0);
 	}
-	if (io->cached_read) {
+	if (io->cached & R_IO_READ) {
 		(void)r_io_cache_read (io, addr, buf, len);
 	}
 	return ret;
@@ -396,10 +473,10 @@ R_API RIOAccessLog *r_io_al_read_at(RIO* io, ut64 addr, ut8* buf, int len) {
 	}
 	log->buf = buf;
 	if (io->ff) {
-		memset (buf, 0xff, len);
+		memset (buf, io->Oxff, len);
 	}
 	rlen = r_io_pread_at (io, addr, buf, len);
-	if (io->cached_read) {
+	if (io->cached & R_IO_READ) {
 		(void)r_io_cache_read (io, addr, buf, len);
 	}
 	if (!(ale = R_NEW0 (RIOAccessLogElement))) {
@@ -417,7 +494,7 @@ R_API RIOAccessLog *r_io_al_read_at(RIO* io, ut64 addr, ut8* buf, int len) {
 
 R_API bool r_io_write_at(RIO* io, ut64 addr, const ut8* buf, int len) {
 	int i;
-	bool ret;
+	bool ret = false;
 	ut8 *mybuf = (ut8*)buf;
 	if (!io || !buf || len < 1) {
 		return false;
@@ -429,7 +506,7 @@ R_API bool r_io_write_at(RIO* io, ut64 addr, const ut8* buf, int len) {
 			mybuf[i] &= io->write_mask[i % io->write_mask_len];
 		}
 	}
-	if (io->cached) {
+	if (io->cached & R_IO_WRITE) {
 		ret = r_io_cache_write (io, addr, mybuf, len);
 	} else if (io->va) {
 		ret = r_io_vwrite_at (io, addr, mybuf, len);
@@ -485,6 +562,17 @@ R_API int r_io_system(RIO* io, const char* cmd) {
 
 R_API bool r_io_resize(RIO* io, ut64 newsize) {
 	if (io) {
+		RList *maps = r_io_map_get_for_fd (io, io->desc->fd);
+		RIOMap *current_map;
+		RListIter *iter;
+		ut64 fd_size = r_io_fd_size (io, io->desc->fd);
+		r_list_foreach (maps, iter, current_map) {
+			// we just resize map of the same size of its fd
+			if (current_map->itv.size == fd_size) {
+				r_io_map_resize (io, current_map->id, newsize);
+			}
+		}
+		r_list_free (maps);
 		return r_io_desc_resize (io->desc, newsize);
 	}
 	return false;
@@ -596,6 +684,7 @@ R_API int r_io_bind(RIO* io, RIOBind* bnd) {
 R_API int r_io_shift(RIO* io, ut64 start, ut64 end, st64 move) {
 	ut8* buf;
 	ut64 chunksize = 0x10000;
+	ut64 saved_off = io->off;
 	ut64 src, shiftsize = r_num_abs (move);
 	if (!shiftsize || (end - start) <= shiftsize) {
 		return false;
@@ -624,6 +713,7 @@ R_API int r_io_shift(RIO* io, ut64 start, ut64 end, st64 move) {
 		rest -= chunksize;
 	}
 	free (buf);
+	io->off = r_io_desc_seek (io->desc, saved_off, R_IO_SEEK_SET);
 	return true;
 }
 

@@ -18,7 +18,7 @@ R_API void* r_asm_code_free(RAsmCode *acode) {
 	return NULL;
 }
 
-static void r_asm_code_equs_free (RAsmEqu *equ) {
+R_API void r_asm_equ_item_free(RAsmEqu *equ) {
 	free (equ->key);
 	free (equ->value);
 	free (equ);
@@ -32,7 +32,7 @@ R_API bool r_asm_code_set_equ (RAsmCode *code, const char *key, const char *valu
 		return false;
 	}
 	if (!code->equs) {
-		code->equs = r_list_newf ((RListFree)r_asm_code_equs_free);
+		code->equs = r_list_newf ((RListFree)r_asm_equ_item_free);
 	} else {
 		r_list_foreach (code->equs, iter, equ) {
 			if (!strcmp (equ->key, key)) {

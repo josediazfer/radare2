@@ -920,7 +920,7 @@ R_API int r_sign_search_update(RAnal *a, RSignSearch *ss, ut64 *at, const ut8 *b
 	if (!a || !ss || !buf || len <= 0) {
 		return 0;
 	}
-	return r_search_update (ss->search, at, buf, len);
+	return r_search_update (ss->search, *at, buf, len);
 }
 
 static bool fcnMetricsCmp(RSignItem *it, RAnalFunction *fcn) {
@@ -1210,10 +1210,66 @@ R_API bool r_sign_load(RAnal *a, const char *file) {
 	return true;
 }
 
+R_API bool r_sign_load_gz(RAnal *a, const char *filename) {
+	ut8 *buf = NULL;
+	int size = 0;
+	char *tmpfile = NULL;
+	bool retval = true;
+
+	char *path = r_sign_path (a, filename);
+	if (!r_file_exists (path)) {
+		eprintf ("error: file %s does not exist\n", filename);
+		retval = false;
+		goto out;
+	}
+
+	if (!(buf = r_file_gzslurp (path, &size, 0))) {
+		eprintf ("error: cannot decompress file\n");
+		retval = false;
+		goto out;
+	}
+
+	if (!(tmpfile = r_file_temp ("r2zign"))) {
+		eprintf ("error: cannot create temp file\n");
+		retval = false;
+		goto out;
+	}
+
+	if (!r_file_dump (tmpfile, buf, size, 0)) {
+		eprintf ("error: cannot dump file\n");
+		retval = false;
+		goto out;
+	}
+
+	if (!r_sign_load (a, tmpfile)) {
+		eprintf ("error: cannot load file\n");
+		retval = false;
+		goto out;
+	}
+
+	if (!r_file_rm (tmpfile)) {
+		eprintf ("error: cannot delete temp file\n");
+		retval = false;
+		goto out;
+	}
+
+out:
+	free (buf);
+	free (tmpfile);
+	free (path);
+
+	return retval;
+}
+
 R_API bool r_sign_save(RAnal *a, const char *file) {
 	bool retval = true;
 
 	if (!a || !file) {
+		return false;
+	}
+	
+	if (sdb_count (a->sdb_zigns) == 0) {
+		eprintf ("WARNING: no zignatures to save\n");
 		return false;
 	}
 

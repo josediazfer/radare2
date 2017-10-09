@@ -720,7 +720,10 @@ R_API int r_debug_detach(RDebug *dbg, int pid) {
 	return false;
 }
 
-R_API int r_debug_select(RDebug *dbg, int pid, int tid) {
+R_API bool r_debug_select(RDebug *dbg, int pid, int tid) {
+	if (pid < 0) {
+		return false;
+	}
 	if (tid < 0) {
 		tid = pid;
 	}
@@ -729,8 +732,12 @@ R_API int r_debug_select(RDebug *dbg, int pid, int tid) {
 			eprintf ("= attach %d %d\n", pid, tid);
 		}
 	} else {
-		if (dbg->pid != -1)
+		if (dbg->pid != -1) {
 			eprintf ("Child %d is dead\n", dbg->pid);
+		}
+	}
+	if (pid < 0 || tid < 0) {
+		return false;
 	}
 
 	if (dbg->h && dbg->h->select && !dbg->h->select (pid, tid))
@@ -831,7 +838,6 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			RRegItem *pc_ri;
 			RBreakpointItem *b = NULL;
 			ut64 pc;
-			bool ign;
 
 			/* get the program coounter */
 			pc_ri = r_reg_get (dbg->reg, dbg->reg->name[R_REG_NAME_PC], -1);
@@ -1653,6 +1659,13 @@ R_API int r_debug_child_clone(RDebug *dbg) {
 }
 
 R_API bool r_debug_is_dead (RDebug *dbg) {
+	if (!dbg->h) {
+		return false;
+	}
+	// workaround for debug.io.. should be generic
+	if (!strcmp (dbg->h->name, "io")) {
+		return false;
+	}
 	bool is_dead = (dbg->pid == -1 && strncmp (dbg->h->name, "gdb", 3)) || (dbg->reason->type == R_DEBUG_REASON_DEAD);
 	if (dbg->pid > 0) {
 		is_dead = !dbg->h->kill (dbg, dbg->pid, false, 0);

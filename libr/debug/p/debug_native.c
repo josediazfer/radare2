@@ -187,11 +187,14 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 #elif __APPLE__
 	return xnu_attach (dbg, pid);
 #elif __KFBSD__
-	if (ptrace (PT_ATTACH, pid, 0, 0) != -1) perror ("ptrace (PT_ATTACH)");
+	if (ptrace (PT_ATTACH, pid, 0, 0) != -1) {
+		perror ("ptrace (PT_ATTACH)");
+	}
 	return pid;
 #else
 	int ret = ptrace (PTRACE_ATTACH, pid, 0, 0);
 	if (ret != -1) {
+		eprintf ("Trying to attach to %d\n", pid);
 		perror ("ptrace (PT_ATTACH)");
 	}
 	return pid;
@@ -271,7 +274,10 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 		r_cons_break_push ((RConsBreak)r_debug_native_stop, dbg);
 	}
 
-	ptrace (PTRACE_CONT, pid, NULL, contsig);
+	int ret = ptrace (PTRACE_CONT, pid, NULL, contsig);
+	if (ret) {
+		perror ("PTRACE_CONT");
+	}
 	if (dbg->continue_all_threads && dbg->n_threads) {
 		RList *list = dbg->threads;
 		RDebugPid *th;
@@ -413,7 +419,7 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 		break;
 	} while (true);
 	r_cons_break_pop ();
-	status = reason? 1: 0;
+	int status = reason? 1: 0;
 #else
 #if __linux__ && !defined (WAIT_ON_ALL_CHILDREN)
 	reason = linux_dbg_wait (dbg, dbg->tid);
@@ -431,6 +437,7 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 		}
 	}
 #else
+	int status = -1;
 	// XXX: this is blocking, ^C will be ignored
 #ifdef WAIT_ON_ALL_CHILDREN
 	int ret = waitpid (-1, &status, WAITPID_FLAGS);
@@ -700,7 +707,6 @@ static RList *r_debug_native_pids (RDebug *dbg, int pid) {
 	return list;
 }
 
-
 static RList *r_debug_native_threads (RDebug *dbg, int pid) {
 	RList *list = r_list_new ();
 	if (!list) {
@@ -720,10 +726,7 @@ static RList *r_debug_native_threads (RDebug *dbg, int pid) {
 #endif
 }
 
-
-
 #if __sun || __NetBSD__ || __KFBSD__ || __OpenBSD__
-
 
 //Function to read register from Linux, BSD, Android systems
 static int bsd_reg_read (RDebug *dbg, int type, ut8* buf, int size) {
@@ -826,8 +829,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 #else // i386/x86-64
 		return false;
 #endif
-	} else
-	if (type == R_REG_TYPE_GPR) {
+	} else if (type == R_REG_TYPE_GPR) {
 #if __WINDOWS__ && !__CYGWIN__
 		return w32_reg_write(dbg, type, buf, size);
 #elif __linux__
@@ -932,39 +934,47 @@ static RList *r_debug_native_sysctl_map (RDebug *dbg) {
 
 	return list;
 }
-#endif
+#elif __linux__
+static int io_perms_to_prot (int io_perms) {
+	int prot_perms = PROT_NONE;
 
-static char* r_debug_native_get_map_info (RDebug *dbg, RDebugMap *map, int type) {
-	char *ret;
-
-	ret = NULL;
-#if __WINDOWS__
-	ret = w32_get_map_info (dbg, map, type);
-#else
-	if (type == R_DEBUG_MAP_INFO_PERMS) {
-		ret = strdup(r_str_rwx_i (map->perm));
+	if (io_perms & R_IO_READ) {
+		prot_perms |= PROT_READ;
 	}
-#endif
-	return ret;
+	if (io_perms & R_IO_WRITE) {
+		prot_perms |= PROT_WRITE;
+	}
+	if (io_perms & R_IO_EXEC) {
+		prot_perms |= PROT_EXEC;
+	}
+	return prot_perms;
 }
 
-#if __linux__
 static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	RBuffer *buf = NULL;
 	RDebugMap* map = NULL;
-	char code[1024];
+	char code[1024], *sc_name;
 	int num;
-	ut64 map_addr;
+	/* force to usage of x86.as, not yet working x86.nz */
 	char *asm_list[] = {
 			"x86", "x86.as",
 			"x64", "x86.as",
 			NULL};
 
-	num = r_syscall_get_num (dbg->anal->syscall, "mmap");
+	/* NOTE: Since kernel 2.4,  that  system  call  has  been  superseded  by
+       		 mmap2(2 and  nowadays  the  glibc  mmap()  wrapper  function invokes
+       		 mmap2(2)). If arch is x86_32 then usage mmap2() */
+	if (!strcmp (dbg->arch, "x86") && dbg->bits == 4) {
+		sc_name = "mmap2";
+	} else {
+		sc_name = "mmap";
+	}
+	num = r_syscall_get_num (dbg->anal->syscall, sc_name);
 	snprintf (code, sizeof (code),
 		"sc_mmap@syscall(%d);\n"
 		"main@naked(0) { .rarg0 = sc_mmap(0x%08"PFMT64x",%d,%d,%d,%d,%d);\n"
-	"}\n", num, (void*)addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+		"}\n",
+		num, addr, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
 	r_egg_load (dbg->egg, code, 0);
@@ -978,6 +988,8 @@ static RDebugMap* linux_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	}
 	buf = r_egg_get_bin (dbg->egg);
 	if (buf) {
+		ut64 map_addr;
+
 		r_reg_arena_push (dbg->reg);
 		map_addr = r_debug_execute (dbg, buf->buf, buf->length, 0, 1);
 		r_reg_arena_pop (dbg->reg);
@@ -993,17 +1005,17 @@ err_linux_map_alloc:
 static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	RBuffer *buf = NULL;
 	char code[1024];
-	int ret = 0, num;
+	int ret = 0;
 	char *asm_list[] = {
 			"x86", "x86.as",
 			"x64", "x86.as",
 			NULL};
+	int num = r_syscall_get_num (dbg->anal->syscall, "munmap");
 
-	num = r_syscall_get_num (dbg->anal->syscall, "munmap");
 	snprintf (code, sizeof (code),
 		"sc_munmap@syscall(%d);\n"
 		"main@naked(0) { .rarg0 = sc_munmap(0x%08"PFMT64x",%d);\n"
-	"}\n", num, (void*)addr, size);
+		"}\n", num, addr, size);
 	r_egg_reset (dbg->egg);
 	r_egg_setup (dbg->egg, dbg->arch, 8 * dbg->bits, 0, 0);
 	r_egg_load (dbg->egg, code, 0);
@@ -1018,13 +1030,27 @@ static int linux_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	buf = r_egg_get_bin (dbg->egg);
 	if (buf) {
 		r_reg_arena_push (dbg->reg);
-		ret = r_debug_execute (dbg, buf->buf, buf->length , 0, 1) == 0;
+		ret = r_debug_execute (dbg, buf->buf, buf->length, 0, 1) == 0;
 		r_reg_arena_pop (dbg->reg);
 	}
 err_linux_map_dealloc:
 	return ret;
 }
 #endif
+
+static char* r_debug_native_get_map_info (RDebug *dbg, RDebugMap *map, int type) {
+	char *ret;
+
+	ret = NULL;
+#if __WINDOWS__
+	ret = w32_get_map_info (dbg, map, type);
+#else
+	if (type == R_DEBUG_MAP_INFO_PERMS) {
+		ret = strdup(r_str_rwx_i (map->perm));
+	}
+#endif
+	return ret;
+}
 
 static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 
@@ -1050,7 +1076,7 @@ static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 	map = r_debug_map_get (dbg, (ut64)(size_t)base);
 	return map;
 #elif __linux__
-	linux_map_alloc (dbg, addr, size);	
+	return linux_map_alloc (dbg, addr, size);	
 #else
 	// map_alloc not implemented for this platform
 	return NULL;
@@ -1703,24 +1729,6 @@ static RList *r_debug_desc_native_list (int pid) {
 #endif
 }
 
-#if __linux__
-static int perms2map(int perms)
-{
-	int map_perms = 0;
-
-	if (R_IO_PERM (perms, R_IO_READ)) {
-		map_perms |= PROT_READ;
-	}
-	if (R_IO_PERM (perms, R_IO_WRITE)) {
-		map_perms |= PROT_WRITE;
-	}
-	if (R_IO_PERM (perms, R_IO_EXEC)) {
-		map_perms |= PROT_EXEC;
-	}
-	return map_perms;
-}
-#endif
-
 static int r_debug_native_map_protect(RDebug *dbg, ut64 addr, int size, int perms) {
 	return r_debug_native_map_protect_ (dbg, addr, size, perms, false);
 }
@@ -1740,7 +1748,7 @@ static int r_debug_native_map_protect_(RDebug *dbg, ut64 addr, int size, int per
 	snprintf (code, sizeof (code),
 		"sc_mprotect@syscall(%d);\n"
 		"main@naked(0) { .rarg0 = sc_mprotect(0x%08"PFMT64x",%d,%d);\n"
-		"}\n", num, addr, size, perms2map (perms));
+		"}\n", num, addr, size, io_perms_to_prot (perms));
 	if (cache) {
 		RDebugCacheBuf *cache_buf;
 
@@ -1841,8 +1849,12 @@ RDebugPlugin r_debug_plugin_native = {
 	.bits = R_SYS_BITS_32 | R_SYS_BITS_64,
 	.arch = "mips",
 	.canstep = 0,
-#elif __POWERPC__
+#elif __powerpc__
+# if __powerpc64__
+	.bits = R_SYS_BITS_32 | R_SYS_BITS_64,
+# else
 	.bits = R_SYS_BITS_32,
+#endif
 	.arch = "ppc",
 	.canstep = 1,
 #else
@@ -1867,7 +1879,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.wait = &r_debug_native_wait,
 	.kill = &r_debug_native_kill,
 	.frames = &r_debug_native_frames, // rename to backtrace ?
-	.reg_profile = (void *)r_debug_native_reg_profile,
+	.reg_profile = r_debug_native_reg_profile,
 	.reg_read = r_debug_native_reg_read,
 	.info = r_debug_native_info,
 	.reg_write = (void *)&r_debug_native_reg_write,

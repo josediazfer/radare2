@@ -691,7 +691,10 @@ static int build_format_flags(R_PDB *pdb, char *type, int pos, char *res_field, 
 			if (!name) {
 				return 0;
 			}
+			r_name_filter (tmp, -1);
+			r_name_filter (*name_field, -1);
 			strcpy (name, tmp);
+
 			sprintf (name, "(%s)%s", tmp, *name_field);
 			free (*name_field);
 			*name_field = name;
@@ -799,14 +802,14 @@ void build_command_field(ELeafType lt, char **command_field) {
 		if (!(*command_field)) {
 			break;
 		}
-		strcpy (*command_field, "pf");
+		strcpy (*command_field, "pf.");
 		break;
 	case eLF_ENUM:
-		*command_field = (char *) malloc (strlen ("\"td enum") + 1);
+		*command_field = (char *) malloc (strlen ("\"td enum ") + 1);
 		if (!(*command_field)) {
 			break;
 		}
-		strcpy (*command_field, "\"td enum");
+		strcpy (*command_field, "\"td enum ");
 		break;
 	default:
 		break;
@@ -815,8 +818,11 @@ void build_command_field(ELeafType lt, char **command_field) {
 
 ///////////////////////////////////////////////////////////////////////////////
 void build_name_field(char *name, char **name_field) {
-	*name_field = name? strdup (name): NULL;
-	r_name_filter (*name_field, -1);
+	if (name_field) {
+		*name_field = name? strdup (name): NULL;
+		r_name_filter (*name_field, -1);
+		r_str_replace_char (*name_field, ':', '_');
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -836,7 +842,7 @@ int build_flags_format_and_members_field(R_PDB *pdb, ELeafType lt, char *name, c
 		*pos = *pos + 1;
 		break;
 	case eLF_ENUM:
-		members_field[i] = r_str_newf ("%s=%08x", name, offset);
+		members_field[i] = r_str_newf ("%s=0x%"PFMT64x, name, offset);
 #if 0
 		members_field[i] = (char *) malloc (sizeof(char) * strlen (name) + 8 + 1 + 1);	// 8 - hex int, 1 - =
 		if (!members_field[i]) {
@@ -849,7 +855,6 @@ int build_flags_format_and_members_field(R_PDB *pdb, ELeafType lt, char *name, c
 		return 0;
 	}
 
-	r_name_filter (members_field[i], -1);
 	return 1;
 }
 
@@ -1017,7 +1022,7 @@ static void print_types(R_PDB *pdb, int mode) {
 			}
 
 			if (mode == 'r') {
-				pdb->cb_printf ("%s %s ", command_field, name_field);
+				pdb->cb_printf ("%s%s ", command_field, name_field);
 				if (lt != eLF_ENUM) {
 					pdb->cb_printf ("%s ", flags_format_field);
 				} else {

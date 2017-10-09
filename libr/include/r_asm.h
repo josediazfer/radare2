@@ -96,7 +96,6 @@ typedef struct {
 typedef struct r_asm_t {
 	char *cpu;
 	int bits;
-	int addrbytes;
 	int big_endian;
 	int syntax;
 	ut64 pc;
@@ -182,6 +181,7 @@ R_API void r_asm_list_directives(void);
 /* code.c */
 R_API RAsmCode *r_asm_code_new(void);
 R_API void* r_asm_code_free(RAsmCode *acode);
+R_API void r_asm_equ_item_free(RAsmEqu *equ);
 R_API bool r_asm_code_set_equ (RAsmCode *code, const char *key, const char *value);
 R_API char *r_asm_code_equ_replace (RAsmCode *code, char *str);
 
@@ -259,10 +259,6 @@ extern RAsmPlugin r_asm_plugin_evm;
 
 #ifdef __cplusplus
 }
-#ifdef __cplusplus
-}
-#endif
-
 #endif
 
 #endif

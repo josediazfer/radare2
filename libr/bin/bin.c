@@ -864,7 +864,6 @@ R_API int r_bin_object_set_items(RBinFile *binfile, RBinObject *o) {
 // XXX - this is a rather hacky way to do things, there may need to be a better
 // way.
 R_API int r_bin_load(RBin *bin, const char *file, ut64 baseaddr, ut64 loadaddr, int xtr_idx, int fd, int rawstr) {
-	int ret;
 	if (!bin) {
 		return false;
 	}
@@ -1018,7 +1017,7 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, int fd, ut64 baseaddr,
 	RBinFile *binfile = NULL;
 	int tfd = -1;
 
-	if (!io || (fd < 0)) {
+	if (!io || (fd < 0) || (st64)sz < 0) {
 		return false;
 	}
 	bool is_debugger = iob->fd_is_dbg (io, fd);
@@ -1028,7 +1027,7 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, int fd, ut64 baseaddr,
 	}
 	file_sz = iob->fd_size (io, fd);
 	// file_sz = UT64_MAX happens when attaching to frida:// and other non-debugger io plugins which results in double opening
-	if (!file_sz || (is_debugger && file_sz == UT64_MAX)) {
+	if (is_debugger && file_sz == UT64_MAX) {
 		tfd = iob->fd_open (io, fname, R_IO_READ, 0644);
 		if (tfd >= 1) {
 			file_sz = iob->fd_size (io, tfd);
@@ -1047,7 +1046,7 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, int fd, ut64 baseaddr,
 			if (tfd >= 0) {
 				buf_bytes = calloc (1, sz + 1);
 				iob->fd_read_at (io, tfd, 0, buf_bytes, sz);
-				iob->fd_close (io, tfd);
+				// iob->fd_close (io, tfd);
 			}
 		}
 	}
@@ -1062,7 +1061,7 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, int fd, ut64 baseaddr,
 		}
 	}
 
-	if (!name) {
+	if (!name && (st64)sz > 0) {
 		// XXX - for the time being this is fine, but we may want to
 		// change the name to something like
 		// <xtr_name>:<bin_type_name>
@@ -1081,7 +1080,7 @@ R_API int r_bin_load_io_at_offset_as_sz(RBin *bin, int fd, ut64 baseaddr,
 								(void) iob->fd_read_at (io, tfd, 0, buf_bytes, sz);
 							}
 						}
-						iob->fd_close (io, tfd);
+				//DOUBLECLOSE UAF : iob->fd_close (io, tfd);
 						tfd = -1;	// marking it closed
 					} else if (sz != file_sz) {
 						(void) iob->read_at (io, 0LL, buf_bytes, sz);
@@ -1874,7 +1873,7 @@ R_API RList *r_bin_reset_strings(RBin *bin) {
 		return NULL;
 	}
 	if (o->strings) {
-		r_list_purge (o->strings);
+		r_list_free (o->strings);
 		o->strings = NULL;
 	}
 

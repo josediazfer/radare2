@@ -479,7 +479,7 @@ R_API int r_debug_continue_pass_exception(RDebug *dbg);
 #endif
 
 /* process/thread handling */
-R_API int r_debug_select(RDebug *dbg, int pid, int tid);
+R_API bool r_debug_select(RDebug *dbg, int pid, int tid);
 //R_API int r_debug_pid_add(RDebug *dbg);
 //R_API int r_debug_pid_add_thread(RDebug *dbg);
 //R_API int r_debug_pid_del(RDebug *dbg);
@@ -662,6 +662,7 @@ extern RDebugPlugin r_debug_plugin_io;
 extern RDebugPlugin r_debug_plugin_windbg;
 extern RDebugPlugin r_debug_plugin_bochs;
 extern RDebugPlugin r_debug_plugin_qnx;
+extern RDebugPlugin r_debug_plugin_null;
 #endif
 
 #ifdef __cplusplus

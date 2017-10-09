@@ -15,11 +15,13 @@ static const char *help_msg_z[] = {
 	"z-", "zignature", "delete zignature",
 	"z-", "*", "delete all zignatures",
 	"za", "[?]", "add zignature",
+	"zg", "", "generate zignatures (alias for zaF)",
 	"zo", "[?]", "manage zignature files",
 	"zf", "[?]", "manage FLIRT signatures",
 	"z/", "[?]", "search zignatures",
 	"zc", "", "check zignatures at address",
 	"zs", "[?]", "manage zignspaces",
+	"zi", "", "show zignatures matching information",
 	NULL
 };
 
@@ -83,7 +85,7 @@ static bool addFcnBytes(RCore *core, RAnalFunction *fcn, const char *name) {
 	}
 	int maxsz = r_config_get_i (core->config, "zign.maxsz");
 	int fcnlen = r_anal_fcn_realsize (fcn);
-	int len = R_MIN (core->assembler->addrbytes * fcnlen, maxsz);
+	int len = R_MIN (core->io->addrbytes * fcnlen, maxsz);
 
 	ut8 *buf = malloc (len);
 	if (!buf) {
@@ -402,56 +404,6 @@ out_case_fcn:
 	return true;
 }
 
-static bool loadGzSdb(RAnal *a, const char *filename) {
-	ut8 *buf = NULL;
-	int size = 0;
-	char *tmpfile = NULL;
-	bool retval = true;
-
-	char *path = r_sign_path (a, filename);
-	if (!r_file_exists (path)) {
-		eprintf ("error: file %s does not exist\n", filename);
-		retval = false;
-		goto out;
-	}
-
-	if (!(buf = r_file_gzslurp (path, &size, 0))) {
-		eprintf ("error: cannot decompress file\n");
-		retval = false;
-		goto out;
-	}
-
-	if (!(tmpfile = r_file_temp ("r2zign"))) {
-		eprintf ("error: cannot create temp file\n");
-		retval = false;
-		goto out;
-	}
-
-	if (!r_file_dump (tmpfile, buf, size, 0)) {
-		eprintf ("error: cannot dump file\n");
-		retval = false;
-		goto out;
-	}
-
-	if (!r_sign_load (a, tmpfile)) {
-		eprintf ("error: cannot load file\n");
-		retval = false;
-		goto out;
-	}
-
-	if (!r_file_rm (tmpfile)) {
-		eprintf ("error: cannot delete temp file\n");
-		retval = false;
-		goto out;
-	}
-
-out:
-	free (buf);
-	free (tmpfile);
-	free (path);
-
-	return retval;
-}
 
 static int cmdOpen(void *data, const char *input) {
 	RCore *core = (RCore *) data;
@@ -471,7 +423,7 @@ static int cmdOpen(void *data, const char *input) {
 		return false;
 	case 'z':
 		if (input[1] == ' ' && input[2]) {
-			return loadGzSdb (core->anal, input + 2);
+			return r_sign_load_gz (core->anal, input + 2);
 		}
 		eprintf ("usage: zoz filename\n");
 		return false;
@@ -651,7 +603,6 @@ static bool search(RCore *core, bool rad) {
 	RAnalFunction *fcni = NULL;
 	RIOMap *map;
 	bool retval = true;
-	ut64 sin_from = UT64_MAX, sin_to = UT64_MAX;
 	int hits = 0;
 
 	struct ctxSearchCB bytes_search_ctx = { core, rad, 0, "bytes" };
@@ -678,17 +629,12 @@ static bool search(RCore *core, bool rad) {
 
 	// Bytes search
 	if (useBytes) {
-		list = r_core_get_boundaries_prot (core, R_IO_EXEC | R_IO_WRITE | R_IO_READ, mode, &sin_from, &sin_to);
-		if (list) {
-			r_list_foreach (list, iter, map) {
-				eprintf ("[+] searching 0x%08"PFMT64x" - 0x%08"PFMT64x"\n", map->from, map->to);
-				retval &= searchRange (core, map->from, map->to, rad, &bytes_search_ctx);
-			}
-			r_list_free (list);
-		} else {
-			eprintf ("[+] searching 0x%08"PFMT64x" - 0x%08"PFMT64x"\n", sin_from, sin_to);
-			retval = searchRange (core, sin_from, sin_to, rad, &bytes_search_ctx);
+		list = r_core_get_boundaries_prot (core, R_IO_EXEC | R_IO_WRITE | R_IO_READ, mode);
+		r_list_foreach (list, iter, map) {
+			eprintf ("[+] searching 0x%08"PFMT64x" - 0x%08"PFMT64x"\n", map->itv.addr, r_itv_end (map->itv));
+			retval &= searchRange (core, map->itv.addr, r_itv_end (map->itv), rad, &bytes_search_ctx);
 		}
+		r_list_free (list);
 	}
 
 	// Function search
@@ -830,6 +776,17 @@ static int cmdCheck(void *data, const char *input) {
 	return retval;
 }
 
+static int cmdInfo(void *data, const char *input) {
+	if (!data || !input) {
+		return false;
+	}
+	RCore *core = (RCore *) data;
+	r_flag_space_push (core->flags, "sign");
+	r_flag_list (core->flags, *input, input[0] ? input + 1: "");
+	r_flag_space_pop (core->flags);
+	return true;
+}
+
 static int cmd_zign(void *data, const char *input) {
 	RCore *core = (RCore *) data;
 
@@ -844,6 +801,8 @@ static int cmd_zign(void *data, const char *input) {
 		break;
 	case 'o':
 		return cmdOpen (data, input + 1);
+	case 'g':
+		return cmdAdd (data, "F");
 	case 'a':
 		return cmdAdd (data, input + 1);
 	case 'f':
@@ -854,6 +813,8 @@ static int cmd_zign(void *data, const char *input) {
 		return cmdCheck (data, input + 1);
 	case 's':
 		return cmdSpace (data, input + 1);
+	case 'i':
+		return cmdInfo (data, input + 1);
 	case '?':
 		r_core_cmd_help (core, help_msg_z);
 		break;

@@ -13,6 +13,8 @@ typedef struct {
 	libgdbr_t desc;
 } RIOGdb;
 
+#define R_GDB_MAGIC r_str_hash ("gdb")
+
 static libgdbr_t *desc = NULL;
 static RIODesc *riogdb = NULL;
 
@@ -21,32 +23,10 @@ static bool __plugin_open(RIO *io, const char *file, bool many) {
 }
 
 static int debug_gdb_read_at(ut8 *buf, int sz, ut64 addr) {
-	ut32 size_max;
-	ut32 packets;
-	ut32 last;
-	ut32 x;
-	int ret = 0;
 	if (sz < 1 || addr >= UT64_MAX || !desc) {
 		return -1;
 	}
-	size_max = desc->data_max / 2;
-	packets = sz / size_max;
-	last = sz % size_max;
-	for (x = 0; x < packets; x++) {
-		if (gdbr_read_memory (desc, addr + (x * size_max), size_max) < 0) {
-			return ret;
-		}
-		memcpy ((buf + (x * size_max)), desc->data + (x * size_max), R_MIN (sz, size_max));
-		ret += desc->data_len;
-	}
-	if (last) {
-		if (gdbr_read_memory (desc, addr + x * size_max, last) < 0) {
-			return ret;
-		}
-		memcpy ((buf + x * size_max), desc->data + (x * size_max), last);
-		ret += desc->data_len;
-	}
-	return ret;
+	return gdbr_read_memory (desc, addr, buf, sz);
 }
 
 static int debug_gdb_write_at(const ut8 *buf, int sz, ut64 addr) {
@@ -83,12 +63,13 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		// FIX: Don't allocate more than one gdb RIODesc
 		return riogdb;
 	}
-	strncpy (host, file + 6, sizeof (host)-1);
+	strncpy (host, file + 6, sizeof (host) - 1);
 	host [sizeof (host) - 1] = '\0';
 	if (host[0] == '/') {
 		isdev = true;
 	}
 
+	rw |= R_IO_WRITE;
 	if (isdev) {
 		port = strchr (host, '@');
 		if (port) {
@@ -134,7 +115,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 
 	if (gdbr_connect (&riog->desc, host, i_port) == 0) {
 		desc = &riog->desc;
-		if (pid) { // FIXME this is here for now because RDebug's pid and libgdbr's aren't properly synced.
+		if (pid > 0) { // FIXME this is here for now because RDebug's pid and libgdbr's aren't properly synced.
 			desc->pid = i_pid;
 			if (gdbr_attach (desc, i_pid) < 0) {
 				eprintf ("gdbr: Failed to attach to PID %i\n", i_pid);
@@ -143,7 +124,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		} else if ((i_pid = desc->pid) < 0) {
 			i_pid = -1;
 		}
-		riogdb = r_io_desc_new (io, &r_io_plugin_gdb, file, rw, mode, riog);
+		riogdb = r_io_desc_new (io, &r_io_plugin_gdb, file, R_IO_RWX, mode, riog);
 	}
 	// Get name
 	if (riogdb) {
@@ -176,6 +157,9 @@ static ut64 __lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 }
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
+	if (!io || !fd || !buf || count < 1) {
+		return -1;
+	}
 	memset (buf, 0xff, count);
 	ut64 addr = io->off;
 	if (!desc || !desc->data) {
@@ -196,6 +180,20 @@ static int __close(RIODesc *fd) {
 
 static int __getpid(RIODesc *fd) {
 	return desc ? desc->pid : -1;
+#if 0
+	// dupe for ? r_io_desc_get_pid (desc);
+	if (!desc || !desc->data) {
+		return -1;
+	}
+	RIODescData *iodd = desc->data;
+	if (iodd) {
+		if (iodd->magic != R_GDB_MAGIC) {
+			return -1;
+		}
+		return iodd->pid;
+	}
+	return -1;
+#endif
 }
 
 static int __gettid(RIODesc *fd) {
@@ -206,23 +204,24 @@ int send_msg(libgdbr_t* g, const char* command);
 int read_packet(libgdbr_t* instance);
 
 static int __system(RIO *io, RIODesc *fd, const char *cmd) {
-        //printf("ptrace io command (%s)\n", cmd);
-        /* XXX ugly hack for testing purposes */
-        if (!cmd[0] || cmd[0] == '?' || !strcmp (cmd, "help")) {
-                eprintf ("Usage: =!cmd args\n"
-                         " =!pid             - show targeted pid\n"
-                         " =!pkt s           - send packet 's'\n"
-                         " =!monitor cmd     - hex-encode monitor command and pass"
-                                             " to target interpreter\n"
-                         " =!detach [pid]    - detach from remote/detach specific pid\n"
-                         " =!inv.reg         - invalidate reg cache\n"
-                         " =!pktsz           - get max packet size used\n"
-                         " =!pktsz bytes     - set max. packet size as 'bytes' bytes\n"
-                         " =!exec_file [pid] - get file which was executed for"
-                                             " current/specified pid\n");
+	if (!desc) {
 		return true;
 	}
-	if (!strncmp (cmd, "pktsz", 5)) {
+	if (!cmd[0] || cmd[0] == '?' || !strcmp (cmd, "help")) {
+		eprintf ("Usage: =!cmd args\n"
+			 " =!pid             - show targeted pid\n"
+			 " =!pkt s           - send packet 's'\n"
+			 " =!monitor cmd     - hex-encode monitor command and pass"
+			                     " to target interpreter\n"
+			 " =!detach [pid]    - detach from remote/detach specific pid\n"
+			 " =!inv.reg         - invalidate reg cache\n"
+			 " =!pktsz           - get max packet size used\n"
+			 " =!pktsz bytes     - set max. packet size as 'bytes' bytes\n"
+			 " =!exec_file [pid] - get file which was executed for"
+			                     " current/specified pid\n");
+		return true;
+	}
+	if (r_str_startswith (cmd, "pktsz")) {
 		const char *ptr = r_str_chop_ro (cmd + 5);
 		if (!isdigit (*ptr)) {
 			io->cb_printf ("packet size: %u bytes\n",
@@ -234,10 +233,10 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 			// pktsz = 0 doesn't make sense
 			return false;
 		}
-		desc->stub_features.pkt_sz = R_MAX (pktsz, 64); // min = 64
+		desc->stub_features.pkt_sz = R_MAX (pktsz, 8); // min = 64
 		return true;
 	}
-	if (!strncmp (cmd, "detach", 6)) {
+	if (r_str_startswith (cmd, "detach")) {
 		int pid;
 		if (!isspace (cmd[6]) || !desc->stub_features.multiprocess) {
 			return gdbr_detach (desc) >= 0;
@@ -248,7 +247,7 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 		}
 		return gdbr_detach_pid (desc, pid) >= 0;
 	}
-	if (!strncmp (cmd, "pkt ", 4)) {
+	if (r_str_startswith (cmd, "pkt ")) {
 		if (send_msg (desc, cmd + 4) == -1) {
 			return false;
 		}
@@ -260,16 +259,16 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 		}
 		return r >= 0;
 	}
-	if (!strncmp (cmd, "pid", 3)) {
+	if (r_str_startswith (cmd, "pid")) {
 		int pid = desc ? desc->pid : -1;
 		if (!cmd[3]) {
 			io->cb_printf ("%d\n", pid);
 		}
 		return pid;
 	}
-	if (!strncmp (cmd, "monitor", 7)) {
+	if (r_str_startswith (cmd, "monitor")) {
 		const char *qrcmd = cmd + 8;
-		if (!isspace (cmd[8])) {
+		if (!isspace (cmd[7])) {
 			qrcmd = "help";
 		}
 		if (gdbr_send_qRcmd (desc, qrcmd, io->cb_printf) < 0) {
@@ -278,7 +277,7 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 		}
 		return true;
 	}
-	if (!strncmp (cmd, "inv.reg", 7)) {
+	if (r_str_startswith (cmd, "inv.reg")) {
 		gdbr_invalidate_reg_cache ();
 		return true;
 	}
@@ -309,8 +308,30 @@ static int __system(RIO *io, RIODesc *fd, const char *cmd) {
 		free (file);
 		return true;
 	}
-	// This is internal, not available to user. Sets a flag that next call to
-	// get memmap will be for getting baddr
+	// These are internal, not available to user directly
+	if (r_str_startswith (cmd, "retries")) {
+		int num_retries;
+		if (isspace (cmd[7]) && isdigit (cmd[8])) {
+			if ((num_retries = atoi (cmd + 8)) >= 1) {
+				desc->num_retries = num_retries;
+			}
+			return true;
+		}
+		io->cb_printf ("num_retries: %d bytes\n", desc->page_size);
+		return true;
+	}
+	if (r_str_startswith (cmd, "page_size")) {
+		int page_size;
+		if (isspace (cmd[9]) && isdigit (cmd[10])) {
+			if ((page_size = atoi (cmd + 10)) >= 64) {
+				desc->page_size = page_size;
+			}
+			return true;
+		}
+		io->cb_printf ("page size: %d bytes\n", desc->page_size);
+		return true;
+	}
+	// Sets a flag that next call to get memmap will be for getting baddr
 	if (!strcmp (cmd, "baddr")) {
 		desc->get_baddr = true;
 		return true;

@@ -800,6 +800,7 @@ R_API char *r_str_trim_head_tail(char *str) {
 // Secure string copy with null terminator (like strlcpy or strscpy but ours
 R_API void r_str_ncpy(char *dst, const char *src, int n) {
 	int i;
+	n--;
 	for (i = 0; src[i] && n > 0; i++, n--) {
 		dst[i] = src[i];
 	}
@@ -1226,7 +1227,7 @@ R_API void r_str_sanitize(char *c) {
 	}
 }
 
-static void r_str_byte_escape(const char *p, char **dst, int dot_nl, bool default_dot) {
+static void r_str_byte_escape(const char *p, char **dst, int dot_nl, bool default_dot, bool ign_bslash) {
 	char *q = *dst;
 	switch (*p) {
 	case '\n':
@@ -1239,7 +1240,9 @@ static void r_str_byte_escape(const char *p, char **dst, int dot_nl, bool defaul
 		break;
 	case '\\':
 		*q++ = '\\';
-		*q++ = '\\';
+		if (!ign_bslash) {
+			*q++ = '\\';
+		}
 		break;
 	case '\t':
 		*q++ = '\\';
@@ -1277,7 +1280,7 @@ static void r_str_byte_escape(const char *p, char **dst, int dot_nl, bool defaul
 
 /* Internal function. dot_nl specifies wheter to convert \n into the
  * graphiz-compatible newline \l */
-static char *r_str_escape_(const char *buf, int dot_nl, bool ign_esc_seq, bool show_asciidot) {
+static char *r_str_escape_(const char *buf, int dot_nl, bool ign_esc_seq, bool show_asciidot, bool ign_bslash) {
 	char *new_buf, *q;
 	const char *p;
 
@@ -1312,7 +1315,7 @@ static char *r_str_escape_(const char *buf, int dot_nl, bool ign_esc_seq, bool s
 				break;
 			}
 		default:
-			r_str_byte_escape (p, &q, dot_nl, show_asciidot);
+			r_str_byte_escape (p, &q, dot_nl, show_asciidot, ign_bslash);
 		}
 		p++;
 	}
@@ -1322,15 +1325,15 @@ out:
 }
 
 R_API char *r_str_escape(const char *buf) {
-	return r_str_escape_ (buf, false, true, false);
+	return r_str_escape_ (buf, false, true, false, false);
 }
 
 R_API char *r_str_escape_dot(const char *buf) {
-	return r_str_escape_ (buf, true, true, false);
+	return r_str_escape_ (buf, true, true, false, false);
 }
 
-R_API char *r_str_escape_latin1(const char *buf, bool show_asciidot) {
-	return r_str_escape_ (buf, false, false, show_asciidot);
+R_API char *r_str_escape_latin1(const char *buf, bool show_asciidot, bool ign_bslash) {
+	return r_str_escape_ (buf, false, false, show_asciidot, ign_bslash);
 }
 
 static char *r_str_escape_utf(const char *buf, int buf_size, RStrEnc enc, bool show_asciidot) {
@@ -1397,7 +1400,7 @@ static char *r_str_escape_utf(const char *buf, int buf_size, RStrEnc enc, bool s
 				*q++ = "0123456789abcdef"[ch >> 4 * i & 0xf];
 			}
 		} else {
-			r_str_byte_escape (p, &q, false, false);
+			r_str_byte_escape (p, &q, false, false, false);
 		}
 		switch (enc) {
 		case R_STRING_ENC_UTF16LE:
@@ -1535,6 +1538,16 @@ R_API int r_str_nlen_w(const char *str, int n) {
 		}
 	}
 	return len;
+}
+
+R_API bool r_str_is_ascii(const char *str) {
+	const ut8 *ptr;
+	for (ptr = (const ut8 *)str; *ptr; ptr++) {
+		if (*ptr > 0x7f) {
+			return false;
+		}
+	}
+	return true;
 }
 
 R_API int r_str_is_printable(const char *str) {
@@ -2680,37 +2693,52 @@ R_API const char *r_str_pad(const char ch, int sz) {
 	return pad;
 }
 
-static char **consts = NULL;
+static char **__consts = NULL;
 
-R_API const char *r_str_const(const char *ptr) {
+R_API const char *r_str_const_at(char ***consts, const char *ptr) {
+	if (!consts) {
+		consts = &__consts;
+	}
 	int ctr = 0;
 	if (!ptr) {
 		return NULL;
 	}
-	if (consts) {
+	if (*consts) {
 		const char *p;
-		while ((p = consts[ctr])) {
+		while ((p = (*consts)[ctr])) {
 			if (ptr == p || !strcmp (ptr, p)) {
 				return p;
 			}
 			ctr ++;
 		}
-		consts = realloc (consts, (2+ctr) * sizeof(void*));
+		char **res = realloc (*consts, (ctr + 2) * sizeof (void*));
+		if (res) {
+			*consts = res;
+		} else {
+			return NULL;
+		}
 	} else {
-		consts = malloc (sizeof (void*) * 2);
+		*consts = malloc (sizeof (void*) * 2);
 	}
-	consts[ctr] = strdup (ptr);
-	consts[ctr+1] = NULL;
-	return consts[ctr];
+	(*consts)[ctr] = strdup (ptr);
+	(*consts)[ctr + 1] = NULL;
+	return (*consts)[ctr];
 }
 
-R_API void r_str_const_free() {
+R_API const char *r_str_const(const char *ptr) {
+	return r_str_const_at (&__consts, ptr);
+}
+
+R_API void r_str_const_free(char ***consts) {
 	int i;
-	if (consts) {
-		for (i = 0; consts[i]; i++) {
-			free (consts[i]);
+	if (!consts) {
+		consts = &__consts;
+	}
+	if (*consts) {
+		for (i = 0; (*consts)[i]; i++) {
+			free ((*consts)[i]);
 		}
-		R_FREE (consts);
+		R_FREE (*consts);
 	}
 }
 

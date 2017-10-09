@@ -314,7 +314,7 @@ static bool run_commands(RList *cmds, RList *files, bool quiet) {
 		}
 		ret = r_core_run_script (&r, file);
 		if (ret == -2) {
-			eprintf ("Cannot open '%s'\n", file);
+			eprintf ("[c] Cannot open '%s'\n", file);
 		}
 		if (ret < 0 || (ret == 0 && quiet)) {
 			r_cons_flush ();
@@ -448,8 +448,9 @@ int main(int argc, char **argv, char **envp) {
 
 	r_sys_set_environ (envp);
 
-	if (r_sys_getenv ("R_DEBUG")) {
+	if ((tmp = r_sys_getenv ("R_DEBUG"))) {
 		r_sys_crash_handler ("gdb --pid %d");
+		free (tmp);
 	}
 	if (argc < 2) {
 		LISTS_FREE ();
@@ -775,6 +776,28 @@ int main(int argc, char **argv, char **envp) {
 	if (run_rc) {
 		radare2_rc (&r);
 	}
+
+	if (r_config_get_i (r.config, "zign.autoload")) {
+		char *path = r_file_abspath (r_config_get (r.config, "dir.zigns"));
+		char *complete_path = NULL;
+		RList *list = r_sys_dir (path);
+		RListIter *iter;
+		char *file = NULL;
+		r_list_foreach (list, iter, file) {
+			if (file && *file && *file != '.') {
+				complete_path = r_str_newf ("%s"R_SYS_DIR"%s", path, file);
+				if (r_str_endswith (complete_path, "gz")) {
+					r_sign_load_gz (r.anal, complete_path);
+				} else {
+					r_sign_load (r.anal, complete_path);
+				}
+				r_str_free (complete_path);
+			}
+		}
+		r_list_free (list);
+		free (path);
+	}
+
 	// if (argv[optind] && r_file_is_directory (argv[optind]))
 	if (pfile && r_file_is_directory (pfile)) {
 		if (debug) {
@@ -782,7 +805,7 @@ int main(int argc, char **argv, char **envp) {
 			return 1;
 		}
 		if (chdir (argv[optind])) {
-			eprintf ("Cannot open directory\n");
+			eprintf ("[d] Cannot open directory\n");
 			return 1;
 		}
 	} else if (argv[optind] && !strcmp (argv[optind], "=")) {
@@ -791,13 +814,13 @@ int main(int argc, char **argv, char **envp) {
 		ut8 *buf = (ut8 *)r_stdin_slurp (&sz);
 		close (0);
 		if (buf && sz > 0) {
-			char path[1024];
+			char path[128];
 			snprintf (path, sizeof (path) - 1, "malloc://%d", sz);
 			fh = r_core_file_open (&r, path, perms, mapaddr);
 			if (!fh) {
 				r_cons_flush ();
 				free (buf);
-				eprintf ("Cannot open %s\n", path);
+				eprintf ("[=] Cannot open '%s'\n", path);
 				return 1;
 			}
 			r_io_write_at (r.io, 0, buf, sz);
@@ -835,10 +858,11 @@ int main(int argc, char **argv, char **envp) {
 					fh = r_core_file_open (&r, pfile, perms, mapaddr);
 					iod = (r.io && fh) ? r_io_desc_get (r.io, fh->fd) : NULL;
 					if (!strcmp (debugbackend, "gdb")) {
-						const char *filepath;
-						ut64 addr;
-						filepath  = r_config_get (r.config, "dbg.exe.path");
-						addr = r_config_get_i (r.config, "bin.baddr");
+						const char *filepath = r_config_get (r.config, "dbg.exe.path");
+						ut64 addr = baddr;
+						if (addr == UINT64_MAX) {
+							addr = r_config_get_i (r.config, "bin.baddr");
+						}
 						if (filepath && r_file_exists (filepath)
 						    && !r_file_is_directory (filepath)) {
 							char *newpath = r_file_abspath (filepath);
@@ -847,7 +871,7 @@ int main(int argc, char **argv, char **envp) {
 									free (iod->name);
 									iod->name = newpath;
 								}
-								if (!addr || addr == UINT64_MAX) {
+								if (addr == UINT64_MAX) {
 									addr = r_debug_get_baddr (r.dbg, newpath);
 								}
 								r_core_bin_load (&r, NULL, addr);
@@ -856,7 +880,7 @@ int main(int argc, char **argv, char **envp) {
 							filepath = iod->name;
 							if (r_file_exists (filepath)
 							    && !r_file_is_directory (filepath)) {
-								if (!addr || addr == UINT64_MAX) {
+								if (addr == UINT64_MAX) {
 									addr = r_debug_get_baddr (r.dbg, filepath);
 								}
 								r_core_bin_load (&r, filepath, addr);
@@ -866,7 +890,7 @@ int main(int argc, char **argv, char **envp) {
 									free (iod->name);
 									iod->name = (char*) filepath;
 								}
-								if (!addr || addr == UINT64_MAX) {
+								if (addr == UINT64_MAX) {
 									addr = r_debug_get_baddr (r.dbg, filepath);
 								}
 								r_core_bin_load (&r, NULL, addr);
@@ -987,7 +1011,9 @@ int main(int argc, char **argv, char **envp) {
 				if (prj && *prj) {
 					pfile = r_core_project_info (&r, prj);
 					if (pfile) {
-						fh = r_core_file_open (&r, pfile, perms, mapaddr);
+						if (!fh) {
+							fh = r_core_file_open (&r, pfile, perms, mapaddr);
+						}
 						// run_anal = 0;
 						run_anal = -1;
 					} else {
@@ -995,17 +1021,27 @@ int main(int argc, char **argv, char **envp) {
 					}
 				} else {
 					// necessary for GDB, otherwise io only works with io.va=false
-					fh = r_core_file_open (&r, pfile, perms, mapaddr);
 					if (fh) {
-						iod = r.io ? r_io_desc_get (r.io, fh->fd) : NULL;
-						if (iod) {
-							r_io_map_new (r.io, iod->fd, perms, 0LL, 0LL, r_io_desc_size (iod), true);
+						// avoid connecting twice to gdb if first try fails
+						RCoreFile *f = r_core_file_open (&r, pfile, perms, mapaddr);
+						if (f) {
+							fh = f;
+						}
+						if (fh) {
+							iod = r.io ? r_io_desc_get (r.io, fh->fd) : NULL;
+							if (iod) {
+								perms = iod->flags;
+								r_io_map_new (r.io, iod->fd, perms, 0LL, 0LL, r_io_desc_size (iod), true);
+							}
 						}
 					}
 				}
 			}
 		} else {
-			fh = r_core_file_open (&r, pfile, perms, mapaddr);
+			RCoreFile *f = r_core_file_open (&r, pfile, perms, mapaddr);
+			if (f) {
+				fh = f;
+			}
 			if (fh) {
 				r_debug_use (r.dbg, is_gdb ? "gdb" : debugbackend);
 			}
@@ -1039,9 +1075,9 @@ int main(int argc, char **argv, char **envp) {
 			if (pfile && *pfile) {
 				r_cons_flush ();
 				if (perms & R_IO_WRITE) {
-					eprintf ("Cannot open '%s' for writing.\n", pfile);
+					eprintf ("[w] Cannot open '%s' for writing.\n", pfile);
 				} else {
-					eprintf ("Cannot open '%s'\n", pfile);
+					eprintf ("[r] Cannot open '%s'\n", pfile);
 				}
 			} else {
 				eprintf ("Missing file to open\n");
@@ -1191,6 +1227,9 @@ int main(int argc, char **argv, char **envp) {
 	if (fullfile) {
 		r_core_block_size (&r, r_io_desc_size (iod));
 	}
+	if (perms & R_IO_WRITE) {
+		r_core_cmd0 (&r, "omfg+w");
+	}
 	ret = run_commands (cmds, files, quiet);
 	r_list_free (cmds);
 	r_list_free (evals);
@@ -1201,7 +1240,7 @@ int main(int argc, char **argv, char **envp) {
 	}
 	if (r_config_get_i (r.config, "scr.prompt")) {
 		if (run_rc && r_config_get_i (r.config, "cfg.fortunes")) {
-			r_core_print_fortune (&r);
+			r_core_fortune_print_random (&r);
 			r_cons_flush ();
 		}
 	}
@@ -1221,7 +1260,7 @@ int main(int argc, char **argv, char **envp) {
 			r_core_seek (&r, 0, 1);
 			free (data);
 		} else {
-			eprintf ("Cannot open '%s'\n", patchfile);
+			eprintf ("[p] Cannot open '%s'\n", patchfile);
 		}
 	}
 	if ((patchfile && !quiet) || !patchfile) {
@@ -1238,9 +1277,6 @@ int main(int argc, char **argv, char **envp) {
 			if (r.bin->cur->o->info->arch) {
 				r_core_cmd0 (&r, "aeip");
 			}
-		}
-		if (perms & R_IO_WRITE) {
-			r_core_cmd0 (&r, "omfg+w");
 		}
 		for (;;) {
 #if USE_THREADS
@@ -1287,10 +1323,8 @@ int main(int argc, char **argv, char **envp) {
 							if (r_config_get_i (r.config, "dbg.exitkills") &&
 									r_cons_yesno ('y', "Do you want to kill the process? (Y/n)")) {
 								r_debug_kill (r.dbg, 0, false, 9); // KILL
-#if __WINDOWS__
 							} else {
 								r_debug_detach (r.dbg, r.dbg->pid);
-#endif
 							}
 						} else continue;
 					}
@@ -1339,7 +1373,7 @@ beach:
 	r_core_fini (&r);
 	r_cons_set_raw (0);
 	free (file);
-	r_str_const_free ();
+	r_str_const_free (NULL);
 	r_cons_free ();
 	return ret;
 }

@@ -1,7 +1,8 @@
-/* radare - LGPL - Copyright 2011-2015 - pancake */
+/* radare - LGPL - Copyright 2011-2017 - pancake */
 
 #include <r_egg.h>
 #include <r_bin.h>
+#include <r_print.h>
 #include <getopt.c>
 #include "../blob/version.c"
 
@@ -23,7 +24,7 @@ static int usage (int v) {
 	" -d [off:dword]  patch dword (4 bytes) at given offset\n"
 	" -D [off:qword]  patch qword (8 bytes) at given offset\n"
 	" -e [encoder]    use specific encoder. see -L\n"
-	" -f [format]     output format (raw, pe, elf, mach0)\n"
+	" -f [format]     output format (raw, c, pe, elf, mach0, python, javascript)\n"
 	" -F              output native format (osx=mach0, linux=elf, ..)\n"
 	" -h              show this help\n"
 	" -i [shellcode]  include shellcode plugin, uses options. see -L\n"
@@ -243,8 +244,8 @@ int main(int argc, char **argv) {
 			{
 			char *p = strchr (optarg, '=');
 			if (p) {
-				*p = 0;
-				r_egg_option_set (egg, optarg, p + 1);
+				*p++ = 0;
+				r_egg_option_set (egg, optarg, p);
 			} else {
 				r_egg_option_set (egg, optarg, "true");
 			}
@@ -468,7 +469,14 @@ int main(int argc, char **argv) {
 				eprintf ("No format specified wtf\n");
 				goto fail;
 			}
-			switch (*format) { //*format) {
+			RPrint *p = r_print_new ();
+			switch (*format) {
+			case 'c':
+				r_print_code (p, 0, b->buf, b->length, 'c');
+				break;
+			case 'j': // JavaScript
+				r_print_code (p, 0, b->buf, b->length, 'j');
+				break;
 			case 'r':
 				if (show_str) {
 					printf ("\"");
@@ -484,6 +492,10 @@ int main(int argc, char **argv) {
 				} // else show_raw is_above()
 				break;
 			case 'p': // PE
+				if (strlen(format) >= 2 && format[1] == 'y') { // Python
+					r_print_code (p, 0, b->buf, b->length, 'p');
+				}
+				break;
 			case 'e': // ELF
 			case 'm': // MACH0
 				create (format, arch, bits, b->buf, b->length);

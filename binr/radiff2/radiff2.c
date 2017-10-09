@@ -3,6 +3,12 @@
 #include <r_diff.h>
 #include <r_core.h>
 #include <r_hash.h>
+#include <getopt.c>
+#ifdef _MSC_VER
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 
 #include "../blob/version.c"
 
@@ -11,6 +17,7 @@ enum {
 	MODE_DIFF_STRS,
 	MODE_DIFF_IMPORTS,
 	MODE_DIST,
+	MODE_DIST_MYERS,
 	MODE_DIST_LEVENSTEIN,
 	MODE_CODE,
 	MODE_GRAPH,
@@ -282,8 +289,8 @@ static int show_help(int v) {
 			"  -p         use physical addressing (io.va=0)\n"
 			"  -q         quiet mode (disable colors, reduce output)\n"
 			"  -r         output in radare commands\n"
-			"  -s         compute text distance\n"
-			"  -ss        compute text distance (using levenstein algorithm)\n"
+			"  -s         compute edit distance (no substitution, Eugene W. Myers' O(ND) diff algorithm)\n"
+			"  -ss        compute Levenshtein edit distance (substitution is allowed, O(N^2))\n"
 			"  -S [name]  sort code diff (name, namelen, addr, size, type, dist) (only for -C or -g)\n"
 			"  -t [0-100] set threshold for code diff (default is 70%%)\n"
 			"  -x         show two column hexdump diffing\n"
@@ -536,7 +543,7 @@ int main(int argc, char **argv) {
 	int mode = MODE_DIFF;
 	int diffops = 0;
 	int threshold = -1;
-	double sim;
+	double sim = 0.0;
 
 	evals = r_list_newf (NULL);
 
@@ -603,6 +610,8 @@ int main(int argc, char **argv) {
 		case 's':
 			if (mode == MODE_DIST) {
 				mode = MODE_DIST_LEVENSTEIN;
+			} else if (mode == MODE_DIST_LEVENSTEIN) {
+				mode = MODE_DIST_MYERS;
 			} else {
 				mode = MODE_DIST;
 			}
@@ -784,14 +793,23 @@ int main(int argc, char **argv) {
 		r_diff_free (d);
 		break;
 	case MODE_DIST:
+	case MODE_DIST_MYERS:
 	case MODE_DIST_LEVENSTEIN:
-	{
-		RDiff *d = r_diff_new ();
-		d->verbose = verbose;
-		d->levenstein = (mode == MODE_DIST_LEVENSTEIN);
-		r_diff_buffers_distance (d, bufa, sza, bufb, szb, &count, &sim);
-		r_diff_free (d);
-	}
+		{
+			RDiff *d = r_diff_new ();
+			if (d) {
+				d->verbose = verbose;
+				if (mode == MODE_DIST_LEVENSTEIN) {
+					d->type = 'l';
+				} else if (mode == MODE_DIST_MYERS) {
+					d->type = 'm';
+				} else {
+					d->type = 0;
+				}
+				r_diff_buffers_distance (d, bufa, sza, bufb, szb, &count, &sim);
+				r_diff_free (d);
+			}
+		}
 		printf ("similarity: %.3f\n", sim);
 		printf ("distance: %d\n", count);
 		break;

@@ -667,17 +667,6 @@ static int cb_asm_armimm(void *user, void *data) {
 	return true;
 }
 
-static int cb_asm_addrbytes(void *user, void *data) {
-	RCore *core = (RCore *) user;
-	RConfigNode *node = (RConfigNode *) data;
-	if (node->i_value < 1) {
-		eprintf ("asm.arch: asm.addrbytes should >= 1\n");
-		return false;
-	}
-	core->anal->addrbytes = core->assembler->addrbytes = node->i_value;
-	return true;
-}
-
 static int cb_asm_invhex(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -906,6 +895,26 @@ static int cb_cfgsanbox(void *user, void *data) {
 	return (!node->i_value && ret)? 0: 1;
 }
 
+static int cb_cfg_fortunes(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	// TODO CN_BOOL option does not receive the right hand side of assignment as an argument
+	if (node->value[0] == '?') {
+		r_core_fortune_list (core);
+		return false;
+	}
+	return true;
+}
+
+static int cb_cfg_fortunes_type(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *)data;
+	if (node->value[0] == '?') {
+		r_core_fortune_list_types ();
+		return false;
+	}
+	return true;
+}
+
 static int cb_cmdlog(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -997,6 +1006,38 @@ static int cb_dbg_forks(void *user, void *data) {
 	core->dbg->trace_forks = node->i_value;
 	if (core->io->debug) {
 		r_debug_attach (core->dbg, core->dbg->pid);
+	}
+	return true;
+}
+
+static int cb_dbg_gdb_page_size(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	if (node->i_value < 64) { // 64 is hardcoded min packet size
+		return false;
+	}
+	if (core->io && core->io->desc && core->io->desc->plugin
+	    && core->io->desc->plugin->name
+	    && !strcmp (core->io->desc->plugin->name, "gdb")) {
+		char cmd[64];
+		snprintf (cmd, sizeof (cmd), "page_size %"PFMT64d, node->i_value);
+		r_io_system (core->io, cmd);
+	}
+	return true;
+}
+
+static int cb_dbg_gdb_retries(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	if (node->i_value <= 0) {
+		return false;
+	}
+	if (core->io && core->io->desc && core->io->desc->plugin
+	    && core->io->desc->plugin->name
+	    && !strcmp (core->io->desc->plugin->name, "gdb")) {
+		char cmd[64];
+		snprintf (cmd, sizeof (cmd), "retries %"PFMT64d, node->i_value);
+		r_io_system (core->io, cmd);
 	}
 	return true;
 }
@@ -1368,13 +1409,31 @@ static int cb_iobuffer(void *user, void *data) {
 	return true;
 }
 
-static int cb_iocache(void *user, void *data) {
-	RCore *core = (RCore *) user;
-	RConfigNode *node = (RConfigNode *) data;
-	if ((int)node->i_value < 0) {
-		r_io_cache_reset (core->io, node->i_value);
+static int cb_io_cache_read(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	if (node->i_value) {
+		core->io->cached |= R_IO_READ;
+	} else {
+		core->io->cached &= ~R_IO_READ;
 	}
-	r_io_cache_enable (core->io, node->i_value, node->i_value);
+	return true;
+}
+
+static int cb_io_cache_write(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	if (node->i_value) {
+		core->io->cached |= R_IO_WRITE;
+	} else {
+		core->io->cached &= ~R_IO_WRITE;
+	}
+	return true;
+}
+
+static int cb_io_cache(void *user, void *data) {
+	(void)cb_io_cache_read (user, data);
+	(void)cb_io_cache_write (user, data);
 	return true;
 }
 
@@ -1652,18 +1711,6 @@ static int cb_teefile(void *user, void *data) {
 	return true;
 }
 
-static int cb_anal_trace(void *user, void *data) {
-	RCore *core = (RCore *) user;
-	RConfigNode *node = (RConfigNode *) data;
-	if (core->anal) {
-		if (node->i_value && !core->anal->esil) {
-			r_core_cmd0 (core, "aei");
-		}
-		core->anal->trace = node->i_value;
-	}
-	return true;
-}
-
 static int cb_trace(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -1689,6 +1736,13 @@ static int cb_utf8(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->cons->use_utf8 = node->i_value;
+	return true;
+}
+
+static int cb_utf8_curvy(void *user, void *data) {
+	RCore *core = (RCore *) user;
+	RConfigNode *node = (RConfigNode *) data;
+	core->cons->use_utf8_curvy = node->i_value;
 	return true;
 }
 
@@ -1823,16 +1877,14 @@ static int cb_binminstr(void *user, void *data) {
 }
 
 static int cb_searchin(void *user, void *data) {
-	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
 	if (node->value[0] == '?') {
 		if (strlen (node->value) > 1 && node->value[1] == '?') {
 			r_cons_printf ("Valid values for search.in (depends on .from/.to and io.va):\n"
 			"raw               search in raw io (ignoring bounds)\n"
 			"block             search in the current block\n"
-			"file              search in all mapped sections\n"
-			"io.maps           search in current map\n"
-			"io.maprange       search in all maps\n"
+			"io.map            search in current map\n"
+			"io.maps           search in all maps\n"
 			"io.section        search in current mapped section\n"
 			"io.sections       search in all mapped sections\n"
 			"io.sections.write search in all writable marked sections\n"
@@ -1849,17 +1901,8 @@ static int cb_searchin(void *user, void *data) {
 			print_node_options (node);
 		}
 		return false;
-	} 
+	}
 	return true;
-}
-
-static int cb_fileloadmethod(void *user, void *data) {
- 	RConfigNode *node = (RConfigNode*) data;
- 	if (*node->value == '?') {
-		print_node_options (node);
- 		return false;
- 	}
- 	return true;
 }
 
 static int __dbg_swstep_getter(void *user, RConfigNode *node) {
@@ -2096,7 +2139,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("anal.prelude", "", "Specify an hexpair to find preludes in code");
 	SETCB ("anal.split", "true", &cb_analsplit, "Split functions into basic blocks in analysis");
 	SETCB ("anal.recont", "false", &cb_analrecont, "End block after splitting a basic block instead of error"); // testing
-	SETCB ("anal.trace", "false", &cb_anal_trace, "Record ESIL trace in log database");
 	SETI ("anal.ptrdepth", 3, "Maximum number of nested pointers to follow in analysis");
 	SETICB ("anal.maxreflines", 0, &cb_analmaxrefs, "Maximum number of reflines to be analyzed and displayed in asm.lines with pd");
 
@@ -2132,7 +2174,6 @@ R_API int r_core_config_init(RCore *core) {
 
 	/* asm */
 	//asm.os needs to be first, since other asm.* depend on it
-	SETICB ("asm.addrbytes", 1,  &cb_asm_addrbytes, "Number of bytes one vaddr unit uses");
 	SETICB ("asm.armimm", false,  &cb_asm_armimm, "Display # for immediates in ARM");
 	n = NODECB ("asm.os", R_SYS_OS, &cb_asmos);
 	SETDESC (n, "Select operating system (kernel)");
@@ -2158,6 +2199,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("asm.slow", "true", "Perform slow analysis operations in disasm");
 	SETPREF ("asm.decode", "false", "Use code analysis as a disassembler");
 	SETPREF ("asm.flgoff", "false", "Show offset in flags");
+	SETPREF ("asm.offless", "false", "Remove all offsets and constants from disassembly");
 	SETPREF ("asm.indent", "false", "Indent disassembly based on reflines depth");
 	SETI ("asm.indentspace", 2, "How many spaces to indent the code");
 	SETPREF ("asm.dwarf", "false", "Show dwarf comment at disassembly");
@@ -2304,8 +2346,8 @@ R_API int r_core_config_init(RCore *core) {
 	free (p);
 	r_config_desc (cfg, "cfg.editor", "Select default editor program");
 	SETPREF ("cfg.user", r_sys_whoami (buf), "Set current username/pid");
-	SETPREF ("cfg.fortunes", "true", "If enabled show tips at start");
-	SETPREF ("cfg.fortunes.type", "tips,fun", "Type of fortunes to show (tips, fun, nsfw, creepy)");
+	SETCB ("cfg.fortunes", "true", &cb_cfg_fortunes, "If enabled show tips at start");
+	SETCB ("cfg.fortunes.type", "tips,fun", &cb_cfg_fortunes_type, "Type of fortunes to show (tips, fun, nsfw, creepy)");
 	SETPREF ("cfg.fortunes.clippy", "false", "Use ?E instead of ?e");
 	SETPREF ("cfg.fortunes.tts", "false", "Speak out the fortune");
 	SETI ("cfg.hashlimit", SLURP_LIMIT, "If the file is bigger than hashlimit, do not compute hashes");
@@ -2323,6 +2365,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("zign.bytes", "true", "Use bytes patterns for matching");
 	SETPREF ("zign.offset", "true", "Use original offset for matching");
 	SETPREF ("zign.refs", "true", "Use references for matching");
+	SETPREF ("zign.autoload", "false", "Autoload all zignatures located in ~/.config/radare2/zigns");
 
 	/* diff */
 	SETCB ("diff.sort", "addr", &cb_diff_sort, "Specify function diff sorting column see (e diff.sort=?)");
@@ -2392,6 +2435,8 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("dbg.trace.libs", "true", "Trace library code too");
 	SETPREF ("dbg.exitkills", "true", "Kill process on exit");
 	SETPREF ("dbg.exe.path", NULL, "Path to binary being debugged");
+	SETICB ("dbg.gdb.page_size", 4096, &cb_dbg_gdb_page_size, "Page size on gdb target (useful for QEMU)");
+	SETICB ("dbg.gdb.retries", 10, &cb_dbg_gdb_retries, "Number of retries before gdb packet read times out");
 	SETCB ("dbg.consbreak", "false", &cb_consbreak, "SIGINT handle for attached processes");
 
 	r_config_set_getter (cfg, "dbg.swstep", (RConfigCallback)__dbg_swstep_getter);
@@ -2618,24 +2663,28 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("scr.null", "false", &cb_scrnull, "Show no output");
 	SETCB ("scr.utf8", r_cons_is_utf8()?"true":"false",
 		&cb_utf8, "Show UTF-8 characters instead of ANSI");
+	SETCB ("scr.utf8.curvy", "false", &cb_utf8_curvy, "Show curved UTF-8 corners (requires scr.utf8)");
 	SETPREF ("scr.histsave", "true", "Always save history on exit");
 	/* search */
 	SETCB ("search.contiguous", "true", &cb_contiguous, "Accept contiguous/adjacent search hits");
 	SETICB ("search.align", 0, &cb_searchalign, "Only catch aligned search hits");
 	SETI ("search.chunk", 0, "Chunk size for /+ (default size is asm.bits/8");
 	SETI ("search.esilcombo", 8, "Stop search after N consecutive hits");
-	SETI ("search.count", 0, "Start index number at search hits");
 	SETI ("search.distance", 0, "Search string distance");
 	SETPREF ("search.flags", "true", "All search results are flagged, otherwise only printed");
 	SETPREF ("search.overlap", "false", "Look for overlapped search hits");
 	SETI ("search.maxhits", 0, "Maximum number of hits (0: no limit)");
 	SETI ("search.from", -1, "Search start address");
-	n = NODECB ("search.in", "file", &cb_searchin);
+	n = NODECB ("search.in", "io.maps", &cb_searchin);
 	SETDESC (n, "Specify search boundaries");
-	SETOPTIONS (n, "raw", "block", "file", "io.maps", "io.maprange", "io.section", NULL);
-	SETOPTIONS (n, "io.sections", "io.sections.write", "io.sections.exec",
-				"dbg.stack", "dbg.heap", "dbg.map", "dbg.maps", "dbg.maps.exec",
-				"dbg.maps.write", "anal.fcn", "anal.bb", NULL);
+	SETOPTIONS (n, "raw", "block", "io.map", "io.maps", "io.section", "io.sections",
+		"dbg.map", "dbg.maps", "dbg.stack", "anal.fcn", "anal.bb", NULL);
+
+	SETOPTIONS (n, "raw", "block", "io.map", "io.maps",
+			"io.sections", "io.sections.write", "io.sections.exec", "io.sections.readonly",
+			"dbg.stack", "dbg.heap", "dbg.map",
+			"dbg.maps", "dbg.maps.exec", "dbg.maps.write", "dbg.maps.readonly",
+			"anal.fcn", "anal.bb", NULL);
 	SETICB ("search.kwidx", 0, &cb_search_kwidx, "Store last search index count");
 	SETPREF ("search.prefix", "hit", "Prefix name in search hits label");
 	SETPREF ("search.show", "true", "Show search results");
@@ -2653,7 +2702,9 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("io.buffer", "false", &cb_iobuffer, "Load and use buffer cache if enabled");
 	SETI ("io.buffer.from", 0, "Lower address of buffered cache");
 	SETI ("io.buffer.to", 0, "Higher address of buffered cache");
-	SETCB ("io.cache", "false", &cb_iocache, "Enable cache for io changes");
+	SETCB ("io.cache", "false", &cb_io_cache, "Change both of io.cache.{read,write}");
+	SETCB ("io.cache.read", "false", &cb_io_cache_read, "Enable read cache for vaddr (or paddr when io.va=0)");
+	SETCB ("io.cache.write", "false", &cb_io_cache_write, "Enable write cache for vaddr (or paddr when io.va=0)");
 	SETCB ("io.pcache", "false", &cb_iopcache, "io.cache for p-level");
 	SETCB ("io.pcache.write", "false", &cb_iopcachewrite, "Enable write-cache");
 	SETCB ("io.pcache.read", "false", &cb_iopcacheread, "Enable read-cache");
@@ -2673,9 +2724,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("file.lastpath", "", "Path of current file");
 	SETPREF ("file.sha1", "", "SHA1 hash of current file");
 	SETPREF ("file.type", "", "Type of current file");
-	n = NODECB ("file.loadmethod", "fail", &cb_fileloadmethod);
-	SETDESC (n, "What to do when load addresses overlap");
-	SETOPTIONS (n, "fail", "overwrite", "append", NULL);
 	SETI ("file.loadalign", 1024, "Alignment of load addresses");
 	SETI ("file.openmany", 1, "Maximum number of files opened at once");
 	SETPREF ("file.nowarn", "true", "Suppress file loading warning messages");

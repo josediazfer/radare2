@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2016 - pancake */
+/* radare - LGPL - Copyright 2009-2017 - pancake */
 
 #include <r_debug.h>
 #include <r_list.h>
@@ -384,7 +384,9 @@ R_API void r_debug_map_free(RDebugMap *map) {
 
 R_API RList *r_debug_map_list_new() {
 	RList *list = r_list_new ();
-	if (!list) return NULL;
+	if (!list) {
+		return NULL;
+	}
 	list->free = (RListFree)r_debug_map_free;
 	return list;
 }

@@ -27,7 +27,7 @@ static char** env = NULL;
 #define HAVE_ENVIRON 0
 #endif
 
-#if !HAVE_ENVIRON
+#if HAVE_ENVIRON
 #include <execinfo.h>
 #endif
 // iOS dont have this we cant hardcode
@@ -614,7 +614,7 @@ R_API int r_sys_cmdbg (const char *str) {
 #endif
 }
 
-R_API int r_sys_cmd (const char *str) {
+R_API int r_sys_cmd(const char *str) {
 	if (r_sandbox_enable (0)) {
 		return false;
 	}

@@ -63,6 +63,7 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 	free (obinfilepath);
 	obinfilepath = strdup (ofilepath);
 
+	// r_str_chop (path);
 	file = r_core_file_open (core, path, perm, laddr);
 	if (file) {
 		bool had_rbin_info = false;
@@ -210,14 +211,15 @@ R_API void r_core_sysenv_end(RCore *core, const char *cmd) {
 }
 
 #if DISCUSS
-EDITOR   r_sys_setenv ("EDITOR", r_config_get (core->config, "cfg.editor"));
+EDITOR r_sys_setenv ("EDITOR", r_config_get (core->config, "cfg.editor"));
 CURSOR cursor position (offset from curseek)
 VERBOSE cfg.verbose
 #endif
+
 R_API char *r_core_sysenv_begin(RCore * core, const char *cmd) {
-	char *f, *ret = strdup (cmd);
+	char *f, *ret = cmd? strdup (cmd): NULL;
 	RIODesc *desc = core->file ? r_io_desc_get (core->io, core->file->fd) : NULL;
-	if (strstr (cmd, "R2_BYTES")) {
+	if (cmd && strstr (cmd, "R2_BYTES")) {
 		char *s = r_hex_bin2strdup (core->block, core->blocksize);
 		r_sys_setenv ("R2_BYTES", s);
 		free (s);
@@ -226,7 +228,7 @@ R_API char *r_core_sysenv_begin(RCore * core, const char *cmd) {
 	if (desc && desc->name) {
 		r_sys_setenv ("R2_FILE", desc->name);
 		r_sys_setenv ("R2_SIZE", sdb_fmt (0, "%"PFMT64d, r_io_desc_size (desc)));
-		if (strstr (cmd, "R2_BLOCK")) {
+		if (cmd && strstr (cmd, "R2_BLOCK")) {
 			// replace BLOCK in RET string
 			if ((f = r_file_temp ("r2block"))) {
 				if (r_file_dump (f, core->block, core->blocksize, 0)) {
@@ -635,47 +637,13 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 	return true;
 }
 
-R_API RIOMap *r_core_file_get_next_map(RCore *core, RCoreFile *fh, int mode, ut64 loadaddr) {
-	const char *loadmethod = r_config_get (core->config, "file.loadmethod");
-	bool suppress_warning = r_config_get_i (core->config, "file.nowarn");
-	ut64 load_align = r_config_get_i (core->config, "file.loadalign");
-	if (!loadmethod) {
-		return NULL;
-	}
-	RIOMap *map = NULL;
-	if (!strcmp (loadmethod, "overwrite")) {
-		map = r_io_map_new (core->io, fh->fd, mode, 0, loadaddr, r_io_fd_size (core->io, fh->fd), true);
-	}
-	if (!strcmp (loadmethod, "fail")) {
-		map = r_io_map_add (core->io, fh->fd, mode, 0, loadaddr, r_io_fd_size (core->io, fh->fd), true);
-	}
-	if (!strcmp (loadmethod, "append") && load_align) {
-		map = r_io_map_add_next_available (core->io, fh->fd, mode, 0, loadaddr, r_io_fd_size (core->io, fh->fd), load_align);
-	}
-	if (!suppress_warning) {
-		if (!map) {
-			eprintf ("r_core_file_get_next_map: Unable to load specified file to 0x%08"PFMT64x "\n", loadaddr);
-		} else {
-			if (map->from != loadaddr) {
-				eprintf ("r_core_file_get_next_map: Unable to load specified file to 0x%08"PFMT64x ",\n"
-					"but loaded to 0x%08"PFMT64x "\n", loadaddr, map->from);
-			}
-		}
-	}
-//	r_io_sort_maps (core->io); //necessary ???	//condret says no
-	return map;
-}
-
-
 R_API RCoreFile *r_core_file_open_many(RCore *r, const char *file, int flags, ut64 loadaddr) {
 	bool openmany = r_config_get_i (r->config, "file.openmany");
 	int opened_count = 0;
 	// ut64 current_loadaddr = loadaddr;
 	RCoreFile *fh; //, *top_file = NULL;
 	RListIter *fd_iter, *iter2;
-	char *loadmethod = NULL;
 	RList *list_fds = NULL;
-	const char *cp = NULL;
 	RIODesc *fd;
 
 	list_fds = r_io_open_many (r->io, file, flags, 0644);
@@ -684,12 +652,6 @@ R_API RCoreFile *r_core_file_open_many(RCore *r, const char *file, int flags, ut
 		r_list_free (list_fds);
 		return NULL;
 	}
-
-	cp = r_config_get (r->config, "file.loadmethod");
-	if (cp) {
-		loadmethod = strdup (cp);
-	}
-	r_config_set (r->config, "file.loadmethod", "append");
 
 	r_list_foreach_safe (list_fds, fd_iter, iter2, fd) {
 		opened_count++;
@@ -717,24 +679,6 @@ R_API RCoreFile *r_core_file_open_many(RCore *r, const char *file, int flags, ut
 		r_core_bin_load (r, fd->name, 0LL);
 	}
 	return NULL;
-#if DEAD_CODE
-	if (!top_file) {
-		free (loadmethod);
-		return top_file;
-	}
-	cp = r_config_get (r->config, "cmd.open");
-	if (cp && *cp) {
-		r_core_cmd (r, cp, 0);
-	}
-
-	r_config_set (r->config, "file.path", r_file_abspath (r_io_desc_get (r->io, top_file->fd)->name));
-	if (loadmethod) {
-		r_config_set (r->config, "file.loadmethod", loadmethod);
-	}
-	free (loadmethod);
-
-	return top_file;
-#endif
 }
 
 /* loadaddr is r2 -m (mapaddr) */
@@ -960,9 +904,18 @@ R_API int r_core_file_list(RCore *core, int mode) {
 					}
 				}
 				if (!header_loaded) {
+					RList* maps = r_io_map_get_for_fd (core->io, f->fd);
+					RListIter *iter;
+					RIOMap* current_map;
 					char *absfile = r_file_abspath (desc->uri);
-					r_cons_printf ("on %s 0x%"PFMT64x "\n", absfile, (ut64) from);
+					r_list_foreach (maps, iter, current_map) {
+						if (current_map) {
+							r_cons_printf ("on %s 0x%"PFMT64x "\n", absfile, current_map->itv.addr);
+						}
+					}
+					r_list_free (maps);
 					free(absfile);
+
 				}
 			}
 			break;

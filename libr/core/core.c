@@ -119,17 +119,25 @@ R_API ut64 r_core_get_asmqjmps(RCore *core, const char *str) {
 		int i, pos = 0;
 		int len = strlen (str);
 		for (i = 0; i < len - 1; ++i) {
-			if (!isupper ((ut8)str[i])) return UT64_MAX;
+			if (!isupper ((ut8)str[i])) {
+				return UT64_MAX;
+			}
 			pos *= R_CORE_ASMQJMPS_LETTERS;
 			pos += str[i] - 'A' + 1;
 		}
-		if (!islower ((ut8)str[i])) return UT64_MAX;
+		if (!islower ((ut8)str[i])) {
+			return UT64_MAX;
+		}
 		pos *= R_CORE_ASMQJMPS_LETTERS;
 		pos += str[i] - 'a';
-		if (pos < core->asmqjmps_count) return core->asmqjmps[pos + 1];
+		if (pos < core->asmqjmps_count) {
+			return core->asmqjmps[pos + 1];
+		}
 	} else if (str[0] > '0' && str[1] <= '9') {
 		int pos = str[0] - '0';
-		if (pos <= core->asmqjmps_count) return core->asmqjmps[pos];
+		if (pos <= core->asmqjmps_count) {
+			return core->asmqjmps[pos];
+		}
 	}
 	return UT64_MAX;
 }
@@ -212,6 +220,17 @@ static const char *getName(RCore *core, ut64 addr) {
 	return item ? item->name : NULL;
 }
 
+static char *getNameDelta(RCore *core, ut64 addr) {
+	RFlagItem *item = r_flag_get_at (core->flags, addr, true);
+	if (item) {
+		if (item->offset != addr) {
+			return r_str_newf ("%s + %d", item->name, (int)(addr - item->offset));
+		}
+		return strdup (item->name);
+	}
+	return NULL;
+}
+
 static void archbits(RCore *core, ut64 addr) {
 	r_anal_build_range_on_hints (core->anal);
 	r_core_seek_archbits (core, addr);
@@ -231,6 +250,7 @@ R_API int r_core_bind(RCore *core, RCoreBind *bnd) {
 	bnd->puts = (RCorePuts)r_cons_strcat;
 	bnd->setab = (RCoreSetArchBits)setab;
 	bnd->getName = (RCoreGetName)getName;
+	bnd->getNameDelta = (RCoreGetNameDelta)getNameDelta;
 	bnd->archbits = (RCoreSeekArchBits)archbits;
 	bnd->cfggeti = (RCoreConfigGetI)cfggeti;
 	return true;
@@ -291,14 +311,17 @@ static ut64 getref (RCore *core, int n, char t, int type) {
 	RListIter *iter;
 	RAnalRef *r;
 	RList *list;
-	int i=0;
-	if (!fcn) return UT64_MAX;
+	int i = 0;
+	if (!fcn) {
+		return UT64_MAX;
+	}
 #if FCN_OLD
 	list = (t=='r')? fcn->refs: fcn->xrefs;
 	r_list_foreach (list, iter, r) {
 		if (r->type == type) {
-			if (i == n)
+			if (i == n) {
 				return r->addr;
+			}
 			i++;
 		}
 	}
@@ -385,13 +408,18 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 	case '.':
 		if (core->num->nc.curr_tok=='+') {
 			ut64 off = core->num->nc.number_value.n;
-			if (!off) off = core->offset;
+			if (!off) {
+				off = core->offset;
+			}
 			RAnalFunction *fcn = r_anal_get_fcn_at (core->anal, off, 0);
 			if (fcn) {
-				if (ok) *ok = true;
+				if (ok) {
+					*ok = true;
+				}
 				ut64 dst = r_anal_fcn_label_get (core->anal, fcn, str + 1);
-				if (dst == UT64_MAX)
+				if (dst == UT64_MAX) {
 					dst = fcn->addr;
+				}
 				st64 delta = dst - off;
 				if (delta < 0) {
 					core->num->nc.curr_tok = '-';
@@ -431,7 +459,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		// pop state
 		if (ok) *ok = 1;
 		ut8 buf[sizeof (ut64)] = R_EMPTY;
-		(void)r_io_read_at (core->io, n, buf, refsz);
+		(void)r_io_read_at (core->io, n, buf, R_MIN (sizeof (buf), refsz));
 		switch (refsz) {
 		case 8:
 			return r_read_ble64 (buf, core->print->big_endian);
@@ -486,10 +514,9 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		case '{':
 			bptr = strdup (str + 2);
 			ptr = strchr (bptr, '}');
-			if (ptr != NULL) {
-				ut64 ret;
+			if (ptr) {
 				ptr[0] = '\0';
-				ret = r_config_get_i (core->config, bptr);
+				ut64 ret = r_config_get_i (core->config, bptr);
 				free (bptr);
 				return ret;
 			}
@@ -565,10 +592,10 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 			return 0LL; // maybe // return UT64_MAX;
 		case '?': return core->num->value;
 		case '$': return core->offset;
-		case 'o': 
+		case 'o':
 			{
 				RIOSection *s;
-				s = r_io_section_vget (core->io, core->offset); 
+				s = r_io_section_vget (core->io, core->offset);
 				return s ? core->offset - s->vaddr + s->paddr : core->offset;
 			}
 			break;
@@ -595,7 +622,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		}
 		break;
 	default:
-		if (*str>'A') {
+		if (*str > 'A') {
 			// NOTE: functions override flags
 			RAnalFunction *fcn = r_anal_fcn_find_name (core->anal, str);
 			if (fcn) {
@@ -1707,6 +1734,9 @@ R_API bool r_core_init(RCore *core) {
 	}
 	core->print->cons = core->cons;
 	r_cons_bind (&core->print->consbind);
+
+	// We save the old num, in order to restore it after free
+	core->old_num = core->cons->num;
 	core->cons->num = core->num;
 	core->lang = r_lang_new ();
 	core->lang->cmd_str = (char *(*)(void *, const char *))r_core_cmd_str;
@@ -1822,6 +1852,12 @@ R_API RCore *r_core_fini(RCore *c) {
 	free (c->lastcmd);
 	free (c->block);
 	r_io_free (c->io);
+
+	// Check if the old num is saved. If yes, we restore it.
+	if (c->cons && c->old_num) {
+		c->cons->num = c->old_num;
+		c->old_num = NULL;
+	}
 	r_num_free (c->num);
 	// TODO: sync or not? sdb_sync (c->sdb);
 	// TODO: sync all dbs?
@@ -2512,14 +2548,14 @@ R_API RBuffer *r_core_syscall (RCore *core, const char *name, const char *args) 
 	return b;
 }
 
-
-R_API int r_core_search_value_in_range(RCore *core, ut64 from, ut64 to, ut64 vmin,
+R_API int r_core_search_value_in_range(RCore *core, RAddrInterval search_itv, ut64 vmin,
 				     ut64 vmax, int vsize, bool asterisk, inRangeCb cb) {
 	int i, match, align = core->search->align, hitctr = 0;
 	bool vinfun = r_config_get_i (core->config, "anal.vinfun");
 	bool vinfunr = r_config_get_i (core->config, "anal.vinfunrange");
 	ut8 buf[4096];
 	ut64 v64, value = 0;
+	ut64 from = search_itv.addr, to = r_itv_end (search_itv);
 	ut32 v32;
 	ut16 v16;
 	if (from >= to) {
@@ -2532,8 +2568,12 @@ R_API int r_core_search_value_in_range(RCore *core, ut64 from, ut64 to, ut64 vmi
 	}
 	r_cons_break_push (NULL, NULL);
 	while (from < to) {
-		memset (buf, 0, sizeof (buf)); // probably unnecessary
-		(void) r_io_read_at (core->io, from, buf, sizeof (buf));
+		memset (buf, 0xff, sizeof (buf)); // probably unnecessary
+		bool res = r_io_read_at (core->io, from, buf, sizeof (buf));
+		if (!res || !memcmp (buf, "\xff\xff\xff\xff", 4)) {
+			from += sizeof (buf);
+			continue;
+		}
 		if (r_cons_is_breaked ()) {
 			goto beach;
 		}
@@ -2552,7 +2592,7 @@ R_API int r_core_search_value_in_range(RCore *core, ut64 from, ut64 to, ut64 vmi
 			case 2: v16 = *((ut16 *) (v)); match = (v16 >= vmin && v16 <= vmax); value = v16; break;
 			case 4: v32 = *((ut32 *) (v)); match = (v32 >= vmin && v32 <= vmax); value = v32; break;
 			case 8: v64 = *((ut64 *) (v)); match = (v64 >= vmin && v64 <= vmax); value = v64; break;
-			default: eprintf ("Unknown vsize\n"); return -1;
+			default: eprintf ("Unknown vsize %d\n", vsize); return -1;
 			}
 			if (match && !vinfun) {
 				if (vinfunr) {

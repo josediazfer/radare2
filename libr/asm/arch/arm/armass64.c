@@ -657,6 +657,26 @@ static ut32 adr(ArmOp *op, int addr) {
 	return data;
 }
 
+static ut32 stp(ArmOp *op, int k) {
+	ut32 data = UT32_MAX;
+
+	if (op->operands[3].immediate & 0x7) {
+		return data;
+	}
+	if (k == 0x000040a9 && (op->operands[0].reg == op->operands[1].reg)) {
+		return data;
+	}
+
+	data = k;
+	data += op->operands[0].reg << 24;
+	data += op->operands[1].reg << 18;
+	data += (op->operands[2].reg & 0x7) << 29;
+	data += (op->operands[2].reg >> 3) << 16;
+	data += (op->operands[3].immediate & 0x8) << 20;
+	data += (op->operands[3].immediate >> 4) << 8;
+	return data;
+}
+
 static ut32 exception(ArmOp *op, ut32 k) {
 	ut32 data = UT32_MAX;
 
@@ -897,6 +917,14 @@ bool arm64ass(const char *str, ut64 addr, ut32 *op) {
 	}
 	if (!strncmp (str, "str", 3)) {
 		*op = reglsop (&ops, 0x000000f8);
+		return *op != -1;
+	}
+	if (!strncmp (str, "stp", 3)) {
+		*op = stp (&ops, 0x000000a9);
+		return *op != -1;
+	}
+	if (!strncmp (str, "ldp", 3)) {
+		*op = stp (&ops, 0x000040a9);
 		return *op != -1;
 	}
 	if (!strncmp (str, "sub", 3)) { // w

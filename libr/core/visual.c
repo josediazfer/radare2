@@ -1531,7 +1531,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			r_line_set_prompt ("cmd.cprompt> ");
 			I->line->contents = strdup (cmd);
 			buf = r_line_readline ();
-			if (!strcmp (buf, "|")) {
+			if (buf && !strcmp (buf, "|")) {
 				R_FREE (I->line->contents);
 				core->print->cur_enabled = true;
 				core->print->cur = 0;
@@ -1539,7 +1539,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			} else {
 				//		if (r_cons_fgets (buf, sizeof (buf)-4, 0, NULL) <0) buf[0]='\0';
 				R_FREE (I->line->contents);
-				(void)r_config_set (core->config, "cmd.cprompt", buf);
+				(void)r_config_set (core->config, "cmd.cprompt", buf? buf: "");
 			}
 		}
 		break;
@@ -2202,7 +2202,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 						} else {
 							RIOMap *map = ls_pop (core->io->maps);
 							if (map) {
-								entry = map->from;
+								entry = map->itv.addr;
 							} else {
 								entry = r_config_get_i (core->config, "bin.baddr");
 							}

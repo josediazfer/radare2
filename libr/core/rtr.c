@@ -1188,7 +1188,10 @@ static int r_core_rtr_gdb_cb(libgdbr_t *g, void *core_ptr, const char *cmd,
 		break;
 	case 'm':
 		sscanf (cmd + 1, "%"PFMT64x",%x", &m_off, &ret);
-		return r_io_read_at (core->io, m_off, (ut8*) out_buf, ret);
+		if (r_io_read_at (core->io, m_off, (ut8*) out_buf, ret)) {
+			return ret;
+		}
+		return -1;
 	default:
 		return r_core_cmd (core, cmd, 0);
 	}
@@ -1304,15 +1307,20 @@ R_API void r_core_rtr_pushout(RCore *core, const char *input) {
 	const char *cmd = NULL;
 	char *str = NULL;
 	if (fd) {
-		for (rtr_n = 0; rtr_host[rtr_n].fd->fd != fd \
-			&& rtr_n < RTR_MAX_HOSTS - 1; rtr_n++);
+		for (rtr_n = 0; rtr_host[rtr_n].fd && rtr_n < RTR_MAX_HOSTS - 1; rtr_n++) {
+			if (rtr_host[rtr_n].fd->fd != fd) {
+				continue;
+			}
+		}
 		if (!(cmd = strchr (input, ' '))) {
 			eprintf ("Error\n");
 			return;
 		}
-	} else cmd = input;
+	} else {
+		cmd = input;
+	}
 
-	if (!rtr_host[rtr_n].fd->fd) {
+	if (!rtr_host[0].fd || !rtr_host[rtr_n].fd->fd) {
 		eprintf("Error: Unknown host\n");
 		return;
 	}
@@ -1469,15 +1477,15 @@ R_API void r_core_rtr_add(RCore *core, const char *_input) {
 						char *uri = r_str_newf ("http://%s:%s/%s%s", host, port, file, res);
 						if (ptr == res) free (ptr);
 						str = r_socket_http_get (uri, NULL, &len);
-						if (str) {
+						if (str && len > 0) {
 							str[len] = 0;
 							res = strstr (str, "\n\n");
 							if (res) res = strstr (res+1, "\n\n");
 							if (res) res += 2; else res = str;
-							printf ("%s%s", res, (res[strlen (res)-1]=='\n')?"":"\n");
+							printf ("%s%s", res, (*res && res[strlen (res)-1] == '\n') ? "" : "\n");
 							r_line_hist_add (str);
-							free (str);
 						}
+						free (str);
 						free (uri);
 					}
 				}

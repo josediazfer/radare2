@@ -1907,9 +1907,9 @@ static int fcn_list_default(RCore *core, RList *fcns, bool quiet) {
 	RAnalFunction *fcn;
 	r_list_foreach (fcns, iter, fcn) {
 		fcn_print_default (core, fcn, quiet);
-	}
-	if (quiet) {
-		r_cons_newline ();
+		if (quiet) {
+			r_cons_newline ();
+		}
 	}
 	return 0;
 }
@@ -2468,6 +2468,7 @@ static int core_anal_followptr(RCore *core, int type, ut64 at, ut64 ptr, ut64 re
 	}
 	wordsize = (int)(core->anal->bits / 8);
 	if (!r_io_read_i (core->io, ptr, &dataptr, wordsize, false)) {
+		eprintf ("core_anal_followptr: Cannot read word at destination\n");
 		return false;
 	}
 	return core_anal_followptr (core, type, at, dataptr, ref, code, depth - 1);
@@ -2508,6 +2509,7 @@ static bool opiscall(RCore *core, RAnalOp *aop, ut64 addr, const ut8* buf, int l
 	return false;
 }
 
+// TODO(maskray) RAddrInterval API
 #define OPSZ 8
 R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref, int mode) {
 	ut8 *buf = (ut8 *)malloc (core->blocksize);
@@ -2555,6 +2557,7 @@ R_API int r_core_anal_search(RCore *core, ut64 from, ut64 to, ut64 ref, int mode
 			}
 			// TODO: this can be probably enhaced
 			if (!r_io_read_at (core->io, at, buf, core->blocksize)) {
+				eprintf ("Failed to read at 0x%08" PFMT64x "\n", at);
 				break;
 			}
 			for (i = bckwrds ? (core->blocksize - OPSZ - 1) : 0;
@@ -2988,6 +2991,7 @@ R_API RCoreAnalStats* r_core_anal_get_stats(RCore *core, ut64 from, ut64 to, ut6
 	ut64 at;
 
 	if (from == to || from == UT64_MAX || to == UT64_MAX) {
+		eprintf ("Cannot alloc for this range\n");
 		return NULL;
 	}
 	as = R_NEW0 (RCoreAnalStats);
@@ -3342,33 +3346,34 @@ static ut64 esilbreak_last_data = UT64_MAX;
 
 static ut64 ntarget = UT64_MAX;
 
+// TODO differentiate endian-aware mem_read with other reads; move ntarget handling to another function
 static int esilbreak_mem_read(RAnalEsil *esil, ut64 addr, ut8 *buf, int len) {
 	ut8 str[128];
 	if (addr != UT64_MAX) {
 		esilbreak_last_read = addr;
 	}
-	if (myvalid (mycore->io, addr)) {
-		ut8 buf[8];
+	if (myvalid (mycore->io, addr) && r_io_read_at (mycore->io, addr, (ut8*)buf, len)) {
 		ut64 refptr;
-		if (len == 8) {
-			if (!r_io_read_at (mycore->io, addr, (ut8*)buf, len)) {
-				/* invalid read */
-				refptr = UT64_MAX;
-			} else {
-				refptr = r_read_ble64 (buf, esil->anal->big_endian);
-				esilbreak_last_data = refptr;
-			}
-		} else {
-			if (!r_io_read_at (mycore->io, addr, (ut8*)buf, len)) {
-				/* invalid read */
-				refptr = UT64_MAX;
-			} else {
-				refptr = (ut64)r_read_ble32 (buf, esil->anal->big_endian);
-				esilbreak_last_data = refptr;
-			}
+		bool trace = true;
+		switch (len) {
+		case 2:
+			esilbreak_last_data = refptr = (ut64)r_read_ble16 (buf, esil->anal->big_endian);
+			break;
+		case 4:
+			esilbreak_last_data = refptr = (ut64)r_read_ble32 (buf, esil->anal->big_endian);
+			break;
+		case 8:
+			esilbreak_last_data = refptr = r_read_ble64 (buf, esil->anal->big_endian);
+			break;
+		default:
+			trace = false;
+			r_io_read_at (mycore->io, addr, (ut8*)buf, len);
+			break;
 		}
+
+		// TODO incorrect
 		bool validRef = false;
-		if (myvalid (mycore->io, refptr)) {
+		if (trace && myvalid (mycore->io, refptr)) {
 			if (ntarget == UT64_MAX || ntarget == refptr) {
 				r_core_cmdf (mycore, "axd 0x%"PFMT64x" 0x%"PFMT64x,
 						(ut64)refptr, esil->address);
@@ -3642,9 +3647,7 @@ R_API void r_core_anal_esil(RCore *core, const char *str, const char *target) {
 	//this is necessary for the hook to read the id of analop
 	ESIL->user = &op;
 	ESIL->cb.hook_mem_read = &esilbreak_mem_read;
-	if (!core->io->cached) {
-		ESIL->cb.hook_mem_write = &esilbreak_mem_write;
-	}
+	ESIL->cb.hook_mem_write = &esilbreak_mem_write;
 	//eprintf ("Analyzing ESIL refs from 0x%"PFMT64x" - 0x%"PFMT64x"\n", addr, end);
 	// TODO: backup/restore register state before/after analysis
 	pcname = r_reg_get_name (core->anal->reg, R_REG_NAME_PC);

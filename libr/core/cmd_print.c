@@ -80,17 +80,17 @@ static const char *help_msg_at_at[] = {
 	"@@", "", " # foreach iterator command:",
 	"Repeat a command over a list of offsets", "", "",
 	"x", " @@ sym.*", "run 'x' over all flags matching 'sym.' in current flagspace",
-	"x", " @@dbt[abs]", "run a command on every backtrace address, bp or sp",
-	"x", " @@.file", "\"\" over the offsets specified in the file (one offset per line)",
+	"x", " @@dbt[abs]", "run 'x' command on every backtrace address, bp or sp",
+	"x", " @@.file", "run 'x' over the offsets specified in the file (one offset per line)",
 	"x", " @@=off1 off2 ..", "manual list of offsets",
 	"x", " @@/x 9090", "temporary set cmd.hit to run a command on each search result",
-	"x", " @@k sdbquery", "\"\" on all offsets returned by that sdbquery",
-	"x", " @@t", "\"\" on all threads (see dp)",
-	"x", " @@b", "\"\" on all basic blocks of current function (see afb)",
-	"x", " @@i", "\"\" on all instructions of the current function (see pdr)",
-	"x", " @@f", "\"\" on all functions (see aflq)",
-	"x", " @@f:write", "\"\" on all functions matching write in the name",
-	"x", " @@s:from to step", "\"\" on all offsets from, to incrementing by step",
+	"x", " @@k sdbquery", "run 'x' on all offsets returned by that sdbquery",
+	"x", " @@t", "run 'x' on all threads (see dp)",
+	"x", " @@b", "run 'x' on all basic blocks of current function (see afb)",
+	"x", " @@i", "run 'x' on all instructions of the current function (see pdr)",
+	"x", " @@f", "run 'x' on all functions (see aflq)",
+	"x", " @@f:write", "run 'x' on all functions matching write in the name",
+	"x", " @@s:from to step", "run 'x' on all offsets from, to incrementing by step",
 	"x", " @@c:cmd", "the same as @@=`` without the backticks",
 	"x", " @@=`pdf~call[0]`", "run 'x' at every call offset of the current function",
 	// TODO: Add @@k sdb-query-expression-here
@@ -118,7 +118,7 @@ static const char *help_msg_p[] = {
 	"p", "[iI][df] [len]", "print N ops/bytes (f=func) (see pi? and pdi)",
 	"p", "[kK] [len]", "print key in randomart (K is for mosaic)",
 	"pm", "[?] [magic]", "print libmagic data (see pm? and /m?)",
-	"pq", "[z] [len]", "print QR code with the first Nbytes of the current block",
+	"pq", "[?][iz] [len]", "print QR code with the first Nbytes of the current block",
 	"pr", "[?][glx] [len]", "print N raw bytes (in lines or hexblocks, 'g'unzip)",
 	"ps", "[?][pwz] [len]", "print pascal/wide/zero-terminated strings",
 	"pt", "[?][dn] [len]", "print different timestamps",
@@ -957,7 +957,7 @@ static void cmd_print_format(RCore *core, const char *_input, int len) {
 			_input++;
 			val = sdb_get (core->print->formats, _input, NULL);
 			if (val != NULL) {
-				r_cons_printf ("%d bytes\n", r_print_format_struct_size (val, core->print, mode));
+				r_cons_printf ("%d bytes\n", r_print_format_struct_size (val, core->print, mode, 0));
 			} else {
 				eprintf ("Struct %s not defined\nUsage: pfs.struct_name | pfs format\n", _input);
 			}
@@ -966,7 +966,7 @@ static void cmd_print_format(RCore *core, const char *_input, int len) {
 				_input++;
 			}
 			if (*_input) {
-				r_cons_printf ("%d bytes\n", r_print_format_struct_size (_input, core->print, mode));
+				r_cons_printf ("%d bytes\n", r_print_format_struct_size (_input, core->print, mode, 0));
 			} else {
 				eprintf ("Struct %s not defined\nUsage: pfs.struct_name | pfs format\n", _input);
 			}
@@ -1132,7 +1132,7 @@ static void cmd_print_format(RCore *core, const char *_input, int len) {
 			const char *fmt = NULL;
 			fmt = sdb_get (core->print->formats, name, NULL);
 			if (fmt != NULL) {
-				int size = r_print_format_struct_size (fmt, core->print, mode) + 10;
+				int size = r_print_format_struct_size (fmt, core->print, mode, 0) + 10;
 				if (size > core->blocksize) {
 					r_core_block_size (core, size);
 				}
@@ -1160,7 +1160,7 @@ static void cmd_print_format(RCore *core, const char *_input, int len) {
 		/* This make sure the structure will be printed entirely */
 		char *fmt = input + 1;
 		while (*fmt && ISWHITECHAR (*fmt)) fmt++;
-		int size = r_print_format_struct_size (fmt, core->print, mode) + 10;
+		int size = r_print_format_struct_size (fmt, core->print, mode, 0) + 10;
 		if (size > core->blocksize) {
 			r_core_block_size (core, size);
 		}
@@ -1580,10 +1580,11 @@ static int printzoomcallback(void *user, int mode, ut64 addr, ut8 *bufz, ut64 si
 	case 's':
 		j = r_flag_space_get (core->flags, "strings");
 		r_list_foreach (core->flags->flags, iter, flag) {
-			if (flag->space == j && ((addr <= flag->offset
-			&& flag->offset < addr + size)
-			|| (addr <= flag->offset + flag->size
-			&& flag->offset + flag->size < addr + size))) {
+			if (flag->space == j &&
+			    ((addr <= flag->offset &&
+			      flag->offset < addr + size) ||
+			     (addr <= flag->offset + flag->size &&
+			      flag->offset + flag->size < addr + size))) {
 				ret++;
 			}
 		}
@@ -2431,7 +2432,7 @@ static ut8 *analBars(RCore *core, int type, int nblocks, int blocksize, int skip
 
 static void cmd_print_bars(RCore *core, const char *input) {
 	bool print_bars = false;
-	ut8 *ptr = core->block;
+	ut8 *ptr = NULL;
 	// p=e [nblocks] [totalsize] [skip]
 	int nblocks = -1;
 	int totalsize = -1;
@@ -2519,7 +2520,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 				}
 				int len = 0;
 				for (i = 0; i < nblocks; i++) {
-					ut64 off = blocksize * (i + skipblocks);
+					ut64 off = core->offset + blocksize * (i + skipblocks);
 					r_core_read_at (core, off, p, blocksize);
 					for (j = k = 0; j < blocksize; j++) {
 						switch (submode) {
@@ -2683,7 +2684,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 	case 'F': // 0xff bytes
 	case 'p': // printable chars
 	case 'z': // zero terminated strings
-	{
+	if (blocksize > 0) {
 		ut8 *p;
 		ut64 i, j, k;
 		ptr = calloc (1, nblocks);
@@ -2699,7 +2700,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 		}
 		int len = 0;
 		for (i = 0; i < nblocks; i++) {
-			ut64 off = blocksize * (i + skipblocks);
+			ut64 off = core->offset + blocksize * (i + skipblocks);
 			r_core_read_at (core, off, p, blocksize);
 			for (j = k = 0; j < blocksize; j++) {
 				switch (mode) {
@@ -2737,6 +2738,8 @@ static void cmd_print_bars(RCore *core, const char *input) {
 		}
 		free (p);
 		print_bars = true;
+	} else {
+		eprintf ("Invalid blocksize\n");
 	}
 	break;
 	case 'b': // bytes
@@ -2803,7 +2806,7 @@ static void _pointer_table(RCore *core, ut64 origin, ut64 offset, const ut8 *buf
 		step = 4;
 	}
 	if (!r_io_is_valid_offset (core->io, origin, 0) ||
-	    !r_io_is_valid_offset (core->io, offset, 0)) {	
+	    !r_io_is_valid_offset (core->io, offset, 0)) {
 		return;
 	}
 	if (origin != offset) {
@@ -2989,7 +2992,7 @@ static void func_walk_blocks(RCore *core, RAnalFunction *f, char input, char typ
 	}
 	// XXX: hack must be reviewed/fixed in code analysis
 	if (r_list_length (f->bbs) == 1) {
-		ut32 fcn_size = r_anal_fcn_size (f);
+		ut32 fcn_size = r_anal_fcn_realsize (f);
 		b = r_list_get_top (f->bbs);
 		if (b->size > fcn_size) {
 			b->size = fcn_size;
@@ -3297,7 +3300,7 @@ static int cmd_print(void *data, const char *input) {
 	ut32 tbs = core->blocksize;
 	ut64 n, off, from, to, at, ate, piece;
 	ut64 tmpseek = UT64_MAX;
-	int addrbytes = core->assembler->addrbytes;
+	const int addrbytes = core->io->addrbytes;
 	mode = w = p = i = l = len = ret = 0;
 	n = off = from = to = at = ate = piece = 0;
 
@@ -3310,7 +3313,7 @@ static int cmd_print(void *data, const char *input) {
 		if (p) {
 			l = (int) r_num_math (core->num, p + 1);
 			/* except disasm and memoryfmt (pd, pm) */
-			if (input[0] != 'd' && input[0] != 'D' && input[0] != 'm' && 
+			if (input[0] != 'd' && input[0] != 'D' && input[0] != 'm' &&
 				input[0] != 'a' && input[0] != 'f' && input[0] != 'i' && input[0] != 'I') {
 				int n = (st32) l; // r_num_math (core->num, input+1);
 				if (l < 0) {
@@ -3414,7 +3417,15 @@ static int cmd_print(void *data, const char *input) {
 			r_cons_strcat ("{");
 		}
 		off = core->offset;
-		r_list_free (r_core_get_boundaries (core, "file", &from, &to));
+		{
+			RList *list = r_core_get_boundaries (core, r_config_get (core->config, "search.in"));
+			RIOMap *map = r_list_first (list);
+			if (map) {
+				from = map->itv.addr;
+				to = r_itv_end (map->itv);
+			}
+			r_list_free (list);
+		}
 		piece = R_MAX ((to - from) / w, 1);
 		as = r_core_anal_get_stats (core, from, to, piece);
 		if (!as && mode != '?') {
@@ -3558,21 +3569,21 @@ static int cmd_print(void *data, const char *input) {
 		break;
 	case 'A': // "pA"
 	{
-		ut64 from = r_config_get_i (core->config, "search.from");
-		ut64 to = r_config_get_i (core->config, "search.to");
-		int count = r_config_get_i (core->config, "search.count");
+		const ut64 saved_from = r_config_get_i (core->config, "search.from"),
+				saved_to = r_config_get_i (core->config, "search.to"),
+				saved_maxhits = r_config_get_i (core->config, "search.maxhits");
 
 		int want = r_num_math (core->num, input + 1);
 		if (input[1] == '?') {
 			r_core_cmd0 (core, "/A?");
 		} else {
-			r_config_set_i (core->config, "search.count", want);
+			r_config_set_i (core->config, "search.maxhits", want);
 			r_config_set_i (core->config, "search.from", core->offset);
 			r_config_set_i (core->config, "search.to", core->offset + core->blocksize);
 			r_core_cmd0 (core, "/A");
-			r_config_set_i (core->config, "search.count", count);
-			r_config_set_i (core->config, "search.from", from);
-			r_config_set_i (core->config, "search.to", to);
+			r_config_set_i (core->config, "search.maxhits", saved_maxhits);
+			r_config_set_i (core->config, "search.from", saved_from);
+			r_config_set_i (core->config, "search.to", saved_to);
 		}
 	}
 	break;
@@ -4023,7 +4034,6 @@ static int cmd_print(void *data, const char *input) {
 			} else {
 				ut32 bsz = core->blocksize;
 				RAnalFunction *f = r_anal_get_fcn_in (core->anal, core->offset, 0);
-				// R_ANAL_FCN_TYPE_FCN | R_ANAL_FCN_TYPE_SYM);
 				RAnalFunction *tmp_func;
 				ut32 cont_size = 0;
 				RListIter *locs_it = NULL;
@@ -4093,8 +4103,14 @@ static int cmd_print(void *data, const char *input) {
 					}
 					cont_size = tmp_get_contsize (f);
 #endif
-					r_core_cmdf (core, "pD %d @ 0x%08" PFMT64x,
-						f->_size > 0 ? f->_size: r_anal_fcn_realsize (f), f->addr);
+					ut32 linear = f->_size;
+					ut32 bbsum = r_anal_fcn_realsize (f);
+					if (bbsum + 4096 < linear) {
+						eprintf ("Linear size differs too much from the bbsum, please use pdr instead.\n");
+					} else {
+						r_core_cmdf (core, "pD %d @ 0x%08" PFMT64x,
+							f->_size > 0 ? f->_size: r_anal_fcn_realsize (f), f->addr);
+					}
 #if 0
 					for (; locs_it && (tmp_func = locs_it->data); locs_it = locs_it->n) {
 						cont_size = tmp_get_contsize (tmp_func);
@@ -4274,7 +4290,7 @@ static int cmd_print(void *data, const char *input) {
 				* as vaddr. */
 				if ((section = r_bin_get_section_at (obj, core->offset, true))) {
 					vaddr = core->offset + section->vaddr - section->paddr;
-				} 
+				}
 
 				r_cons_printf ("{\"string\":");
 				str = r_str_utf16_encode ((const char *) core->block, len);
@@ -5354,7 +5370,8 @@ static int cmd_print(void *data, const char *input) {
 				len = core->blocksize;
 			}
 		}
-		char *res = r_qrcode_gen (core->block, len, r_config_get_i (core->config, "scr.utf8"));
+		bool inverted = (input[1] == 'i'); // pqi -- inverted colors
+		char *res = r_qrcode_gen (core->block, len, r_config_get_i (core->config, "scr.utf8"), inverted);
 		if (res) {
 			r_cons_printf ("%s\n", res);
 			free (res);

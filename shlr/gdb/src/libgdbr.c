@@ -17,6 +17,8 @@ int gdbr_init(libgdbr_t *g, bool is_server) {
 	g->is_server = is_server;
 	g->send_max = 2500;
 	g->send_buff = (char *) calloc (g->send_max, 1);
+	g->page_size = 4096;
+	g->num_retries = 10; // safe number, should be ~2.5 seconds
 	if (!g->send_buff) {
 		return -1;
 	}
@@ -81,9 +83,9 @@ int gdbr_cleanup(libgdbr_t *g) {
 	if (!g) {
 		return -1;
 	}
-	free (g->data);
-	free (g->send_buff);
+	R_FREE (g->data);
 	g->send_len = 0;
-	free (g->read_buff);
+	R_FREE (g->send_buff);
+	R_FREE (g->read_buff);
 	return 0;
 }

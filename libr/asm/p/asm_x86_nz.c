@@ -1345,14 +1345,29 @@ static int opmov(RAsm *a, ut8 *data, const Opcode *op) {
 				}
 			}
 		} else if (op->operands[0].type & OT_MEMORY) {
-			if (op->operands[0].type & OT_WORD ||
-			    op->operands[0].type & OT_BYTE) {
-				return -1;
-			}
-			if (a->bits == 64 &&
-				!(op->operands[0].type & OT_BYTE) &&
-				!(op->operands[0].type & OT_QWORD)) {
-				data[l++] = 0x67;
+			if (a->bits == 64) {
+				if (op->operands[0].extended) {
+					if (op->operands[0].reg < 0) {
+						return -1;
+					}
+					data[l++] = 0x41;
+					data[l++] = 0xc6;
+					// For r12 and r13
+					if (op->operands[0].reg == 4) {
+						data[l++] = 0x04;
+						data[l++] = 0x24;
+					} else if (op->operands[0].reg == 5) {
+						data[l++] = 0x45;
+						data[l++] = 0x00;
+					} else {
+						data[l++] = op->operands[0].reg;
+					}
+					data[l++] = op->operands[1].immediate;
+					return l;
+				} else if (!(op->operands[0].type & OT_BYTE) &&
+				           !(op->operands[0].type & OT_QWORD)) {
+					data[l++] = 0x67;
+				}
 			}
 			if (op->operands[0].type & (OT_DWORD | OT_QWORD)) {
 				data[l++] = 0xc7;
@@ -1817,6 +1832,21 @@ static int opretf(RAsm *a, ut8 *data, const Opcode *op) {
 	return l;
 }
 
+static int opstos(RAsm *a, ut8 *data, const Opcode *op) {
+	int l = 0;
+	if (!strcmp(op->mnemonic, "stosw")) {
+		data[l++] = 0x66;
+	}
+	if (!strcmp(op->mnemonic, "stosb")) {
+		data[l++] = 0xaa;
+	} else if (!strcmp(op->mnemonic, "stosw")) {
+		data[l++] = 0xab;
+	} else if (!strcmp(op->mnemonic, "stosd")) {
+		data[l++] = 0xab;
+	}
+	return l;
+}
+
 static int opset(RAsm *a, ut8 *data, const Opcode *op) {
 	if (!(op->operands[0].type & (OT_GPREG | OT_BYTE))) {return -1;}
 	int l = 0;
@@ -1988,6 +2018,15 @@ static int opxchg(RAsm *a, ut8 *data, const Opcode *op) {
 	return l;
 }
 
+static int opcdqe(RAsm *a, ut8 *data, const Opcode *op) {
+	int l = 0;
+	if (a->bits == 64) {
+		data[l++] = 0x48;
+	}
+	data[l++] = 0x98;
+	return l;
+}
+
 typedef struct lookup_t {
 	char mnemonic[12];
 	int only_x32;
@@ -2010,7 +2049,8 @@ LookupTable oplookup[] = {
 	{"call", 0, &opcall, 0},
 	{"cbw", 0, NULL, 0x6698, 2},
 	{"cdq", 0, NULL, 0x99, 1},
-	{"cdqe", 0, NULL, 0x98, 1},
+	{"cdqe", 0, &opcdqe, 0},
+	{"cwde", 0, &opcdqe, 0},
 	{"clc", 0, NULL, 0xf8, 1},
 	{"cld", 0, NULL, 0xfc, 1},
 	{"clgi", 0, NULL, 0x0f01dd, 3},
@@ -2211,9 +2251,9 @@ LookupTable oplookup[] = {
 	{"std", 0, NULL, 0xfd, 1},
 	{"stgi", 0, NULL, 0x0f01dc, 3},
 	{"sti", 0, NULL, 0xfb, 1},
-	{"stosb", 0, NULL, 0xaa, 1},
-	{"stosd", 0, NULL, 0xab, 1},
-	{"stosw", 0, NULL, 0x66ab, 2},
+	{"stosb", 0, &opstos, 0},
+	{"stosd", 0, &opstos, 0},
+	{"stosw", 0, &opstos, 0},
 	{"sub", 0, &opsub, 0},
 	{"swapgs", 0, NULL, 0x0f1ff8, 3},
 	{"syscall", 0, NULL, 0x0f05, 2},
@@ -2242,38 +2282,6 @@ LookupTable oplookup[] = {
 	{"test", 0, &optest, 0},
 	{"null", 0, NULL, 0, 0}
 };
-
-static int oprep(RAsm *a, ut8 *data, const Opcode *op) {
-	int l = 0;
-	LookupTable *lt_ptr;
-
-	if (!strcmp (op->mnemonic, "rep") ||
-	    !strcmp (op->mnemonic, "repe") ||
-	    !strcmp (op->mnemonic, "repz")) {
-		data[l++] = 0xf3;
-	} else if (!strcmp (op->mnemonic, "repne") ||
-	           !strcmp (op->mnemonic, "repnz")) {
-		data[l++] = 0xf2;
-	}
-	for (lt_ptr = oplookup; strcmp (lt_ptr->mnemonic, "null"); lt_ptr++) {
-		if (!strcasecmp (op->operands[0].rep_op, lt_ptr->mnemonic)) {
-			if (lt_ptr->opcode > 0) {
-				if (lt_ptr->only_x32 && a->bits == 64) {
-					return -1;
-				}
-				ut8 *ptr = (ut8 *)&lt_ptr->opcode;
-				int i = 0;
-				for (; i < lt_ptr->size; i++) {
-					data[i+l] = ptr[lt_ptr->size - (i + 1)];
-				}
-				return l + lt_ptr->size;
-			} else {
-				return -1;
-			}
-		}
-	}
-	return -1;
-}
 
 static x86newTokenType getToken(const char *str, size_t *begin, size_t *end) {
 	// Skip whitespace
@@ -2540,7 +2548,11 @@ static int parseOperand(RAsm *a, const char *str, Operand *op, bool isrepop) {
 				// Reset nextpos: parseReg wants to parse from the beginning
 				nextpos = pos;
 				reg = parseReg (a, str, &nextpos, &reg_type);
-
+				op->extended = false;
+				if (reg > 7) {
+					op->extended = true;
+					op->reg = reg - 8;
+				}
 				if (reg_type & OT_REGTYPE & OT_SEGMENTREG) {
 					op->reg = reg;
 					op->type = reg_type;
@@ -2594,7 +2606,7 @@ static int parseOperand(RAsm *a, const char *str, Operand *op, bool isrepop) {
 		}
 		if (op->reg == X86R_UNDEFINED) {
 			op->is_good_flag = false;
-			if (!(a->num) ) {
+			if (a->num && a->num->value == 0) {
 				if (isrepop) {
 					strncpy (op->rep_op, str, MAX_REPOP_LENGTH - 1);
 					op->rep_op[MAX_REPOP_LENGTH - 1] = '\0';
@@ -2602,7 +2614,7 @@ static int parseOperand(RAsm *a, const char *str, Operand *op, bool isrepop) {
 				return nextpos;
 			}
 			op->type = OT_CONSTANT;
-			RCore *core = (RCore *)(a->num->userptr);
+			RCore *core = a->num? (RCore *)(a->num->userptr): NULL;
 			if (core && (flag = r_flag_get (core->flags, str))) {
 				op->is_good_flag = true;
 			}
@@ -2682,6 +2694,55 @@ static ut64 getnum(RAsm *a, const char *s) {
 	return r_num_math (a->num, s);
 }
 
+static int oprep(RAsm *a, ut8 *data, const Opcode *op) {
+	int l = 0;
+	LookupTable *lt_ptr;
+	int retval;
+	if (!strcmp (op->mnemonic, "rep") ||
+	    !strcmp (op->mnemonic, "repe") ||
+	    !strcmp (op->mnemonic, "repz")) {
+		data[l++] = 0xf3;
+	} else if (!strcmp (op->mnemonic, "repne") ||
+	           !strcmp (op->mnemonic, "repnz")) {
+		data[l++] = 0xf2;
+	}
+	Opcode instr = {0};
+	parseOpcode (a, op->operands[0].rep_op, &instr);
+
+	for (lt_ptr = oplookup; strcmp (lt_ptr->mnemonic, "null"); lt_ptr++) {
+		if (!strcasecmp (instr.mnemonic, lt_ptr->mnemonic)) {
+			if (lt_ptr->opcode > 0) {
+				if (lt_ptr->only_x32 && a->bits == 64) {
+					return -1;
+				}
+				ut8 *ptr = (ut8 *)&lt_ptr->opcode;
+				int i = 0;
+				for (; i < lt_ptr->size; i++) {
+					data[i + l] = ptr[lt_ptr->size - (i + 1)];
+				}
+				return l + lt_ptr->size;
+			} else {
+				if (lt_ptr->opdo) {
+					data += l;
+					if (instr.has_bnd) {
+						data[l] = 0xf2;
+						data++;
+					}
+					retval = lt_ptr->opdo (a, data, &instr);
+					// if op supports bnd then the first byte will
+					// be 0xf2.
+					if (instr.has_bnd) {
+						retval++;
+					}
+					return l + retval;
+				}
+				break;
+			}
+		}
+	}
+	return -1;
+}
+
 static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 	ut8 *data = ao->buf;
 	char op[128];
@@ -2720,7 +2781,6 @@ static int assemble(RAsm *a, RAsmOp *ao, const char *str) {
 			break;
 		}
 	}
-	//eprintf ("Error: Unknown instruction (%s)\n", instr.mnemonic);
 	free (instr.mnemonic);
 	return retval;
 }

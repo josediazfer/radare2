@@ -22,7 +22,7 @@ static const char *help_msg_i[] = {
 	"icc", "", "List classes, methods and fields in Header Format",
 	"iC", "", "Show signature info (entitlements, ...)",
 	"id", "[?]", "Debug information (source lines)",
-	"idp", "", "Show pdb file information",
+	"idp", "", "Load pdb file information",
 	"iD", " lang sym", "demangle symbolname for given language",
 	"ie", "", "Entrypoint",
 	"iE", "", "Exports (global symbols)",
@@ -52,8 +52,8 @@ static const char *help_msg_id[] = {
 	"Output mode:", "", "",
 	"'*'", "", "Output in radare commands",
 	"id", "", "Source lines",
-	"idp", " [file.pdb]", "Show pdb file information",
-	".idp*", " [file.pdb]", "Load pdb file information",
+	"idp", " [file.pdb]", "Load pdb file information",
+	"idpi", " [file.pdb]", "Show pdb file information",
 	"idpd", "", "Download pdb file on remote server",
 	NULL
 };
@@ -304,7 +304,6 @@ static void playMsg(RCore *core, const char *n, int len) {
 static int cmd_info(void *data, const char *input) {
 	RCore *core = (RCore *) data;
 	bool newline = r_config_get_i (core->config, "scr.interactive");
-	RBinObject *o = r_bin_cur_object (core->bin);
 	RCoreFile *cf = core->file;
 	RIODesc *desc = cf ? r_io_desc_get (core->io, cf->fd) : NULL;
 	int i, va = core->io->va || core->io->debug;
@@ -355,6 +354,8 @@ static int cmd_info(void *data, const char *input) {
 		}
 		break;
 		case 'k':
+		{
+			RBinObject *o = r_bin_cur_object (core->bin);
 			db = o? o->kv: NULL;
 			//:eprintf ("db = %p\n", db);
 			switch (input[1]) {
@@ -395,7 +396,8 @@ static int cmd_info(void *data, const char *input) {
 				eprintf ("Usage: ik*    # load all header information\n");
 			}
 			goto done;
-			break;
+		}
+		break;
 		case 'o':
 		{
 			if (!cf) {
@@ -508,67 +510,92 @@ static int cmd_info(void *data, const char *input) {
 		case 'r': RBININFO ("relocs", R_CORE_BIN_ACC_RELOCS, NULL, 0); break;
 		case 'd': // "id"
 			if (input[1] == 'p') { // "idp"
-				int mode = false;
-				if (input[2] == '*') { // "idp*"
-					mode = true;
-					input++;
-				} else if (input[2] == 'd') { // "idpd"
-					SPDBOptions pdbopts;
+				SPDBOptions pdbopts;
+				RBinInfo *info;
+				bool file_found;
+				char *filename;
+
+				switch (input[2]) {
+				case ' ':
+					r_core_cmdf (core, ".idpi* %s", input + 3);
+					while (input[2]) input++;
+					break;
+				case '\0':
+					r_core_cmd0 (core, ".idpi*");
+					break;
+				case 'd':
 					pdbopts.user_agent = (char*) r_config_get (core->config, "pdb.useragent");
 					pdbopts.symbol_server = (char*) r_config_get (core->config, "pdb.server");
 					pdbopts.extract = r_config_get_i (core->config, "pdb.extract");
 					int r = r_bin_pdb_download (core, 0, NULL, &pdbopts);
 					if (r > 0) {
-						eprintf ("Error while downloading pdb file\n");
+						eprintf ("Error while downloading pdb file");
 					}
-					input += 2;
+					input++;
+					break;
+				case 'i':
+					info = r_bin_get_info (core->bin);
+					file_found = false;
+					filename = strchr (input, ' ');
+					while (input[2]) input++;
+					if (filename) {
+						*filename++ = '\0';
+						filename = strdup (filename);
+						file_found = r_file_exists (filename);
+					} else {
+						/* Autodetect local file */
+						if (!info || !info->debug_file_name) {
+							eprintf ("Cannot get file's debug information");
+							break;
+						}
+						// Check raw path for debug filename
+						file_found = r_file_exists (info->debug_file_name);
+						if (file_found) {
+							filename = strdup (info->debug_file_name);
+						} else {
+							// Check debug filename basename in current directory
+							char* basename = (char*) r_file_basename (info->debug_file_name);
+							file_found = r_file_exists (basename);
+							if (!file_found) {
+								// Check if debug file is in file directory
+								char* dir = r_file_dirname (core->bin->cur->file);
+								filename = r_str_newf ("%s/%s", dir, basename);
+								file_found = r_file_exists (filename);
+							} else {
+								filename = strdup (basename);
+							}
+						}
+					}
+
+					if (!file_found) {
+						eprintf ("File '%s' not found", filename);
+						free (filename);
+						break;
+					}
+					ut64 baddr = 0;
+					if (core->bin->cur && core->bin->cur->o) {
+						baddr = core->bin->cur->o->baddr;
+					} else {
+						eprintf ("Warning: Cannot find base address, flags will probably be misplaced\n");
+					}
+					RCoreFile *file = r_core_file_open (core, filename, R_IO_READ, baddr);
+					r_core_bin_load (core, filename, baddr);
+					if (!file) {
+						eprintf ("Error while opening '%s'", filename);
+						break;
+					}
+					RCoreBinFilter filter = { 0 };
+					r_core_bin_info (core, R_CORE_BIN_ACC_PDB, mode, true, &filter, NULL);
+					r_core_file_close (core, file);
+					free (filename);
+					break;
+				case '?':
+				default:
+					r_core_cmd_help (core, help_msg_id);
+					input++;
 					break;
 				}
 				input++;
-				char* filename = strchr (input, ' ');
-				if (filename) {
-					*filename++ = '\0';
-					char* args = strchr (filename, ' ');
-					if (args) {
-						*args = '\0';
-					}
-				} else {
-					/* Autodetect local file or download remote file */
-					RBinInfo *info = r_bin_get_info (core->bin);
-					if (!info || !info->debug_file_name) {
-						eprintf ("Cannot get file's debug information\n");
-						break;
-					}
-					bool local_file = r_file_exists (info->debug_file_name);
-					if (local_file) {
-						filename = info->debug_file_name;
-					} else {
-						r_core_cmd0 (core, "idpd");
-						filename = (char*) r_file_basename (info->debug_file_name);
-					}
-				}
-				// TODO Use R_IO api
-				int current_fd = r_core_bin_cur (core)->fd;
-				char* r = r_core_cmd_strf (core, "o %s", filename);
-				if (!r || !*r) {
-					//eprintf ("FixMe: Could not read file descriptor\n");
-					if (!r) {
-						if (!(r = strdup ("0"))) {
-							eprintf ("Error: strdup fail\n");
-							break;
-						}
-					}
-				}
-				int fd = atoi (r);
-				free (r);
-				if (fd < 0) {
-					eprintf ("Error while opening '%s'\n", filename);
-					break;
-				}
-				RCoreBinFilter filter = { 0 };
-				r_core_bin_info (core, R_CORE_BIN_ACC_PDB, mode, true, &filter, NULL);
-				r_core_cmdf (core, "o-%d", fd);
-				r_core_cmdf (core, "o %d", current_fd);
 			} else if (input[1] == '?') { // "id?"
 				r_core_cmd_help (core, help_msg_id);
 				input++;

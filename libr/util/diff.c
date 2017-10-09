@@ -221,7 +221,7 @@ R_API bool r_diff_buffers_distance_levenstein(RDiff *d, const ut8 *a, ut32 la, c
 		// the value of v1[start] simply increments.
 		if (start > bLen) {
 			break;
-		} 
+		}
 		v1[start] = v0[start] + 1;
 
 		// need to have a bigger number in colMin than we'll ever encounter in the inner loop
@@ -301,73 +301,128 @@ R_API bool r_diff_buffers_distance_levenstein(RDiff *d, const ut8 *a, ut32 la, c
 	return true;
 }
 
-R_API bool r_diff_buffers_distance_original(RDiff *d, const ut8 *a, ut32 la, const ut8 *b, ut32 lb, ut32 *distance, double *similarity) {
-	int i, j, tmin, **m;
-	ut64 totalsz = 0;
-
-	if (!a || !b || la < 1 || lb < 1)
-		return false;
-
-	if (la == lb && !memcmp (a, b, la)) {
-		if (distance != NULL)
-			*distance = 0;
-		if (similarity != NULL)
-			*similarity = 1.0;
-		return true;
-	}
-	totalsz = sizeof(int*) * (lb+1);
-	for(i = 0; i <= la; i++) {
-		totalsz += ((lb+1) * sizeof(int));
-	}
-	if (totalsz >= 1024 * 1024 * 1024) { // 1 GB of ram
-		char *szstr = r_num_units (NULL, totalsz);
-		eprintf ("Too much memory required (%s) to run distance diff, Use -c.\n", szstr);
-		free (szstr);
+// Eugene W. Myers' O(ND) diff algorithm
+// Returns edit distance with costs: insertion=1, deletion=1, no substitution
+R_API bool r_diff_buffers_distance_myers(RDiff *diff, const ut8 *a, ut32 la, const ut8 *b, ut32 lb, ut32 *distance, double *similarity) {
+	const bool verbose = diff ? diff->verbose: false;
+	if (!a || !b) {
 		return false;
 	}
-	if ((m = malloc ((la+1) * sizeof(int*))) == NULL)
+	const ut32 length = la + lb;
+	const ut8 *ea = a + la, *eb = b + lb;
+	// Strip prefix
+	for (; a < ea && b < eb && *a == *b; a++, b++) {}
+	// Strip suffix
+	for (; a < ea && b < eb && ea[-1] == eb[-1]; ea--, eb--) {}
+	la = ea - a;
+	lb = eb - b;
+	ut32 *v0, *v;
+	st64 m = (st64)la + lb, di = 0, low, high, i, x, y;
+	if (m + 2 > SIZE_MAX / sizeof (st64) || !(v0 = malloc ((m + 2) * sizeof (ut32)))) {
 		return false;
-	for(i = 0; i <= la; i++) {
-		if ((m[i] = malloc ((lb+1) * sizeof(int))) == NULL) {
-			eprintf ("Allocation failed\n");
-			while (i--)
-				free (m[i]);
-			free (m);
-			return false;
+	}
+	v = v0 + lb;
+	v[1] = 0;
+	for (di = 0; di <= m; di++) {
+		low = -di + 2 * R_MAX (0, di - (st64)lb);
+		high = di - 2 * R_MAX (0, di - (st64)la);
+		for (i = low; i <= high; i += 2) {
+			x = i == -di || (i != di && v[i-1] < v[i+1]) ? v[i+1] : v[i-1] + 1;
+			y = x - i;
+			while (x < la && y < lb && a[x] == b[y]) {
+				x++;
+				y++;
+			}
+			v[i] = x;
+			if (x == la && y == lb) {
+				goto out;
+			}
+		}
+		if (verbose && di % 10000 == 0) {
+			eprintf ("\rProcessing dist %" PFMT64d " of max %" PFMT64d "\r", di, m);
 		}
 	}
 
-	for (i = 0; i <= la; i++)
-		m[i][0] = i;
-	for (j = 0; j <= lb; j++)
-		m[0][j] = j;
-
-	for (i = 1; i <= la; i++) {
-		for (j = 1; j <= lb; j++) {
-			int cost = (a[i-1] != b[j-1])? 1: 0;
-			tmin = R_MIN (m[i-1][j] + 1, m[i][j-1] + 1);
-			m[i][j] = R_MIN (tmin, m[i-1][j-1] + cost);
-		}
+out:
+	if (verbose) {
+		eprintf ("\n");
 	}
-
+	free (v0);
+	//Clean up output on loop exit (purely aesthetic)
 	if (distance) {
-		*distance = m[la][lb];
+		*distance = di;
 	}
 	if (similarity) {
-		*similarity = (double)1 - (double)(m[la][lb])/(double)(R_MAX(la, lb));
+		*similarity = length ? 1.0 - (double)di / length : 1.0;
+	}
+	return true;
+}
+
+R_API bool r_diff_buffers_distance_original(RDiff *diff, const ut8 *a, ut32 la, const ut8 *b, ut32 lb, ut32 *distance, double *similarity) {
+	if (!a || !b)
+		return false;
+
+	const bool verbose = diff ? diff->verbose : false;
+	const ut32 length = R_MAX (la, lb);
+	const ut8 *ea = a + la, *eb = b + lb, *t;
+	ut32 *d, i, j;
+	// Strip prefix
+	for (; a < ea && b < eb && *a == *b; a++, b++) {}
+	// Strip suffix
+	for (; a < ea && b < eb && ea[-1] == eb[-1]; ea--, eb--) {}
+	la = ea - a;
+	lb = eb - b;
+	if (la < lb) {
+		i = la;
+		la = lb;
+		lb = i;
+		t = a;
+		a = b;
+		b = t;
 	}
 
-	for(i = 0; i <= la; i++) {
-		free (m[i]);
+	if (sizeof (ut32) > SIZE_MAX / (lb + 1) || !(d = malloc ((lb + 1) * sizeof (ut32)))) {
+		return false;
 	}
-	free (m);
+	for (i = 0; i <= lb; i++) {
+		d[i] = i;
+	}
+	for (i = 0; i < la; i++) {
+		ut32 ul = d[0];
+		d[0] = i + 1;
+		for (j = 0; j < lb; j++) {
+			ut32 u = d[j + 1];
+			d[j + 1] = a[i] == b[j] ? ul : R_MIN (ul, R_MIN (d[j], u)) + 1;
+			ul = u;
+		}
+		if (verbose && i % 10000 == 0) {
+			eprintf ("\rProcessing %" PFMT32u " of %" PFMT32u "\r", i, la);
+		}
+	}
 
+	if (verbose) {
+		eprintf ("\n");
+	}
+	if (distance) {
+		*distance = d[lb];
+	}
+	if (similarity) {
+		*similarity = length ? 1.0 - (double)d[lb] / length : 1.0;
+	}
+	free (d);
 	return true;
 }
 
 R_API bool r_diff_buffers_distance(RDiff *d, const ut8 *a, ut32 la, const ut8 *b, ut32 lb, ut32 *distance, double *similarity) {
-	if (d && d->levenstein) {
-		return r_diff_buffers_distance_levenstein (d, a, la, b, lb, distance, similarity);
+	if (d) {
+		switch (d->type) {
+		case 'm':
+			return r_diff_buffers_distance_myers (d, a, la, b, lb, distance, similarity);
+		case 'l':
+			return r_diff_buffers_distance_levenstein (d, a, la, b, lb, distance, similarity);
+		default:
+			break;
+		}
 	}
 	return r_diff_buffers_distance_original (d, a, la, b, lb, distance, similarity);
 }

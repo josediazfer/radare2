@@ -66,6 +66,7 @@ shlr/sdb/src/sdb-version.h
 shlr/sdb/src/sdb_version.h
 shlr/sdb/src/libsdb.so*
 shlr/spp/config.h
+sys/travis/*.txt
 shlr/capstone/
 sys/.mark_python-deps
 sys/.mark_swig
@@ -87,7 +88,7 @@ tags
 *.kdev4
 radare2-*.zip
 # Ignore meson related files
-bin/
+./bin
 meson.py
 ninja.exe
 .DS_Store

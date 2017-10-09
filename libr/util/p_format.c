@@ -350,21 +350,21 @@ static void r_print_format_decchar(const RPrint* p, int endian, int mode,
 static int r_print_format_string(const RPrint* p, ut64 seeki, ut64 addr64, ut64 addr, int is64, int mode) {
 	ut8 buffer[255];
 	buffer[0] = 0;
-	if (p->iob.read_at) {
-		if (is64 == 1)
-			p->iob.read_at (p->iob.io, addr64, buffer, sizeof (buffer)-8);
-		else
-			p->iob.read_at (p->iob.io, (ut64)addr, buffer, sizeof (buffer)-8);
-	} else {
+	if (!p->iob.read_at) {
 		eprintf ("(cannot read memory)\n");
 		return -1;
 	}
+	int res = (is64 == 1)
+		? p->iob.read_at (p->iob.io, addr64, buffer, sizeof (buffer) - 8)
+		: p->iob.read_at (p->iob.io, (ut64)addr, buffer, sizeof (buffer) - 8);
 	if (MUSTSEEJSON) {
 		p->cb_printf ("%d,\"string\":\"%s\"}", seeki, buffer);
 	} else if (MUSTSEE) {
 		if (!SEEVALUE) p->cb_printf ("0x%08"PFMT64x" = ", seeki);
 		if (!SEEVALUE) p->cb_printf ("0x%08"PFMT64x" -> 0x%08"PFMT64x" ", seeki, addr);
-		p->cb_printf ("%s", buffer);
+		if (res && buffer[0] != 0xff && buffer[1] != 0xff) {
+			p->cb_printf ("%s", buffer);
+		}
 	}
 	return 0;
 }
@@ -1213,11 +1213,14 @@ static void r_print_format_num (const RPrint *p, int endian, int mode, const cha
 }
 
 // XXX: this is somewhat incomplete. must be updated to handle all format chars
-int r_print_format_struct_size(const char *f, RPrint *p, int mode) {
+int r_print_format_struct_size(const char *f, RPrint *p, int mode, int n) {
 	char *end, *args, *fmt;
 	int size = 0, tabsize = 0, i, idx = 0, biggest = 0, fmt_len = 0;
 	if (!f) {
 		return -1;
+	}
+	if (n >= 3) {
+		return 0;
 	}
 	char *o = strdup (f);
 	if (!o) {
@@ -1325,7 +1328,9 @@ int r_print_format_struct_size(const char *f, RPrint *p, int mode) {
 				free (structname);
 				break;
 			}
-			if (endname) *endname = '\0';
+			if (endname) {
+				*endname = '\0';
+			}
 			format = strchr (structname, ' ');
 			if (format) {
 				tmp = *format;
@@ -1336,7 +1341,18 @@ int r_print_format_struct_size(const char *f, RPrint *p, int mode) {
 			} else {
 				format = sdb_get (p->formats, structname + 1, NULL);
 			}
-			size += tabsize * r_print_format_struct_size (format, p, mode);
+			if (!format) {
+				eprintf ("Cannot find format for struct `%s'\n", structname + 1);
+				return 0;
+			}
+			int newsize = r_print_format_struct_size (format, p, mode, n + 1);
+			if (newsize < 1) {
+				eprintf ("Cannot find size for `%s'\n", format);
+				return 0;
+			}
+			if (format && newsize > 0) {
+				size += tabsize * newsize;
+			}
 			free (structname);
 			}
 			break;
@@ -1442,7 +1458,7 @@ static int r_print_format_struct(RPrint* p, ut64 seek, const ut8* b, int len, co
 		p->cb_printf ("<%s>\n", name);
 	}
 	r_print_format (p, seek, b, len, fmt, mode, setval, field);
-	return r_print_format_struct_size (fmt, p, mode);
+	return r_print_format_struct_size (fmt, p, mode, 0);
 }
 
 static char* get_args_offset(const char *arg) {
@@ -1625,7 +1641,7 @@ R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
 			} else {
 				size = -1;
 			}
-			int fs = r_print_format_struct_size (arg, p, 0);
+			int fs = r_print_format_struct_size (arg, p, 0, idx);
 			if (fs == -2) {
 				i = -1;
 				goto beach;
@@ -1946,8 +1962,9 @@ R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
 						while (size--) i+=2;
 					break;
 				case 's':
-					if (r_print_format_string (p, seeki, addr64, addr, 0, mode) == 0)
+					if (r_print_format_string (p, seeki, addr64, addr, 0, mode) == 0) {
 						i += (size==-1) ? 4 : 4*size;
+					}
 					break;
 				case 'S':
 					if (r_print_format_string (p, seeki, addr64, addr, 1, mode) == 0)

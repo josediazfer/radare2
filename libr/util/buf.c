@@ -147,11 +147,12 @@ R_API RBuffer *r_buf_new_with_buf(RBuffer *b) {
 	return r_buf_new_with_bytes (b->buf, b->length);
 }
 
-R_API RBuffer *r_buf_new_sparse() {
+R_API RBuffer *r_buf_new_sparse(ut8 Oxff) {
 	RBuffer *b = r_buf_new ();
 	if (!b) {
 		return NULL;
 	}
+	b->Oxff = Oxff;
 	b->sparse = r_list_newf ((RListFree)free);
 	return b;
 }
@@ -160,6 +161,7 @@ R_API RBuffer *r_buf_new() {
 	RBuffer *b = R_NEW0 (RBuffer);
 	if (b) {
 		b->fd = -1;
+		b->Oxff = 0xff;
 	}
 	return b;
 }
@@ -466,7 +468,7 @@ static int r_buf_cpy(RBuffer *b, ut64 addr, ut8 *dst, const ut8 *src, int len, i
 			}
 		} else {
 			// read from sparse and write into dst
-			memset (dst, 0xff, len);
+			memset (dst, b->Oxff, len);
 			(void)sparse_read (b->sparse, addr, dst, len);
 		}
 		return len;
@@ -497,11 +499,14 @@ static int r_buf_fcpy_at (RBuffer *b, ut64 addr, ut8 *buf, const char *fmt, int 
 		eprintf ("r_buf_fcpy_at not supported yet for r_buf_new_file\n");
 		return 0;
 	}
-	if (addr == R_BUF_CUR)
+	if (addr == R_BUF_CUR) {
 		addr = b->cur;
-	else addr -= b->base;
-	if (addr == UT64_MAX || addr > b->length)
+	} else {
+		addr -= b->base;
+	}
+	if (addr == UT64_MAX || addr > b->length) {
 		return -1;
+	}
 	tsize = 2;
 	for (i = len = 0; i < n; i++)
 	for (j = 0; fmt[j]; j++) {
@@ -635,7 +640,7 @@ R_API int r_buf_read_at(RBuffer *b, ut64 addr, ut8 *buf, int len) {
 		}
 		pa = addr - b->base;
 		if (pa + len > b->length) {
-			memset (buf, 0xff, len);
+			memset (buf, b->Oxff, len);
 			len = b->length - pa;
 			if (len < 0) {
 				return 0;
@@ -751,7 +756,7 @@ R_API bool r_buf_resize (RBuffer *b, ut64 newsize) {
 		if (buf_len > 0) {
 			ut8 *buf = malloc (buf_len);
 			if (buf) {
-				memset (buf, 0xff, buf_len);
+				memset (buf, b->Oxff, buf_len);
 				sparse_write (b->sparse, last_addr, buf, buf_len);
 				free (buf);
 				return true;
@@ -764,7 +769,7 @@ R_API bool r_buf_resize (RBuffer *b, ut64 newsize) {
 	if (buf) {
 		ut32 len = R_MIN (newsize, b->length);
 		memcpy (buf, b->buf, len);
-		memset (buf + len, 0xff, newsize - len);
+		memset (buf + len, b->Oxff, newsize - len);
 		/* commit */
 		free (b->buf);
 		b->buf = buf;

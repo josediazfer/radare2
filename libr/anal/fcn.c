@@ -59,7 +59,7 @@ static int cmpaddr(const void *_a, const void *_b) {
 	return (a->addr - b->addr);
 }
 
-static void update_tinyrange_bbs(RAnalFunction *fcn) {
+R_API void r_anal_fcn_update_tinyrange_bbs(RAnalFunction *fcn) {
 	RAnalBlock *bb;
 	RListIter *iter;
 	r_list_sort (fcn->bbs, &cmpaddr);
@@ -94,7 +94,7 @@ R_API int r_anal_fcn_resize(RAnalFunction *fcn, int newsize) {
 			bb->fail = UT64_MAX;
 		}
 	}
-	update_tinyrange_bbs (fcn);
+	r_anal_fcn_update_tinyrange_bbs (fcn);
 	return true;
 }
 
@@ -299,7 +299,7 @@ static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut6
 		ut8 *bbuf = malloc (MAXBBSIZE);\
 		anal->iob.read_at (anal->iob.io, x, bbuf, MAXBBSIZE);\
 		ret = fcn_recurse (anal, fcn, x, bbuf, MAXBBSIZE, depth - 1);\
-		update_tinyrange_bbs (fcn);\
+		r_anal_fcn_update_tinyrange_bbs (fcn);\
 		free (bbuf);\
 }
 
@@ -353,7 +353,8 @@ static ut64 search_reg_val(RAnal *anal, ut8 *buf, ut64 len, ut64 addr, char *reg
 		0
 	};
 	ut64 ret = UT64_MAX;
-	for (offs = 0; offs < len; offs += anal->addrbytes * oplen) {
+	const int addrbytes = anal->iob.io ? anal->iob.io->addrbytes : 1;
+	for (offs = 0; offs < len; offs += addrbytes * oplen) {
 		r_anal_op_fini (&op);
 		if ((oplen = r_anal_op (anal, &op, addr + offs, buf + offs, len - offs)) < 1) {
 			break;
@@ -548,9 +549,9 @@ static int walk_switch(RAnal *anal, RAnalFunction *fcn, ut64 from, ut64 at) {
 }
 
 static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut64 len, int depth) {
-	int continue_after_jump = anal->opt.afterjmp;
-	int noncode = anal->opt.noncode;
-	int addrbytes = anal->addrbytes;
+	const int continue_after_jump = anal->opt.afterjmp;
+	const int noncode = anal->opt.noncode;
+	const int addrbytes = anal->iob.io ? anal->iob.io->addrbytes : 1;
 	RAnalBlock *bb = NULL;
 	RAnalBlock *bbg = NULL;
 	int ret = R_ANAL_RET_END, skip_ret = 0;
@@ -1076,7 +1077,7 @@ repeat:
 			if (anal->cur) {
 				/* if UJMP is in .plt section just skip it */
 				RBinSection *s = anal->binb.get_vsect_at (anal->binb.bin, addr);
-				if (s && s->name) {
+				if (s && s->name[0]) {
 					bool in_plt = strstr (s->name, ".plt") != NULL;
 					if (!in_plt && strstr (s->name, "_stubs") != NULL) {
 						/* for mach0 */
@@ -1247,7 +1248,7 @@ R_API int r_anal_fcn(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut64 
 	fcn->maxstack = 0;
 	ret = fcn_recurse (anal, fcn, addr, buf, len, FCN_DEPTH);
 	// update tinyrange for the function
-	update_tinyrange_bbs (fcn);
+	r_anal_fcn_update_tinyrange_bbs (fcn);
 
 	if (ret == R_ANAL_RET_END && r_anal_fcn_size (fcn)) {   // cfg analysis completed
 		RListIter *iter;
@@ -1365,7 +1366,7 @@ R_API int r_anal_fcn_del_locs(RAnal *anal, ut64 addr) {
 		if (fcn->type != R_ANAL_FCN_TYPE_LOC) {
 			continue;
 		}
-		if (fcn->addr >= f->addr && fcn->addr < (f->addr + r_anal_fcn_size (f))) {
+		if (r_anal_fcn_in (fcn, addr)) {
 			r_list_delete (anal->fcns, iter);
 		}
 	}
@@ -1395,7 +1396,7 @@ R_API int r_anal_fcn_del(RAnal *a, ut64 addr) {
 		RAnalFunction *fcni;
 		RListIter *iter, *iter_tmp;
 		r_list_foreach_safe (a->fcns, iter, iter_tmp, fcni) {
-			if (addr >= fcni->addr && addr < fcni->addr + r_anal_fcn_size (fcni)) {
+			if (r_anal_fcn_in (fcni, addr)) {
 				if (a->cb.on_fcn_delete) {
 					a->cb.on_fcn_delete (a, a->user, fcni);
 				}
@@ -1498,7 +1499,7 @@ R_API int r_anal_fcn_add_bb(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 siz
 		if (bbi) {
 			/* shrink overlapped basic block */
 			bbi->size = addr - (bbi->addr);
-			update_tinyrange_bbs (fcn);
+			r_anal_fcn_update_tinyrange_bbs (fcn);
 		}
 	}
 	if (!bb) {
@@ -1526,7 +1527,7 @@ R_API int r_anal_fcn_add_bb(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 siz
 			}
 		}
 	}
-	update_tinyrange_bbs (fcn);
+	r_anal_fcn_update_tinyrange_bbs (fcn);
 	return true;
 }
 

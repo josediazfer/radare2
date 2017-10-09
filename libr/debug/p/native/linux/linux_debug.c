@@ -38,8 +38,12 @@ const char *linux_reg_profile (RDebug *dbg) {
 	} else {
 #include "reg/linux-x64.h"
 	}
-#elif __ppc__ || __powerpc || __powerpc__ || __POWERPC__
+#elif __powerpc__
+	if (dbg->bits & R_SYS_BITS_32) {
 #include "reg/linux-ppc.h"
+	} else {
+#include "reg/linux-ppc64.h"
+	}
 #else
 #error "Unsupported Linux CPU"
 #endif
@@ -468,6 +472,7 @@ static void linux_attach_all (RDebug *dbg) {
 			if (th->pid && th->pid != dbg->main_pid) {
 				ret = linux_attach_single_pid (dbg, th->pid);
 				if (ret == -1) {
+					eprintf ("PID %d\n", th->pid);
 					perror ("ptrace (PT_ATTACH)");
 				}
 			}
@@ -488,7 +493,7 @@ int linux_attach(RDebug *dbg, int pid) {
 		}
 		int ret = linux_attach_single_pid (dbg, pid);
 		if (ret == -1) {
-			perror ("ptrace (PT_ATTACH)");
+			// ignore perror ("ptrace (PT_ATTACH)");
 		}
 	}
 out:
@@ -905,7 +910,7 @@ int linux_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 			};
 			ret = ptrace (PTRACE_GETREGSET, pid, NT_PRSTATUS, &io);
 			}
-#elif __POWERPC__
+#elif __BSD__ && __POWERPC__ || __sparc__
 			ret = ptrace (PTRACE_GETREGS, pid, &regs, NULL);
 #else
 			/* linux -{arm/x86/x86_64} */
@@ -953,7 +958,7 @@ int linux_reg_write (RDebug *dbg, int type, const ut8 *buf, int size) {
 			.iov_len = sizeof (R_DEBUG_REG_T)
 		};
 		int ret = ptrace (PTRACE_SETREGSET, dbg->pid, NT_PRSTATUS, &io);
-#elif __POWERPC__
+#elif __POWERPC__ || __sparc__
 		int ret = ptrace (PTRACE_SETREGS, dbg->pid, buf, NULL);
 #else
 		int ret = ptrace (PTRACE_SETREGS, dbg->pid, 0, (void*)buf);

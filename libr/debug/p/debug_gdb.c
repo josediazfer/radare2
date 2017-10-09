@@ -279,7 +279,6 @@ static RDebugReasonType r_debug_gdb_wait(RDebug *dbg, int pid) {
 			return R_DEBUG_REASON_UNKNOWN;
 		}
 	}
-	desc->stop_reason.is_valid = false;
 	if (desc->stop_reason.thread.present) {
 		dbg->reason->tid = desc->stop_reason.thread.tid;
 		dbg->pid = desc->stop_reason.thread.pid;
@@ -369,7 +368,7 @@ static const char *r_debug_gdb_reg_profile(RDebug *dbg) {
 	int arch = r_sys_arch_id (dbg->arch);
 	int bits = dbg->anal->bits;
 	check_connection (dbg);
-	if (desc && desc->target.valid) {
+	if (desc && desc->target.valid && desc->target.regprofile) {
 		return strdup (desc->target.regprofile);
 	}
 	switch (arch) {

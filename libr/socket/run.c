@@ -264,7 +264,6 @@ static void restore_saved_fd (int saved, bool resore, int fd) {
 	if (resore) {
 		dup2 (saved, fd);
 	}
-
 	close (saved);
 }
 
@@ -333,7 +332,6 @@ static int handle_redirection(const char *cmd, bool in, bool out, bool err) {
 	//this seems like a really good place to refactor stuff
 	return 0;
 #endif
-
 	if (cmd[0] == '"') {
 #if __UNIX__
 		if (in) {
@@ -888,7 +886,9 @@ R_API int r_run_config_env(RRunProfile *p) {
 	if (p->_preload) {
 #if __APPLE__
 		// 10.6
+#ifndef __MAC_10_7
 		r_sys_setenv ("DYLD_PRELOAD", p->_preload);
+#endif
 		r_sys_setenv ("DYLD_INSERT_LIBRARIES", p->_preload);
 		// 10.8
 		r_sys_setenv ("DYLD_FORCE_FLAT_NAMESPACE", "1");
@@ -943,8 +943,9 @@ R_API int r_run_start(RRunProfile *p) {
 			cpu_type_t cpu;
 #if __i386__ || __x86_64__
 			cpu = CPU_TYPE_I386;
-			if (p->_bits == 64)
+			if (p->_bits == 64) {
 				cpu |= CPU_ARCH_ABI64;
+			}
 #else
 			cpu = CPU_TYPE_ANY;
 #endif

@@ -64,8 +64,8 @@ static int unpack(libgdbr_t *g, struct parse_ctx *ctx, int len) {
 					g->read_buff[g->read_len] = '\0';
 					return 0;
 				}
-				eprintf ("%s: Garbage at end of packet: %s\n",
-					 __func__, g->read_buff + i + 1);
+				eprintf ("%s: Garbage at end of packet: %s (%s)\n",
+					 __func__, g->read_buff + i + 1, g->read_buff + i + 1);
 			}
 			g->read_len = 0;
 			return 0;
@@ -139,9 +139,9 @@ static int unpack(libgdbr_t *g, struct parse_ctx *ctx, int len) {
 	return 1;
 }
 
-int read_packet(libgdbr_t *g) {
+int read_packet(libgdbr_t *g, bool vcont) {
 	struct parse_ctx ctx = { 0 };
-	int ret;
+	int ret, i;
 	if (!g) {
 		eprintf ("Initialize libgdbr_t first\n");
 		return -1;
@@ -159,7 +159,14 @@ int read_packet(libgdbr_t *g) {
 		}
 	}
 	g->data_len = 0;
-	while (r_socket_ready (g->sock, 0, READ_TIMEOUT) > 0) {
+	for (i = 0; i < g->num_retries; vcont ? 0 : i++) {
+		ret = r_socket_ready (g->sock, 0, READ_TIMEOUT);
+		if (ret == 0 && !vcont) {
+			continue;
+		}
+		if (ret <= 0) {
+			return -1;
+		}
 		int sz = r_socket_read (g->sock, (void *)g->read_buff, g->read_max - 1);
 		if (sz <= 0) {
 			eprintf ("%s: read failed\n", __func__);

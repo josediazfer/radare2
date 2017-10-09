@@ -26,6 +26,7 @@
 int gettimeofday (struct timeval* p, void* tz);
 #endif
 #include <sys/time.h>
+#include "r_util/r_addr_interval.h"
 #include "r_util/r_rbtree.h"
 #include "r_util/r_big.h"
 #include "r_util/r_base64.h"
@@ -66,6 +67,7 @@ int gettimeofday (struct timeval* p, void* tz);
 #include "r_util/r_json.h"
 #include "r_util/r_x509.h"
 #include "r_util/r_pkcs7.h"
+#include "r_util/r_interval.h"
 
 #ifdef __cplusplus
 extern "C" {
