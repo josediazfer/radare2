@@ -117,7 +117,7 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 #pragma message ("fix debugger-concept in core")
 #if __WINDOWS__
 			r_debug_select (core->dbg, newpid, newtid);
-			core->dbg->reason.type = R_DEBUG_REASON_NONE;
+			core->dbg->reason->type = R_DEBUG_REASON_NONE;
 #endif
 		}
 		//reopen and attach

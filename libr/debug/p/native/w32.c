@@ -410,20 +410,6 @@ static char *get_w32_excep_name(unsigned long code) {
 	return desc;
 }
 
-static bool fault_by_mem_bp (RDebug *dbg, DEBUG_EVENT *de) {
-	ut64 fault_addr = (ut64)de->u.Exception.ExceptionRecord.ExceptionInformation[1];
-
-	RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, fault_addr, 1);
-	dbg->reason.fault_addr = fault_addr;
-	eprintf("FAULT: %llx\n", fault_addr);
-	if (b) {
-		dbg->reason.bp_type = R_BP_TYPE_MEM;
-		dbg->reason.type = R_DEBUG_REASON_BREAKPOINT;
-		return true;
-	}
-	return false;
-}
-
 static bool debug_excep_event (DEBUG_EVENT *de) {
 	unsigned long code = de->u.Exception.ExceptionRecord.ExceptionCode;
 	bool show_fexcep = false;
@@ -682,7 +668,6 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 		code = de.dwDebugEventCode;
 		tid = de.dwThreadId;
 		pid = de.dwProcessId;
-		dbg->reason.bp_type = R_BP_TYPE_UK;
 		dbg->tid = tid;
 		dbg->pid = pid;
 		/* TODO: DEBUG_CONTROL_C */
@@ -772,13 +757,12 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 				break;
 			case STATUS_GUARD_PAGE_VIOLATION:
 			{
-				ut64 fault_addr = (ut64)de->u.Exception.ExceptionRecord.ExceptionInformation[1];
+				ut64 fault_addr = (ut64)de.u.Exception.ExceptionRecord.ExceptionInformation[1];
 				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, fault_addr, 1);
                                 dbg->reason->fault_addr = fault_addr;
                                 if (b) {
                                         dbg->reason->b = b;
                                         dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
-                                        show_siginfo = false;
 					next_event = 0;
 					break;
                                 }

@@ -30,15 +30,15 @@ static char *get_map_type(MEMORY_BASIC_INFORMATION *mbi) {
 static DWORD perms2map (int perms) {
 	DWORD ret;
 
-	if (R_IO_PERM (perms, R_IO_RWX)) {
+	if (perms == R_IO_RWX) {
 		ret = PAGE_EXECUTE_READWRITE;
-	} else if (R_IO_PERM (perms, R_IO_RW)) {
+	} else if ((perms & R_IO_RW) == R_IO_RW) {
 		ret = PAGE_READWRITE;
-	} else if (R_IO_PERM (perms, R_IO_READ)) {
+	} else if ((perms & R_IO_READ) == R_IO_READ) {
 		ret = PAGE_READONLY;
-	} else if (R_IO_PERM (perms, R_IO_WRITE)) {
+	} else if ((perms & R_IO_WRITE) == R_IO_WRITE) {
 		ret = PAGE_WRITECOPY;
-	} else if (R_IO_PERM (perms, R_IO_EXEC)) {
+	} else if ((perms & R_IO_EXEC) == R_IO_EXEC) {
 		ret = PAGE_EXECUTE;
 	} else {
 		ret = 0;
