@@ -67,6 +67,7 @@ static const char *help_msg_db[] = {
 	"dbts", " <addr>", "Swap Breakpoint Trace",
 	"dbm", " <module> <offset>", "Add a breakpoint at an offset from a module's base",
 	"dbma", " addr size rwx", "Add a memory breakpoint at address",
+	"dbma", " -addr", "Remove a memory breakpoint",
 	"dbn", " [<name>]", "Show or set name for current breakpoint",
 	//
 	"dbi", "", "List breakpoint indexes",
@@ -2921,6 +2922,11 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 		switch (input[2]) {
 		case 'a': // "dbma"
 			if (input[3] == ' ' && input[4]) {
+				if (input[4] == '-') {
+					r_bp_del_type (core->dbg->bp, r_num_math (core->num, input + 5),
+							R_BP_TYPE_MEM);
+					break;
+				}
 				char *p = strchr (input + 4, ' ');
 				if (p) {
 					char *q;

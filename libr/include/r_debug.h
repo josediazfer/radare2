@@ -131,13 +131,8 @@ typedef struct r_debug_reason_t {
 	int tid;
 	int signum;
 	ut64 bp_addr;
-	ut64 timestamp;
 	ut64 addr;
-	ut64 ptr;
 	ut64 fault_addr;
-	int bp_type;
-	bool ign;
-	RList *bps;
 	RBreakpointItem *b; /* localized breakpoint */
 	RDebugRecoilMode recoil_mode; /* what did the user want to do? */
 } RDebugReason;	

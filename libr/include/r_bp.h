@@ -23,12 +23,9 @@ typedef struct r_bp_arch_t {
 	const ut8 *bytes;
 } RBreakpointArch;
 
-enum {
-	R_BP_TYPE_UK,
-	R_BP_TYPE_SW,
-	R_BP_TYPE_HW,
-	R_BP_TYPE_MEM
-};
+#define R_BP_TYPE_SW	1
+#define R_BP_TYPE_HW	(1 << 1)
+#define R_BP_TYPE_MEM	(1 << 2)
 
 typedef struct r_bp_plugin_t {
 	char *name;
@@ -119,6 +116,7 @@ R_API RBreakpoint *r_bp_new(void);
 R_API RBreakpoint *r_bp_free(RBreakpoint *bp);
 
 R_API int r_bp_del(RBreakpoint *bp, ut64 addr);
+R_API int r_bp_del_type(RBreakpoint *bp, ut64 addr, int type);
 R_API int r_bp_del_depth(RBreakpoint *bp, int depth);
 R_API int r_bp_del_all(RBreakpoint *bp);
 

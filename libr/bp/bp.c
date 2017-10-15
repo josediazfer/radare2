@@ -297,11 +297,15 @@ R_API int r_bp_del_depth(RBreakpoint *bp, int depth) {
 }
 
 R_API int r_bp_del(RBreakpoint *bp, ut64 addr) {
+	return r_bp_del_type (bp, addr, R_BP_TYPE_SW | R_BP_TYPE_HW);
+}
+
+R_API int r_bp_del_type(RBreakpoint *bp, ut64 addr, int type) {
 	RListIter *iter;
 	RBreakpointItem *b;
 	/* No _safe loop necessary because we return immediately after the delete. */
 	r_list_foreach (bp->bps, iter, b) {
-		if (b->addr == addr) {
+		if ((b->type & type) && b->addr == addr) {
 			r_list_delete (bp->bps, iter);
 			return true;
 		}
