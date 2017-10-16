@@ -752,17 +752,21 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 				next_event = 0;
 				break;
 			case EXCEPTION_SINGLE_STEP:
+#if __MINGW64__ || _WIN64
+			case 0x4000001e: /* STATUS_WX86_SINGLE_STEP */
+#endif
 				ret = R_DEBUG_REASON_STEP;
 				next_event = 0;
 				break;
 			case STATUS_GUARD_PAGE_VIOLATION:
 			{
 				ut64 fault_addr = (ut64)de.u.Exception.ExceptionRecord.ExceptionInformation[1];
+				
 				RBreakpointItem *b = r_bp_mem_get_in (dbg->bp, fault_addr, 1);
                                 dbg->reason->fault_addr = fault_addr;
                                 if (b) {
                                         dbg->reason->b = b;
-                                        dbg->reason->type = R_DEBUG_REASON_BREAKPOINT;
+					ret = R_DEBUG_REASON_BREAKPOINT;
 					next_event = 0;
 					break;
                                 }

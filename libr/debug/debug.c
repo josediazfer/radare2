@@ -89,6 +89,11 @@ static int hook_esil_mem_read(RAnalEsil *esil, ut64 addr, ut8 *buf, int len) {
 	return 0;
 }
 
+static int hook_esil_reg_write(RAnalEsil *esil, const char *name, ut64 *val) {
+	eprintf ("reg write %s\n", name);
+	return 1;
+}
+
 static void r_debug_esil_tmem_free(RDebugEsilTraceMem *trace_mem) {
 	if (!trace_mem) {
 		return;
@@ -132,6 +137,7 @@ static RDebugEsilTraceMem* r_debug_anal_memrefs(RDebug *dbg, ut64 addr) {
 	trace_mem->wr_list = r_list_newf ((RListFree)free);
 	trace_mem->dbg = dbg;
 	esil->user = trace_mem;
+	esil->cb.hook_reg_write = hook_esil_reg_write;
 	esil->cb.hook_mem_write = hook_esil_mem_write;
 	esil->cb.hook_mem_read = hook_esil_mem_read;
 	esilstr = R_STRBUF_SAFEGET (&op.esil);
@@ -192,6 +198,9 @@ static bool r_debug_mem_bp_hit(RDebug *dbg, RBreakpointItem *b, ut64 pc, bool sh
 			eprintf (" ptr [%"PFMT64x "] execute access", pc);
 		}
 		bp_found = true;
+	}
+	if (bp_found) {
+		eprintf ("fault_addr %llx\n", dbg->reason->fault_addr);
 	}
 	if (show_hitinfo && bp_found) {
 		eprintf("\n");
