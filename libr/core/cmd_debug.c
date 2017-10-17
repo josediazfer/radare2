@@ -4366,8 +4366,15 @@ static int cmd_debug(void *data, const char *input) {
 					P ("baddr=0x%"PFMT64x"\n", r_debug_get_baddr (core->dbg, NULL));
 					P ("pid=%d\n", rdi->pid);
 					P ("tid=%d\n", rdi->tid);
-					P ("uid=%d\n", rdi->uid);
-					P ("gid=%d\n", rdi->gid);
+					if (rdi->uid != -1) {
+						P ("uid=%d\n", rdi->uid);
+					}
+					if (rdi->gid != -1) {
+						P ("gid=%d\n", rdi->gid);
+					}
+					if (rdi->usr) {
+						P ("usr=%s\n", rdi->usr);
+					}
 					if (rdi->exe && *rdi->exe)
 						P ("exe=%s\n", rdi->exe);
 					if (rdi->cmdline && *rdi->cmdline)
@@ -4408,9 +4415,18 @@ static int cmd_debug(void *data, const char *input) {
 					P ("\"tid\":%d,", rdi->tid);
 					P ("\"uid\":%d,", rdi->uid);
 					P ("\"gid\":%d,", rdi->gid);
-					if (rdi->exe) PS("\"exe\":\"%s\",", rdi->exe)
-						if (rdi->cmdline) PS ("\"cmdline\":\"%s\",", rdi->cmdline);
-					if (rdi->cwd) PS ("\"cwd\":\"%s\",", rdi->cwd);
+					if (rdi->usr) {
+						PS("\"usr\":\"%s\",", rdi->usr);
+					}
+					if (rdi->exe) {
+						PS("\"exe\":\"%s\",", rdi->exe);
+					}
+					if (rdi->cmdline) {
+						PS ("\"cmdline\":\"%s\",", rdi->cmdline);
+					}
+					if (rdi->cwd) {
+						PS ("\"cwd\":\"%s\",", rdi->cwd);
+					}
 				}
 				P ("\"stopreason\":%d}\n", stop);
 				break;
