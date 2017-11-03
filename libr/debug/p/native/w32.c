@@ -11,89 +11,28 @@
 #define WINAPI
 #endif
 
-// XXX remove
-#define WIN32_PI(x) x
-#if 0
-// list windows.. required to get list of windows for current pid and send kill signals
-BOOL CALLBACK enumWindowsProc (HWND hwnd, LPARAM lParam) {
+#define PLIB_MAX 512
+#define PTHREAD_MAX 1024
 
-DWORD procid;
+typedef struct{
+	int pid;
+	HANDLE hFile;
+	void* BaseOfDll;
+	char Path[MAX_PATH];
+	char Name[MAX_PATH];
+} LIB_ITEM, *PLIB_ITEM;
 
-GetWindowThreadProcessId (hwnd, &procid);
-
-if ((HANDLE)procid == g_hProc) { staticchar module[1024];
-module[0] = 0;
-
-if (g_softPhoneTitle.Size() > 0) { int rc = GetWindowText (hwnd, module, 1023);
-module[rc] = 0;
-
-}
-
-if (IsWindow(hwnd) && ((g_appTitle.Size() == 0) || (g_appTitle.EqualsNoCase(module)))) {
-g_hWnd = hwnd;
-
-return (false);
-}
-
-}
-
-return (true);
-}
-
-int
-
-findApplicationWindow (void) {
-g_hWnd = NULL;
-
-EnumWindows (enumWindowsProc, 0);
-
-return (0);
-}
-#endif
-
-#if 0
-
-1860 typedef struct _FLOATING_SAVE_AREA {
-1861         DWORD   ControlWord;
-1862         DWORD   StatusWord;
-1863         DWORD   TagWord;
-1864         DWORD   ErrorOffset;
-
-1865         DWORD   ErrorSelector;
-1866         DWORD   DataOffset;
-1867         DWORD   DataSelector;
-1868         BYTE    RegArea[80];
-1869         DWORD   Cr0NpxState;
-1870 } FLOATING_SAVE_AREA;
-
-1871 typedef struct _CONTEXT {
-1872         DWORD   ContextFlags;
-1873         DWORD   Dr0;
-1874         DWORD   Dr1;
-1875         DWORD   Dr2;
-1876         DWORD   Dr3;
-1877         DWORD   Dr6;
-1878         DWORD   Dr7;
-1879         FLOATING_SAVE_AREA FloatSave;
-1880         DWORD   SegGs;
-1881         DWORD   SegFs;
-1882         DWORD   SegEs;
-1883         DWORD   SegDs;
-1884         DWORD   Edi;
-1885         DWORD   Esi;
-1886         DWORD   Ebx;
-1887         DWORD   Edx;
-1888         DWORD   Ecx;
-1889         DWORD   Eax;
-1890         DWORD   Ebp;
-1891         DWORD   Eip;
-1892         DWORD   SegCs;
-1893         DWORD   EFlags;
-1894         DWORD   Esp;
-1895         DWORD   SegSs;
-1896         BYTE    ExtendedRegs[MAXIMUM_SUPPORTED_EXTENSION];
-1897 } CONTEXT;
-#endif
+// thread list
+typedef struct {
+	int pid;
+	int tid;
+	BOOL bFinished;
+	HANDLE hThread;
+	LPVOID lpThreadLocalBase;
+	LPVOID lpStartAddress;
+	PVOID lpThreadEntryPoint;
+	DWORD dwExitCode;
+} THREAD_ITEM, *PTHREAD_ITEM;
 
 typedef struct _SYSTEM_HANDLE
 {
@@ -151,8 +90,6 @@ typedef struct _OBJECT_TYPE_INFORMATION
 	ULONG NonPagedPoolUsage;
 } OBJECT_TYPE_INFORMATION, *POBJECT_TYPE_INFORMATION;
 
-static DWORD (WINAPI *w32_GetModuleBaseName)(HANDLE, HMODULE, LPTSTR, DWORD) = NULL;
-static BOOL (WINAPI *w32_GetModuleInformation)(HANDLE, HMODULE, LPMODULEINFO, DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugActiveProcessStop)(DWORD) = NULL;
 static HANDLE (WINAPI *w32_OpenThread)(DWORD, BOOL, DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugBreakProcess)(HANDLE) = NULL;
@@ -171,8 +108,6 @@ static BOOL (WINAPI *w32_InitializeContext)(PVOID, DWORD, PCONTEXT*, PDWORD) = N
 static BOOL (WINAPI *w32_GetXStateFeaturesMask)(PCONTEXT Context, PDWORD64) = NULL;
 static PVOID(WINAPI *w32_LocateXStateFeature)(PCONTEXT Context, DWORD, PDWORD) = NULL;
 static BOOL (WINAPI *w32_SetXStateFeaturesMask)(PCONTEXT Context, DWORD64) = NULL;
-static DWORD (WINAPI *w32_GetModuleFileNameEx)(HANDLE, HMODULE, LPTSTR, DWORD) = NULL;
-static HANDLE (WINAPI *w32_CreateToolhelp32Snapshot)(DWORD, DWORD) = NULL;
 
 #ifndef XSTATE_GSSE
 #define XSTATE_GSSE 2
@@ -200,104 +135,102 @@ static HANDLE (WINAPI *w32_CreateToolhelp32Snapshot)(DWORD, DWORD) = NULL;
 #ifndef CONTEXT_ALL
 #define CONTEXT_ALL 1048607
 #endif
-static bool w32dbg_SeDebugPrivilege() {
+
+/*  XXX remove global variables */
+LPVOID lstThread = 0;
+PTHREAD_ITEM lstThreadPtr = 0;
+
+LPVOID lstLib = 0;
+PLIB_ITEM lstLibPtr = 0;
+
+static bool enable_dbg_priv() {
 	/////////////////////////////////////////////////////////
 	//   Note: Enabling SeDebugPrivilege adapted from sample
 	//     MSDN @ http://msdn.microsoft.com/en-us/library/aa446619%28VS.85%29.aspx
 	// Enable SeDebugPrivilege
-	bool ret = true;
+	bool ret = false;
 	TOKEN_PRIVILEGES tokenPriv;
 	HANDLE hToken = NULL;
 	LUID luidDebug;
+
 	if (!OpenProcessToken (GetCurrentProcess (),
-			TOKEN_ADJUST_PRIVILEGES, &hToken))
-		return false;
-
-	if (!LookupPrivilegeValue (NULL, SE_DEBUG_NAME, &luidDebug)) {
-		CloseHandle (hToken);
-		return false;
+			TOKEN_ADJUST_PRIVILEGES, &hToken)) {
+		r_sys_perror ("enable_dbg_priv/OpenProcessToken");
+		goto err_enable_dbg_priv;
 	}
-
+	if (!LookupPrivilegeValue (NULL, SE_DEBUG_NAME, &luidDebug)) {
+		r_sys_perror ("enable_dbg_priv/LookupPrivilegeValue");
+		goto err_enable_dbg_priv;
+		
+	}
 	tokenPriv.PrivilegeCount = 1;
 	tokenPriv.Privileges[0].Luid = luidDebug;
 	tokenPriv.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-	if (AdjustTokenPrivileges (hToken, FALSE, &tokenPriv, 0, NULL, NULL) != FALSE) {
-		if (tokenPriv.Privileges[0].Attributes == SE_PRIVILEGE_ENABLED) {
-		//	eprintf ("PRIV ENABLED\n");
-		}
-		// Always successful, even in the cases which lead to OpenProcess failure
-		//	eprintf ("Successfully changed token privileges.\n");
-		// XXX if we cant get the token nobody tells?? wtf
-	} else {
-		eprintf ("Failed to change token privileges 0x%x\n", (int)GetLastError());
-		ret = false;
+	ret = AdjustTokenPrivileges (hToken, FALSE, &tokenPriv, 0, NULL, NULL);
+	if (!ret) {
+		r_sys_perror ("Failed to change token privileges");
 	}
-	CloseHandle (hToken);
+err_enable_dbg_priv:
+	if (hToken) {
+		CloseHandle (hToken);
+	}
 	return ret;
 }
 
 static int w32_dbg_init() {
-	HANDLE lib;
+	HMODULE h_mod;
 
 	/* escalate privs (required for win7/vista) */
-	w32dbg_SeDebugPrivilege ();
+	enable_dbg_priv ();
+	/****** KERNEL32 functions *****/
+	h_mod = GetModuleHandle (TEXT ("kernel32"));
 	/* lookup function pointers for portability */
 	w32_DebugActiveProcessStop = (BOOL (WINAPI *)(DWORD))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")),
-				"DebugActiveProcessStop");
+		GetProcAddress (h_mod,"DebugActiveProcessStop");
 	w32_OpenThread = (HANDLE (WINAPI *)(DWORD, BOOL, DWORD))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")), "OpenThread");
+		GetProcAddress (h_mod, "OpenThread");
 	w32_OpenProcess = (HANDLE (WINAPI *)(DWORD, BOOL, DWORD))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")), "OpenProcess");
+		GetProcAddress (h_mod, "OpenProcess");
 	w32_DebugBreakProcess = (BOOL (WINAPI *)(HANDLE))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")),
-				"DebugBreakProcess");
-	w32_CreateToolhelp32Snapshot = (HANDLE (WINAPI *)(DWORD, DWORD))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")),
-			       "CreateToolhelp32Snapshot");
+		GetProcAddress (h_mod, "DebugBreakProcess");
 	// only windows vista :(
 	w32_GetThreadId = (DWORD (WINAPI *)(HANDLE))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")), "GetThreadId");
+		GetProcAddress (h_mod, "GetThreadId");
 	// from xp1
 	w32_GetProcessId = (DWORD (WINAPI *)(HANDLE))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")), "GetProcessId");
+		GetProcAddress (h_mod, "GetProcessId");
 	w32_QueryFullProcessImageName = (BOOL (WINAPI *)(HANDLE, DWORD, LPTSTR, PDWORD))
-		GetProcAddress (GetModuleHandle (TEXT ("kernel32")), W32_TCALL ("QueryFullProcessImageName"));
+		GetProcAddress (h_mod, W32_TCALL ("QueryFullProcessImageName"));
 	// api to retrieve YMM from w7 sp1
 	w32_GetEnabledXStateFeatures = (ut64 (WINAPI *) ())
-		GetProcAddress(GetModuleHandle (TEXT ("kernel32")), "GetEnabledXStateFeatures");
+		GetProcAddress(h_mod, "GetEnabledXStateFeatures");
 	w32_InitializeContext = (BOOL (WINAPI *) (PVOID, DWORD, PCONTEXT*, PDWORD))
-		GetProcAddress(GetModuleHandle (TEXT ("kernel32")), "InitializeContext");
+		GetProcAddress(h_mod, "InitializeContext");
 	w32_GetXStateFeaturesMask = (BOOL (WINAPI *) (PCONTEXT Context, PDWORD64))
-		GetProcAddress(GetModuleHandle (TEXT ("kernel32")), "GetXStateFeaturesMask");
+		GetProcAddress(h_mod, "GetXStateFeaturesMask");
 	w32_LocateXStateFeature = (PVOID (WINAPI *) (PCONTEXT Context, DWORD ,PDWORD))
-		GetProcAddress(GetModuleHandle (TEXT ("kernel32")), "LocateXStateFeature");
+		GetProcAddress(h_mod, "LocateXStateFeature");
 	w32_SetXStateFeaturesMask = (BOOL (WINAPI *) (PCONTEXT Context, DWORD64))
-		GetProcAddress(GetModuleHandle (TEXT ("kernel32")), "SetXStateFeaturesMask");
-	lib = LoadLibrary (TEXT("psapi.dll"));
-	if(!lib) {
+		GetProcAddress(h_mod, "SetXStateFeaturesMask");
+	/****** PSAPI functions *****/
+	h_mod = LoadLibrary (TEXT("psapi.dll"));
+	if (!h_mod) {
 		eprintf ("Cannot load psapi.dll. Aborting\n");
 		return false;
 	}
 	w32_GetMappedFileName = (DWORD (WINAPI *)(HANDLE, LPVOID, LPTSTR, DWORD))
-		GetProcAddress (lib, W32_TCALL ("GetMappedFileName"));
-	w32_GetModuleBaseName = (DWORD (WINAPI *)(HANDLE, HMODULE, LPTSTR, DWORD))
-		GetProcAddress (lib, W32_TCALL ("GetModuleBaseName"));
-	w32_GetModuleInformation = (BOOL (WINAPI *)(HANDLE, HMODULE, LPMODULEINFO, DWORD))
-		GetProcAddress (lib, "GetModuleInformation");
-	w32_GetModuleFileNameEx = (DWORD (WINAPI *)(HANDLE, HMODULE, LPTSTR, DWORD))
-		GetProcAddress (lib, W32_TCALL ("GetModuleFileNameEx"));
-	lib = LoadLibrary (TEXT("ntdll.dll"));
+		GetProcAddress (h_mod, W32_TCALL ("GetMappedFileName"));
+	/****** NTDLL functions *****/
+	h_mod = GetModuleHandle (TEXT ("ntdll"));
 	w32_NtQuerySystemInformation = (NTSTATUS  (WINAPI *)(ULONG, PVOID, ULONG, PULONG))
-		GetProcAddress (lib, "NtQuerySystemInformation");
+		GetProcAddress (h_mod, "NtQuerySystemInformation");
 	w32_NtDuplicateObject = (NTSTATUS  (WINAPI *)(HANDLE, HANDLE, HANDLE, PHANDLE, ACCESS_MASK, ULONG, ULONG))
-		GetProcAddress (lib, "NtDuplicateObject");
+		GetProcAddress (h_mod, "NtDuplicateObject");
 	w32_NtQueryObject = (NTSTATUS  (WINAPI *)(HANDLE, ULONG, PVOID, ULONG, PULONG))
-		GetProcAddress(lib,"NtQueryObject");
+		GetProcAddress (h_mod, "NtQueryObject");
 	w32_NtQueryInformationThread = (NTSTATUS  (WINAPI *)(HANDLE, ULONG, PVOID, ULONG, PULONG))
-		GetProcAddress (lib, "NtQueryInformationThread");
-	if (!w32_DebugActiveProcessStop || !w32_OpenThread || !w32_DebugBreakProcess ||
-	    !w32_GetModuleBaseName || !w32_GetModuleInformation) {
+		GetProcAddress (h_mod, "NtQueryInformationThread");
+	if (!w32_DebugActiveProcessStop || !w32_OpenThread || !w32_DebugBreakProcess) {
 		// OOPS!
 		eprintf ("debug_init_calls:\n"
 			"DebugActiveProcessStop: 0x%p\n"
@@ -310,21 +243,6 @@ static int w32_dbg_init() {
 	return true;
 }
 
-#if 0
-static HANDLE w32_t2h(pid_t tid) {
-	TH_INFO *th = get_th (tid);
-	if(!th) {
-		/* refresh thread list */
-		w32_dbg_threads (tid);
-
-		/* try to search thread */
-		if(!(th = get_th (tid)))
-			return NULL;
-	}
-	return th->ht;
-}
-#endif
-
 inline static int w32_h2t(HANDLE h) {
 	if (w32_GetThreadId != NULL) // >= Windows Vista
 		return w32_GetThreadId (h);
@@ -333,46 +251,48 @@ inline static int w32_h2t(HANDLE h) {
 	return (int)(size_t)h; // XXX broken
 }
 
-static inline int w32_h2p(HANDLE h) {
-	return w32_GetProcessId (h);
-}
-
 static int w32_first_thread(int pid) {
-	HANDLE th;
-	HANDLE thid;
+	HANDLE h_proc_snap;
 	THREADENTRY32 te32;
-	te32.dwSize = sizeof (THREADENTRY32);
+	int ret = -1;
 
 	if (!w32_OpenThread) {
-		eprintf("w32_thread_list: no w32_OpenThread?\n");
+		eprintf("w32_first_thread: no w32_OpenThread?\n");
 		return -1;
 	}
-	th = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
-	if (th == INVALID_HANDLE_VALUE) {
-		eprintf ("w32_thread_list: invalid handle\n");
-		return -1;
+	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
+	if (h_proc_snap == INVALID_HANDLE_VALUE) {
+		r_sys_perror ("w32_first_thread/CreateToolhelp32Snapshot");
+		goto err_w32_first_thread;
 	}
-	if (!Thread32First (th, &te32)) {
-		CloseHandle (th);
-		eprintf ("w32_thread_list: no thread first\n");
-		return -1;
+	te32.dwSize = sizeof (THREADENTRY32);
+	if (!Thread32First (h_proc_snap, &te32)) {
+		r_sys_perror ("w32_first_thread/Thread32First");
+		goto err_w32_first_thread;
 	}
 	do {
 		/* get all threads of process */
 		if (te32.th32OwnerProcessID == pid) {
-			thid = w32_OpenThread (THREAD_ALL_ACCESS, 0, te32.th32ThreadID);
-			if (!thid) {
+			HANDLE h_th;
+
+			h_th = w32_OpenThread (THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
+			if (!h_th) {
 				r_sys_perror ("w32_first_thread/OpenThread");
-				goto err_load_th;
+				goto err_w32_first_thread;
 			}
-			CloseHandle (th);
-			return te32.th32ThreadID;
+			CloseHandle (h_th);
+			ret = (int)te32.th32ThreadID;
+			break;
 		}
-	} while (Thread32Next (th, &te32));
-err_load_th:
-	eprintf ("Could not find an active thread for pid %d\n", pid);
-	CloseHandle (th);
-	return pid;
+	} while (Thread32Next (h_proc_snap, &te32));
+err_w32_first_thread:
+	if (ret < 0) {
+		eprintf ("Could not find an active thread for pid %d\n", pid);
+	}
+	if (h_proc_snap != INVALID_HANDLE_VALUE) {
+		CloseHandle (h_proc_snap);
+	}
+	return ret;
 }
 
 static char *get_w32_excep_name(unsigned long code) {
@@ -495,24 +415,10 @@ err_get_file_name_from_handle:
 	return NULL;
 }
 
-typedef struct{
-	int pid;
-	HANDLE hFile;
-	void* BaseOfDll;
-	char Path[MAX_PATH];
-	char Name[MAX_PATH];
-} LIB_ITEM, *PLIB_ITEM;
-LPVOID lstLib = 0;
-PLIB_ITEM lstLibPtr = 0;
-/*
-static char * r_debug_get_dll() {
-	return lstLibPtr->Path;
-}
-*/
 static  PLIB_ITEM  r_debug_get_lib_item() {
 	return lstLibPtr;
 }
-#define PLIB_MAX 512
+
 static void r_debug_lstLibAdd(DWORD pid,LPVOID lpBaseOfDll, HANDLE hFile,char * dllname) {
 	int x;
 	if (lstLib == 0)
@@ -550,23 +456,10 @@ static void * r_debug_findlib (void * BaseOfDll) {
 	return NULL;
 }
 
-// thread list
-typedef struct {
-	int pid;
-	int tid;
-	BOOL bFinished;
-	HANDLE hThread;
-	LPVOID lpThreadLocalBase;
-	LPVOID lpStartAddress;
-	PVOID lpThreadEntryPoint;
-	DWORD dwExitCode;
-} THREAD_ITEM, *PTHREAD_ITEM;
-LPVOID lstThread = 0;
-PTHREAD_ITEM lstThreadPtr = 0;
 static  PTHREAD_ITEM  r_debug_get_thread_item () {
 	return lstThreadPtr;
 }
-#define PTHREAD_MAX 1024
+
 static void r_debug_lstThreadAdd (DWORD pid, DWORD tid, HANDLE hThread, LPVOID  lpThreadLocalBase, LPVOID lpStartAddress, BOOL bFinished) {
 	int x;
 	PVOID startAddress = 0;
@@ -751,55 +644,43 @@ static inline int is_pe_hdr(unsigned char *pe_hdr) {
 	return 0;
 }
 
-static HANDLE w32_open_thread (int pid, int tid) {
-	HANDLE thread = w32_OpenThread (THREAD_ALL_ACCESS, 0, tid);
-	if (thread == INVALID_HANDLE_VALUE) {
-		r_sys_perror ("w32_open_thread/OpenThread");
-	}
-	return thread;
-}
-
 RList *w32_thread_list (int pid, RList *list) {
-        HANDLE th;
-        HANDLE thid;
+        HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
         THREADENTRY32 te32;
-
-        te32.dwSize = sizeof(THREADENTRY32);
 
 	if (!w32_OpenThread) {
 		eprintf("w32_thread_list: no w32_OpenThread?\n");
 		return list;
 	}
-        th = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
-        if(th == INVALID_HANDLE_VALUE || !Thread32First (th, &te32))
-                goto err_load_th;
+        h_proc_snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
+        if (h_proc_snap == INVALID_HANDLE_VALUE) {
+		r_sys_perror ("w32_thread_list/OpenThread");
+                goto err_w32_thread_list;
+	}
+        te32.dwSize = sizeof(THREADENTRY32);
+	if (!Thread32First (h_proc_snap, &te32)) {
+		r_sys_perror ("w32_thread_list/Thread32First");
+                goto err_w32_thread_list;
+	}
         do {
                 /* get all threads of process */
                 if (te32.th32OwnerProcessID == pid) {
-			//te32.dwFlags);
+			HANDLE h_th;
+
                         /* open a new handler */
-			// XXX: fd leak?
-#if 0
- 75 typedef struct tagTHREADENTRY32 {
- 76         DWORD dwSize;
- 77         DWORD cntUsage;
- 78         DWORD th32ThreadID;
- 79         DWORD th32OwnerProcessID;
- 80         LONG tpBasePri;
- 81         LONG tpDeltaPri;
- 82         DWORD dwFlags;
-#endif
-			thid = w32_OpenThread (THREAD_ALL_ACCESS, 0, te32.th32ThreadID);
-			if (!thid) {
+			h_th = w32_OpenThread (THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
+			if (!h_th) {
 				r_sys_perror ("w32_thread_list/OpenThread");
-                                goto err_load_th;
+                                goto err_w32_thread_list;
 			}
+			CloseHandle (h_th);
 			r_list_append (list, r_debug_pid_new ("???", te32.th32ThreadID, 0, 's', 0));
                 }
-        } while (Thread32Next (th, &te32));
-err_load_th:
-        if(th != INVALID_HANDLE_VALUE)
-                CloseHandle (th);
+        } while (Thread32Next (h_proc_snap, &te32));
+err_w32_thread_list:
+        if (h_proc_snap != INVALID_HANDLE_VALUE) {
+                CloseHandle (h_proc_snap);
+	}
 	return list;
 }
 
@@ -814,10 +695,9 @@ static RDebugPid *build_debug_pid(PROCESSENTRY32 *pe) {
 	*image_name = '\0';
 	if (process) {
 		if (w32_QueryFullProcessImageName) {
-			eprintf ("HOLA");
 			w32_QueryFullProcessImageName (process, 0, image_name, &length);
 		}
-		CloseHandle(process);
+		CloseHandle (process);
 	}
 	if (*image_name) {
 		name = r_sys_conv_utf16_to_utf8 (image_name);
@@ -830,20 +710,19 @@ static RDebugPid *build_debug_pid(PROCESSENTRY32 *pe) {
 }
 
 RList *w32_pids (int pid, RList *list) {
-	HANDLE process_snapshot;
+	HANDLE h_proc_snap;
 	PROCESSENTRY32 pe;
-	pe.dwSize = sizeof (PROCESSENTRY32);
-	int show_all_pids = pid == 0;
+	int show_all_pids = (pid == 0);
 
-	process_snapshot = CreateToolhelp32Snapshot (TH32CS_SNAPPROCESS, pid);
-	if (process_snapshot == INVALID_HANDLE_VALUE) {
+	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPPROCESS, pid);
+	if (h_proc_snap == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("w32_pids/CreateToolhelp32Snapshot");
-		return list;
+		goto err_w32_pids;
 	}
-	if (!Process32First (process_snapshot, &pe)) {
+	pe.dwSize = sizeof (PROCESSENTRY32);
+	if (!Process32First (h_proc_snap, &pe)) {
 		r_sys_perror ("w32_pids/Process32First");
-		CloseHandle (process_snapshot);
-		return list;
+		goto err_w32_pids;
 	}
 	do {
 		if (show_all_pids ||
@@ -855,9 +734,11 @@ RList *w32_pids (int pid, RList *list) {
 				r_list_append (list, debug_pid);
 			}
 		}
-	} while (Process32Next (process_snapshot, &pe));
-
-	CloseHandle (process_snapshot);
+	} while (Process32Next (h_proc_snap, &pe));
+err_w32_pids:
+	if (h_proc_snap != INVALID_HANDLE_VALUE) {
+		CloseHandle (h_proc_snap);
+	}
 	return list;
 }
 
@@ -912,7 +793,7 @@ err_w32_break_process:
 	}
 }
 
-static int GetAVX (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
+static int get_avx (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
 	BOOL Success;
 	int nRegs = 0, Index = 0;
 	DWORD ContextSize = 0;
@@ -922,44 +803,44 @@ static int GetAVX (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
 	ut128 * Ymm = NULL;
 	void * buffer = NULL;
 	PCONTEXT Context;
-	if (w32_GetEnabledXStateFeatures == (ut64 (WINAPI *) ())-1) {
+
+	if (!w32_GetEnabledXStateFeatures) {
 		return 0;
 	}
 	// Check for AVX extension
-	FeatureMask = w32_GetEnabledXStateFeatures();
+	FeatureMask = w32_GetEnabledXStateFeatures ();
 	if ((FeatureMask & XSTATE_MASK_AVX) == 0) {
-		return 0;
+		r_sys_perror ("get_avx/GetEnabledXStateFeatures");
+		goto err_get_avx;
 	}
-	Success = w32_InitializeContext(NULL, CONTEXT_ALL | CONTEXT_XSTATE, NULL, &ContextSize);
+	Success = w32_InitializeContext (NULL, CONTEXT_ALL | CONTEXT_XSTATE, NULL, &ContextSize);
 	if ((Success == TRUE) || (GetLastError() != ERROR_INSUFFICIENT_BUFFER)) {
-		return 0;
+		r_sys_perror ("get_avx/InitializeContext");
+		goto err_get_avx;
 	}
-	buffer = malloc(ContextSize);
-	if (buffer == NULL) {
-		return 0;
+	buffer = malloc (ContextSize);
+	if (!buffer) {
+		perror ("get_avx/malloc");
+		goto err_get_avx;
 	}
-	Success = w32_InitializeContext(buffer, CONTEXT_ALL | CONTEXT_XSTATE, &Context, &ContextSize);
-	if (Success == FALSE) {
-		free(buffer);
-		return 0;
+	if (!w32_InitializeContext (buffer, CONTEXT_ALL | CONTEXT_XSTATE, &Context, &ContextSize)) {
+		r_sys_perror ("get_avx/InitializeContext buffer");
+		goto err_get_avx;
 	}
-	Success = w32_SetXStateFeaturesMask(Context, XSTATE_MASK_AVX);
-	if (Success == FALSE) {
-		free(buffer);
-		return 0;
+	if (!w32_SetXStateFeaturesMask (Context, XSTATE_MASK_AVX)) {
+		r_sys_perror ("get_avx/SetXStateFeaturesMask");
+		goto err_get_avx;
 	}
-	Success = GetThreadContext(hThread, Context);
-	if (Success == FALSE) {
-		free(buffer);
-		return 0;
+	if (!GetThreadContext (hThread, Context)) {
+		r_sys_perror ("get_avx/GetThreadContext");
+		goto err_get_avx;
 	}
-	Success = w32_GetXStateFeaturesMask(Context, &FeatureMask);
-	if (Success == FALSE) {
-		free(buffer);
-		return 0;
+	if (!w32_GetXStateFeaturesMask (Context, &FeatureMask)) {
+		r_sys_perror ("get_avx/GetXStateFeaturesMask");
+		goto err_get_avx;
 	}
-	Xmm = (ut128 *)w32_LocateXStateFeature(Context, XSTATE_LEGACY_SSE, &FeatureLength);
-        nRegs = FeatureLength / sizeof(*Xmm);
+	Xmm = (ut128 *)w32_LocateXStateFeature (Context, XSTATE_LEGACY_SSE, &FeatureLength);
+        nRegs = FeatureLength / sizeof (*Xmm);
 	for (Index = 0; Index < nRegs; Index++) {
 		ymm[Index].High = 0;
 		xmm[Index].High = 0;
@@ -980,11 +861,12 @@ static int GetAVX (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
 			ymm[Index].Low = Ymm[Index].Low;
 		}
 	}
+err_get_avx:
 	free(buffer);
 	return nRegs;
 }
 
-static void printwincontext(HANDLE hThread, CONTEXT * ctx) {
+static void show_ctx(HANDLE hThread, CONTEXT * ctx) {
 	ut128 xmm[16];
 	ut128 ymm[16];
 	ut80 st[8];
@@ -992,10 +874,10 @@ static void printwincontext(HANDLE hThread, CONTEXT * ctx) {
 	ut16 top = 0;
 	int x = 0, nxmm = 0, nymm = 0;
 #if __MINGW64__ || _WIN64
-	eprintf ("ControlWord   = %08x StatusWord   = %08x\n", ctx->FltSave.ControlWord, ctx->FltSave.StatusWord);
-	eprintf ("MxCsr         = %08x TagWord      = %08x\n", ctx->MxCsr, ctx->FltSave.TagWord);
-	eprintf ("ErrorOffset   = %08x DataOffset   = %08x\n", ctx->FltSave.ErrorOffset, ctx->FltSave.DataOffset);
-	eprintf ("ErrorSelector = %08x DataSelector = %08x\n", ctx->FltSave.ErrorSelector, ctx->FltSave.DataSelector);
+	eprintf ("ControlWord   = %08x StatusWord   = %08x\n", (ut32)ctx->FltSave.ControlWord, (ut32)ctx->FltSave.StatusWord);
+	eprintf ("MxCsr         = %08x TagWord      = %08x\n", (ut32)ctx->MxCsr, (ut32)ctx->FltSave.TagWord);
+	eprintf ("ErrorOffset   = %08x DataOffset   = %08x\n", (ut32)ctx->FltSave.ErrorOffset, (ut32)ctx->FltSave.DataOffset);
+	eprintf ("ErrorSelector = %08x DataSelector = %08x\n", (ut32)ctx->FltSave.ErrorSelector, (ut32)ctx->FltSave.DataSelector);
 	for (x = 0; x < 8; x++) {
 		st[x].Low = ctx->FltSave.FloatRegisters[x].Low;
 		st[x].High = (ut16)ctx->FltSave.FloatRegisters[x].High;
@@ -1052,7 +934,7 @@ static void printwincontext(HANDLE hThread, CONTEXT * ctx) {
 		eprintf ("XMM%i %016"PFMT64x" %016"PFMT64x"\n", x, xmm[x].High, xmm[x].Low);
 	}
 	// show Ymm regs
-	nymm = GetAVX (hThread, &xmm, &ymm);
+	nymm = get_avx (hThread, (ut128 *)&xmm, (ut128 *)&ymm);
 	if (nymm) {
 		for (x = 0; x < nymm; x++) {
 			eprintf ("Ymm%d: %016"PFMT64x" %016"PFMT64x" %016"PFMT64x" %016"PFMT64x"\n", x, ymm[x].High, ymm[x].Low, xmm[x].High, xmm[x].Low );
@@ -1067,55 +949,72 @@ static int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 	CONTEXT ctx __attribute__ ((aligned (16)));
 #endif
 	int showfpu = false;
-	int pid = dbg->pid;
 	int tid = dbg->tid;
-	HANDLE hThread = NULL;
+	int ret_size = 0;
+	HANDLE h_th;
+
 	if (type < -1) {
 		showfpu = true; // hack for debugging
 		type = -type;
 	}
-	hThread = w32_open_thread (pid, tid);
+	h_th = w32_OpenThread (THREAD_ALL_ACCESS, FALSE, tid);
+	if (!h_th) {
+		r_sys_perror ("w32_reg_read/OpenThread");
+		goto err_w32_reg_read;
+	}
 	memset(&ctx, 0, sizeof (CONTEXT));
 	ctx.ContextFlags = CONTEXT_ALL ;
-	if (GetThreadContext (hThread, &ctx) == TRUE) {
-		if (type == R_REG_TYPE_GPR) {
-			if (size > sizeof (CONTEXT)) {
-				size = sizeof (CONTEXT);
-			}
-			memcpy (buf, &ctx, size);
-		} else {
-			size = 0;
-		}
-	} else {
+	if (!GetThreadContext (h_th, &ctx)) {
 		r_sys_perror ("w32_reg_read/GetThreadContext");
-		size = 0;
+		goto err_w32_reg_read;
 	}
+	if (type == R_REG_TYPE_GPR) {
+		if (size > sizeof (CONTEXT)) {
+			ret_size = sizeof (CONTEXT);
+		} else {
+			ret_size = size;
+		}
+		memcpy (buf, &ctx, ret_size);
+	} 
 	if (showfpu) {
-		printwincontext (hThread, &ctx);
+		show_ctx (h_th, &ctx);
 	}
-	CloseHandle(hThread);
-	return size;
+err_w32_reg_read:
+	if (h_th) {
+		CloseHandle (h_th);
+	}
+	return ret_size;
 }
 
 static int w32_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
 	BOOL ret = false;
-	HANDLE thread;
+	HANDLE h_th;
 #if _MSC_VER
 	CONTEXT ctx;
 #else
 	CONTEXT ctx __attribute__((aligned (16)));
 #endif
-	thread = w32_open_thread (dbg->pid, dbg->tid);
+	h_th = w32_OpenThread (THREAD_ALL_ACCESS, FALSE, dbg->tid);
+	if (!h_th) {
+		r_sys_perror ("w32_reg_write/OpenThread");
+		goto err_w32_reg_write;
+	}
 	ctx.ContextFlags = CONTEXT_ALL;
-	GetThreadContext (thread, &ctx);
+	if (!GetThreadContext (h_th, &ctx)) {
+		r_sys_perror ("w32_reg_write/GetThreadContext");
+		goto err_w32_reg_write;
+	}
 	if (type == R_REG_TYPE_GPR) {
 		if (size > sizeof (CONTEXT)) {
 			size = sizeof (CONTEXT);
 		}
 		memcpy (&ctx, buf, size);
-		ret = SetThreadContext (thread, &ctx)? true: false;
+		ret = SetThreadContext (h_th, &ctx)? true: false;
 	}
-	CloseHandle (thread);
+err_w32_reg_write:
+	if (h_th) {
+		CloseHandle (h_th);
+	}
 	return ret;
 }
 

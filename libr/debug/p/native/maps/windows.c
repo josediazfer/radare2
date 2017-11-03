@@ -82,7 +82,7 @@ static RList *w32_dbg_modules(RDebug *dbg) {
 #ifndef __MINGW32__
 	flags |= TH32CS_SNAPMODULE32;
 #endif
-	HANDLE h_mod_snap = w32_CreateToolhelp32Snapshot (flags, dbg->pid);
+	HANDLE h_mod_snap = CreateToolhelp32Snapshot (flags, dbg->pid);
 
 	if (!h_mod_snap) {
 		r_sys_perror ("w32_dbg_modules/CreateToolhelp32Snapshot");

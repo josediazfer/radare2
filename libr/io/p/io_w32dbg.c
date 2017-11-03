@@ -119,9 +119,11 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 			return NULL;
 		}
 		dbg->pid = atoi (file + 9);
-		if (__attach (dbg) == -1) {
-			free (dbg);
-			return NULL;
+		if(!strncmp (file, "attach://", 9)) {
+			if (__attach (dbg) == -1) {
+				free (dbg);
+				return NULL;
+			}
 		}
 		pidpath = r_sys_pid_to_path (dbg->pid);
 		ret = r_io_desc_new (io, &r_io_plugin_w32dbg,
