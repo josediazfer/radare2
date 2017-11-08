@@ -326,16 +326,9 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 	RDebugReasonType reason = R_DEBUG_REASON_UNKNOWN;
 
 #if __WINDOWS__ && !__CYGWIN__
-	RDebugW32 *dbg_w32;
-
-	if (dbg->native_ptr) {
-		dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	} else {
-		dbg_w32 = R_NEW0 (RDebugW32);
-		dbg->native_ptr = dbg_w32;
-	}
 	reason = w32_dbg_wait (dbg, pid);
 	if (reason == R_DEBUG_REASON_NEW_LIB) {
+		RDebugW32 *dbg_w32 = w32_dbg_get (dbg);
 		if (dbg_w32->lib_info) {
 			if (tracelib (dbg, pid, "load", dbg_w32->lib_info)) {
 				reason = R_DEBUG_REASON_TRAP;
@@ -365,6 +358,7 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 			eprintf ("loading unknown library.\n");
 		}
 	} else if (reason == R_DEBUG_REASON_EXIT_LIB) {
+		RDebugW32 *dbg_w32 = w32_dbg_get (dbg);
 		if (dbg_w32->lib_info) {
 			if (tracelib (dbg, pid, "unload", dbg_w32->lib_info)) {
 				reason = R_DEBUG_REASON_TRAP;
@@ -373,9 +367,11 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 			eprintf ("unloading unknown library.\n");
 		}
 	} else if (reason == R_DEBUG_REASON_NEW_TID) {
+		RDebugW32 *dbg_w32 = w32_dbg_get (dbg);
 		RDebugW32ThreadInfo *item = &dbg_w32->th_info;
 		eprintf ("(%d) created thread %d (start @ %08"PFMT64x")\n", pid, dbg->tid, item->entry_addr);
 	} else if (reason == R_DEBUG_REASON_EXIT_TID) {
+		RDebugW32 *dbg_w32 = w32_dbg_get (dbg);
 		RDebugW32ThreadInfo *item = &dbg_w32->th_info;
 		eprintf ("(%d) finished thread %d exit code %d\n", pid, dbg->tid, item->exit_code);
 	}
@@ -1764,9 +1760,8 @@ static bool r_debug_gcore (RDebug *dbg, RBuffer *dest) {
 
 static void r_debug_native_free (RDebug *dbg) {
 #if __WINDOWS__ && !__CYGWIN__
-	w32_dbg_native_free ((RDebugW32 *)dbg->native_ptr);
+	w32_dbg_free (dbg);
 #endif
-	dbg->native_ptr = NULL;
 }
 
 struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {

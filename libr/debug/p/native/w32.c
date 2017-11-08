@@ -164,13 +164,14 @@ err_enable_dbg_priv:
 	return ret;
 }
 
-static void r_lib_info_free (RDebugW32LibInfo *lib_info) {
+static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
 	free (lib_info->path);
 	free (lib_info->name);
 	free (lib_info);
 }
 
-static void w32_dbg_native_free(RDebugW32 *dbg_w32) {
+static void w32_dbg_free(RDebug *dbg) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	if (dbg_w32) {
 		r_list_free (dbg_w32->libs_loaded_list);
 		dbg_w32->libs_loaded_list = NULL;
@@ -178,7 +179,20 @@ static void w32_dbg_native_free(RDebugW32 *dbg_w32) {
 			r_lib_info_free (dbg_w32->lib_info);
 		}
 		dbg_w32->lib_info = NULL;
+		dbg->native_ptr = NULL;
 	}
+}
+
+static RDebugW32 *w32_dbg_get(RDebug *dbg) {
+	RDebugW32 *dbg_w32;
+
+	if (dbg->native_ptr) {
+		dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	} else {
+		dbg_w32 = R_NEW0 (RDebugW32);
+		dbg->native_ptr = dbg_w32;
+	}
+	return dbg_w32;
 }
 
 static int w32_dbg_init() {
@@ -255,10 +269,6 @@ static int w32_first_thread(int pid) {
 	THREADENTRY32 te32;
 	int ret = -1;
 
-	if (!OpenThread) {
-		eprintf("w32_first_thread: no OpenThread?\n");
-		return -1;
-	}
 	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
 	if (h_proc_snap == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("w32_first_thread/CreateToolhelp32Snapshot");
@@ -434,7 +444,7 @@ static char *get_lib_from_mod (RDebug *dbg, ut64 lib_addr) {
 }
 
 static void set_lib_info(RDebug *dbg, DEBUG_EVENT *de, bool loaded) {
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32 *dbg_w32 = w32_dbg_get (dbg);
 	char *path = NULL;
 	RDebugW32LibInfo *lib_info;
 	RList *libs_loaded_list;
@@ -503,7 +513,7 @@ err_set_lib_info:
 }
 
 static void set_thread_info(RDebug *dbg, DEBUG_EVENT *de) {
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32 *dbg_w32 = w32_dbg_get (dbg);
 	RDebugW32ThreadInfo *th_info = &dbg_w32->th_info;
 	HANDLE h_th;
 	PVOID th_entry_addr;
