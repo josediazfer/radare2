@@ -77,9 +77,9 @@ static inline RDebugMap *add_map_reg(RList *list, const char *name, MEMORY_BASIC
 static RList *w32_dbg_modules(RDebug *dbg) {
 	MODULEENTRY32 me32;
 	RDebugMap *mr;
-	RList *list = r_list_new ();
+	RList *list = r_list_newf ((RListFree)r_debug_map_free);
 	DWORD flags = TH32CS_SNAPMODULE;
-#ifndef __MINGW32__
+#if __MINGW64__ || _WIN64
 	flags |= TH32CS_SNAPMODULE32;
 #endif
 	HANDLE h_mod_snap = CreateToolhelp32Snapshot (flags, dbg->pid);
@@ -101,9 +101,7 @@ static RList *w32_dbg_modules(RDebug *dbg) {
 		free (mod_name);
 		if (mr) {
 			mr->file = r_sys_conv_utf16_to_utf8 (me32.szExePath);
-			if (mr->file) {
-				r_list_append (list, mr);
-			}
+			r_list_append (list, mr);
 		}
 	} while (Module32Next (h_mod_snap, &me32));
 err_w32_dbg_modules:
@@ -242,12 +240,12 @@ static RList *w32_dbg_maps(RDebug *dbg) {
 	MEMORY_BASIC_INFORMATION mbi;
 	HANDLE h_proc;
 	RWinModInfo mod_inf = {0};
-	RList *map_list = r_list_new(), *mod_list = NULL;
+	RList *map_list = r_list_newf((RListFree)r_debug_map_free), *mod_list = NULL;
 
 	GetSystemInfo (&si);
-	h_proc = w32_OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dbg->pid);
+	h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dbg->pid);
 	if (!h_proc) {
-		r_sys_perror ("w32_dbg_maps/w32_OpenProcess");
+		r_sys_perror ("w32_dbg_maps/OpenProcess");
 		goto err_w32_dbg_maps;
 	}
 	cur_addr = si.lpMinimumApplicationAddress;

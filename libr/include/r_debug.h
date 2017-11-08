@@ -286,7 +286,6 @@ typedef struct r_debug_t {
 	RReg *reg;
 	const char *creg; // current register value
 	RBreakpoint *bp;
-	void *user; // XXX(jjd): unused?? meant for caller's use??
 	char *snap_path;
 
 	/* io */
@@ -307,6 +306,7 @@ typedef struct r_debug_t {
 	int _mode;
 	RNum *num;
 	REgg *egg;
+	void *native_ptr; /* address to internal struct used by native code */
 } RDebug;
 
 typedef struct r_debug_desc_plugin_t {
@@ -356,6 +356,7 @@ typedef struct r_debug_plugin_t {
 	int (*startv)(int argc, char **argv);
 	int (*attach)(RDebug *dbg, int pid);
 	int (*detach)(RDebug *dbg, int pid);
+	void (*free)(RDebug *dbg);
 	int (*select)(int pid, int tid);
 	RList *(*threads)(RDebug *dbg, int pid);
 	RList *(*pids)(RDebug *dbg, int pid);

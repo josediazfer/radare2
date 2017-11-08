@@ -160,24 +160,10 @@ static int r_debug_native_step (RDebug *dbg) {
 
 // return thread id
 static int r_debug_native_attach (RDebug *dbg, int pid) {
-#if 0
-	if (!dbg || pid == dbg->pid)
-		return dbg->tid;
-#endif
 #if __linux__
 	return linux_attach (dbg, pid);
 #elif __WINDOWS__ && !__CYGWIN__
-	int ret;
-	HANDLE process = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
-	if (process != (HANDLE)NULL && DebugActiveProcess (pid)) {
-		ret = w32_first_thread (pid);
-	} else {
-		ret = -1;
-	}
-	// XXX: What is this for?
-	ret = w32_first_thread (pid);
-	CloseHandle (process);
-	return ret;
+	return w32_dbg_attach (dbg, pid);
 #elif __CYGWIN__
 	#warning "r_debug_native_attach not supported on this platform"
 	return -1;
@@ -200,7 +186,7 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 
 static int r_debug_native_detach (RDebug *dbg, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_DebugActiveProcessStop (pid)? 0 : -1;
+	return w32_dbg_detach (dbg, pid);
 #elif __CYGWIN__
 	#warning "r_debug_native_detach not supported on this platform"
 	return -1;
@@ -243,8 +229,8 @@ static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 	DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
 		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
 	if (ContinueDebugEvent (pid, tid, continue_status) == 0) {
+		eprintf ("failed debug_contp pid %d tid %d\n", pid, tid);
 		r_sys_perror ("r_debug_native_continue/ContinueDebugEvent");
-		eprintf ("debug_contp: error\n");
 		return false;
 	}
 	return tid;
@@ -307,7 +293,7 @@ static RDebugInfo* r_debug_native_info (RDebug *dbg, const char *arg) {
 }
 
 #if __WINDOWS__ && !__CYGWIN__
-static bool tracelib(RDebug *dbg, const char *mode, PLIB_ITEM item) {
+static bool tracelib(RDebug *dbg, int pid, const char *mode, RDebugW32LibInfo *item) {
 	const char *needle = NULL;
 	int tmp = 0;
 	if (mode) {
@@ -316,10 +302,16 @@ static bool tracelib(RDebug *dbg, const char *mode, PLIB_ITEM item) {
 		case 'u': needle = dbg->glob_unlibs; break;
 		}
 	}
-	eprintf ("(%d) %sing library at %p (%s) %s\n", item->pid, mode,
-		item->BaseOfDll, item->Path, item->Name);
+	eprintf ("(%d) %sing library at %08"PFMT64x, pid, mode, item->base_addr);
+	if (item->path) {
+		printf (" (%s)", item->path);
+	}
+	if (item->name) {
+		printf (" %s", item->name);
+	}
+	printf ("\n");
 	if (needle && strlen (needle)) {
-		tmp = r_str_glob (item->Name, needle);
+		tmp = r_str_glob (item->name, needle);
 	}
 	return !mode || !needle || tmp ;
 }
@@ -334,23 +326,28 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 	RDebugReasonType reason = R_DEBUG_REASON_UNKNOWN;
 
 #if __WINDOWS__ && !__CYGWIN__
+	RDebugW32 *dbg_w32;
+
+	if (dbg->native_ptr) {
+		dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	} else {
+		dbg_w32 = R_NEW0 (RDebugW32);
+		dbg->native_ptr = dbg_w32;
+	}
 	reason = w32_dbg_wait (dbg, pid);
 	if (reason == R_DEBUG_REASON_NEW_LIB) {
-		RDebugInfo *r = r_debug_native_info (dbg, "");
-		if (r && r->lib) {
-			if (tracelib (dbg, "load", r->lib)) {
+		if (dbg_w32->lib_info) {
+			if (tracelib (dbg, pid, "load", dbg_w32->lib_info)) {
 				reason = R_DEBUG_REASON_TRAP;
 			}
-			r_debug_info_free (r);
-
 			/* Check if autoload PDB is set, and load PDB information if yes */
 			RCore* core = dbg->corebind.core;
 			bool autoload_pdb = dbg->corebind.cfggeti (core, "pdb.autoload");
 			if (autoload_pdb) {
-				char* o_res = dbg->corebind.cmdstrf (core, "o %s", ((PLIB_ITEM)(r->lib))->Path);
+				char* o_res = dbg->corebind.cmdstrf (core, "o %s", dbg_w32->lib_info->path);
 				// File exists since we loaded it, however the "o" command fails sometimes hence the while loop
 				while (*o_res == 0) {
-					o_res = dbg->corebind.cmdstrf (core, "o %s", ((PLIB_ITEM)(r->lib))->Path);
+					o_res = dbg->corebind.cmdstrf (core, "o %s", dbg_w32->lib_info->path);
 				}
 				int fd = atoi (o_res);
 				dbg->corebind.cmdf (core, "o %d", fd);
@@ -365,33 +362,22 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 				dbg->corebind.cmdf (core, "o-%d", fd);
 			}
 		} else {
-			eprintf ("Loading unknown library.\n");
+			eprintf ("loading unknown library.\n");
 		}
 	} else if (reason == R_DEBUG_REASON_EXIT_LIB) {
-		RDebugInfo *r = r_debug_native_info (dbg, "");
-		if (r && r->lib) {
-			if (tracelib (dbg, "unload", r->lib)) {
+		if (dbg_w32->lib_info) {
+			if (tracelib (dbg, pid, "unload", dbg_w32->lib_info)) {
 				reason = R_DEBUG_REASON_TRAP;
 			}
-			r_debug_info_free (r);
 		} else {
-			eprintf ("Unloading unknown library.\n");
+			eprintf ("unloading unknown library.\n");
 		}
 	} else if (reason == R_DEBUG_REASON_NEW_TID) {
-		RDebugInfo *r = r_debug_native_info (dbg, "");
-		if (r && r->thread) {
-			PTHREAD_ITEM item = r->thread;
-			eprintf ("(%d) Created thread %d (start @ %p)\n", item->pid, item->tid, item->lpStartAddress);
-			r_debug_info_free (r);
-		}
-
+		RDebugW32ThreadInfo *item = &dbg_w32->th_info;
+		eprintf ("(%d) created thread %d (start @ %08"PFMT64x")\n", pid, dbg->tid, item->entry_addr);
 	} else if (reason == R_DEBUG_REASON_EXIT_TID) {
-		RDebugInfo *r = r_debug_native_info (dbg, "");
-		if (r && r->thread) {
-			PTHREAD_ITEM item = r->thread;
-			eprintf ("(%d) Finished thread %d Exit code %d\n", (ut32)item->pid, (ut32)item->tid, (ut32)item->dwExitCode);
-			r_debug_info_free (r);
-		}
+		RDebugW32ThreadInfo *item = &dbg_w32->th_info;
+		eprintf ("(%d) finished thread %d exit code %d\n", pid, dbg->tid, item->exit_code);
 	}
 #else
 	if (pid == -1) {
@@ -424,13 +410,13 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 	if (reason == R_DEBUG_REASON_NEW_TID) {
 		RDebugInfo *r = r_debug_native_info (dbg, "");
 		if (r) {
-			eprintf ("(%d) Created thread %d\n", r->pid, r->tid);
+			eprintf ("(%d) created thread %d\n", r->pid, r->tid);
 			r_debug_info_free (r);
 		}
 	} else if (reason == R_DEBUG_REASON_EXIT_TID) {
 		RDebugInfo *r = r_debug_native_info (dbg, "");
 		if (r) {
-			eprintf ("(%d) Finished thread %d Exit code\n", r->pid, r->tid);
+			eprintf ("(%d) finished thread %d exit code\n", r->pid, r->tid);
 			r_debug_info_free (r);
 		}
 	}
@@ -1070,7 +1056,7 @@ static RDebugMap* r_debug_native_map_alloc (RDebug *dbg, ut64 addr, int size) {
 #elif __WINDOWS__ && !__CYGWIN__
 	RDebugMap *map = NULL;
 	LPVOID base = NULL;
-	HANDLE process = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
+	HANDLE process = OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
 	if (process == INVALID_HANDLE_VALUE) {
 		return map;
 	}
@@ -1098,7 +1084,7 @@ static int r_debug_native_map_dealloc (RDebug *dbg, ut64 addr, int size) {
 	return xnu_map_dealloc (dbg, addr, size);
 
 #elif __WINDOWS__ && !__CYGWIN__
-	HANDLE process = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->tid);
+	HANDLE process = OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->tid);
 	if (process == INVALID_HANDLE_VALUE) {
 		return false;
 	}
@@ -1530,7 +1516,7 @@ static RList *win_desc_list (int pid) {
 	NTSTATUS status;
 	ULONG handleInfoSize = 0x10000;
 	LPVOID buff;
-	if (!(processHandle = w32_OpenProcess (0x0040, FALSE, pid))) {
+	if (!(processHandle = OpenProcess (0x0040, FALSE, pid))) {
 		eprintf ("win_desc_list: Error opening process.\n");
 		return NULL;
 	}
@@ -1696,7 +1682,7 @@ static int r_debug_native_map_protect (RDebug *dbg, ut64 addr, int size, int per
 #if __WINDOWS__ && !__CYGWIN__
 	DWORD old;
 	BOOL ret = FALSE;
-	HANDLE h_proc = w32_OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
+	HANDLE h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg->pid);
 
 	if (h_proc) {
 		ret = VirtualProtectEx (h_proc, (LPVOID)(size_t)addr,
@@ -1776,6 +1762,13 @@ static bool r_debug_gcore (RDebug *dbg, RBuffer *dest) {
 #endif
 }
 
+static void r_debug_native_free (RDebug *dbg) {
+#if __WINDOWS__ && !__CYGWIN__
+	w32_dbg_native_free ((RDebugW32 *)dbg->native_ptr);
+#endif
+	dbg->native_ptr = NULL;
+}
+
 struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
 	.open = r_debug_desc_native_open,
 	.list = r_debug_desc_native_list,
@@ -1828,6 +1821,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.contsc = &r_debug_native_continue_syscall,
 	.attach = &r_debug_native_attach,
 	.detach = &r_debug_native_detach,
+	.free = &r_debug_native_free,
 	.pids = &r_debug_native_pids,
 	.tids = &r_debug_native_tids,
 	.threads = &r_debug_native_threads,

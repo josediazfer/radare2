@@ -365,6 +365,10 @@ R_API void r_debug_tracenodes_reset (RDebug *dbg) {
 
 R_API RDebug *r_debug_free(RDebug *dbg) {
 	if (dbg) {
+		/* free internal native data */
+		if (dbg && dbg->h && dbg->h->free) {
+			dbg->h->free(dbg);
+		}
 		// TODO: free it correctly.. we must ensure this is an instance and not a reference..
 		r_bp_free (dbg->bp);
 		//r_reg_free(&dbg->reg);
@@ -397,7 +401,7 @@ R_API int r_debug_attach(RDebug *dbg, int pid) {
 	if (dbg && dbg->h && dbg->h->attach) {
 		ret = dbg->h->attach (dbg, pid);
 		if (ret != -1) {
-			r_debug_select (dbg, pid, ret); //dbg->pid, dbg->tid);
+			r_debug_select (dbg, pid, ret);
 		}
 	}
 	return ret;
