@@ -9,6 +9,12 @@ ifeq (${OSTYPE},darwin)
 NATIVE_OBJS=native/xnu/xnu_debug.o
 endif
 
+ifeq (${OSTYPE},windows)
+NATIVE_OBJS=native/windows/dbg.o
+NATIVE_OBJS+=native/windows/io_dbg.o
+NATIVE_OBJS+=native/windows/map.o
+endif
+
 ifeq ($(OSTYPE),$(filter $(OSTYPE),gnulinux android))
 NATIVE_OBJS=native/linux/linux_debug.o
 NATIVE_OBJS+=native/procfs.o

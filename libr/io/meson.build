@@ -49,8 +49,7 @@ endif
 if host_os == 'windows'
 files += [
   'p/io_r2k_windows.c',
-  'p/io_w32.c',
-  'p/io_w32dbg.c',
+  'p/io_w32.c'
 ]
 endif
 

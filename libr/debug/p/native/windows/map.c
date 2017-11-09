@@ -1,3 +1,6 @@
+#include "map.h"
+
+extern DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD);
 
 typedef struct {
 	RDebugMap *map;
@@ -74,7 +77,20 @@ static inline RDebugMap *add_map_reg(RList *list, const char *name, MEMORY_BASIC
 	return add_map (list, name, (ut64)(size_t)mbi->BaseAddress, (ut64)mbi->RegionSize, mbi);
 }
 
-static RList *w32_dbg_modules(RDebug *dbg) {
+static inline int is_pe_hdr(unsigned char *pe_hdr) {
+	IMAGE_DOS_HEADER *dos_header = (IMAGE_DOS_HEADER *)pe_hdr;
+	IMAGE_NT_HEADERS *nt_headers;
+
+	if (dos_header->e_magic==IMAGE_DOS_SIGNATURE) {
+		nt_headers = (IMAGE_NT_HEADERS *)((char *)dos_header
+				+ dos_header->e_lfanew);
+		if (nt_headers->Signature==IMAGE_NT_SIGNATURE)
+			return 1;
+	}
+	return 0;
+}
+
+RList *w32_dbg_modules(RDebug *dbg) {
 	MODULEENTRY32 me32;
 	RDebugMap *mr;
 	RList *list = r_list_newf ((RListFree)r_debug_map_free);
@@ -234,7 +250,7 @@ static void proc_mem_map(HANDLE h_proc, RList *map_list, MEMORY_BASIC_INFORMATIO
 	}
 }
 
-static RList *w32_dbg_maps(RDebug *dbg) {
+RList *w32_dbg_maps(RDebug *dbg) {
 	SYSTEM_INFO si = {0};
 	LPVOID cur_addr;
 	MEMORY_BASIC_INFORMATION mbi;

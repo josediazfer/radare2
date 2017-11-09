@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <psapi.h>
 #include <tchar.h>
+#include "dbg.h"
+#include "map.h"
+#include "io_dbg.h"
 
 #ifndef NTSTATUS
 #define NTSTATUS DWORD
@@ -11,86 +14,13 @@
 #define WINAPI
 #endif
 
-typedef struct {
-	ut64 base_addr;
-	char *path;
-	char *name;
-	bool loaded;
-} RDebugW32LibInfo;
-
-typedef struct {
-	ut64 entry_addr;
-	int exit_code;
-} RDebugW32ThreadInfo;
-
-typedef struct {
-	RList *libs_loaded_list;
-	RDebugW32ThreadInfo th_info;
-	RDebugW32LibInfo *lib_info;
-} RDebugW32;
-
-typedef struct _SYSTEM_HANDLE
-{
-	ULONG ProcessId;
-	BYTE ObjectTypeNumber;
-	BYTE Flags;
-	USHORT Handle;
-	PVOID Object;
-	ACCESS_MASK GrantedAccess;
-} SYSTEM_HANDLE, *PSYSTEM_HANDLE;
-typedef struct _SYSTEM_HANDLE_INFORMATION
-{
-	ULONG HandleCount;
-	SYSTEM_HANDLE Handles[1];
-} SYSTEM_HANDLE_INFORMATION, *PSYSTEM_HANDLE_INFORMATION;
-typedef enum _POOL_TYPE
-{
-	NonPagedPool,
-	PagedPool,
-	NonPagedPoolMustSucceed,
-	DontUseThisType,
-	NonPagedPoolCacheAligned,
-	PagedPoolCacheAligned,
-	NonPagedPoolCacheAlignedMustS
-} POOL_TYPE, *PPOOL_TYPE;
-typedef struct _UNICODE_STRING
-{
-	USHORT Length;
-	USHORT MaximumLength;
-	PWSTR Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
-typedef struct _OBJECT_TYPE_INFORMATION
-{
-	UNICODE_STRING Name;
-	ULONG TotalNumberOfObjects;
-	ULONG TotalNumberOfHandles;
-	ULONG TotalPagedPoolUsage;
-	ULONG TotalNonPagedPoolUsage;
-	ULONG TotalNamePoolUsage;
-	ULONG TotalHandleTableUsage;
-	ULONG HighWaterNumberOfObjects;
-	ULONG HighWaterNumberOfHandles;
-	ULONG HighWaterPagedPoolUsage;
-	ULONG HighWaterNonPagedPoolUsage;
-	ULONG HighWaterNamePoolUsage;
-	ULONG HighWaterHandleTableUsage;
-	ULONG InvalidAttributes;
-	GENERIC_MAPPING GenericMapping;
-	ULONG ValidAccess;
-	BOOLEAN SecurityRequired;
-	BOOLEAN MaintainHandleCount;
-	USHORT MaintainTypeList;
-	POOL_TYPE PoolType;
-	ULONG PagedPoolUsage;
-	ULONG NonPagedPoolUsage;
-} OBJECT_TYPE_INFORMATION, *POBJECT_TYPE_INFORMATION;
+DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
 static BOOL (WINAPI *w32_DebugActiveProcessStop)(DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugBreakProcess)(HANDLE) = NULL;
 static DWORD (WINAPI *w32_GetThreadId)(HANDLE) = NULL; // Vista
 static DWORD (WINAPI *w32_GetProcessId)(HANDLE) = NULL; // XP
 static BOOL (WINAPI *w32_QueryFullProcessImageName)(HANDLE, DWORD, LPTSTR, PDWORD) = NULL;
-static DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 static NTSTATUS (WINAPI *w32_NtQuerySystemInformation)(ULONG, PVOID, ULONG, PULONG) = NULL;
 static NTSTATUS (WINAPI *w32_NtQueryInformationThread)(HANDLE, ULONG, PVOID, ULONG, PULONG) = NULL;
 static NTSTATUS (WINAPI *w32_NtDuplicateObject)(HANDLE, HANDLE, HANDLE, PHANDLE, ACCESS_MASK, ULONG, ULONG) = NULL;
@@ -128,38 +58,37 @@ static BOOL (WINAPI *w32_SetXStateFeaturesMask)(PCONTEXT Context, DWORD64) = NUL
 #ifndef CONTEXT_ALL
 #define CONTEXT_ALL 1048607
 #endif
-static RList *w32_dbg_modules(RDebug *dbg);
 
-static bool enable_dbg_priv() {
+bool w32_enable_dbg_priv() {
 	/////////////////////////////////////////////////////////
 	//   Note: Enabling SeDebugPrivilege adapted from sample
 	//     MSDN @ http://msdn.microsoft.com/en-us/library/aa446619%28VS.85%29.aspx
 	// Enable SeDebugPrivilege
 	bool ret = false;
 	TOKEN_PRIVILEGES tokenPriv;
-	HANDLE hToken = NULL;
+	HANDLE h_tok = NULL;
 	LUID luidDebug;
 
 	if (!OpenProcessToken (GetCurrentProcess (),
-			TOKEN_ADJUST_PRIVILEGES, &hToken)) {
-		r_sys_perror ("enable_dbg_priv/OpenProcessToken");
-		goto err_enable_dbg_priv;
+			TOKEN_ADJUST_PRIVILEGES, &h_tok)) {
+		r_sys_perror ("w32_enable_dbg_priv/OpenProcessToken");
+		goto err_w32_enable_dbg_priv;
 	}
 	if (!LookupPrivilegeValue (NULL, SE_DEBUG_NAME, &luidDebug)) {
-		r_sys_perror ("enable_dbg_priv/LookupPrivilegeValue");
-		goto err_enable_dbg_priv;
+		r_sys_perror ("w32_enable_dbg_priv/LookupPrivilegeValue");
+		goto err_w32_enable_dbg_priv;
 		
 	}
 	tokenPriv.PrivilegeCount = 1;
 	tokenPriv.Privileges[0].Luid = luidDebug;
 	tokenPriv.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-	ret = AdjustTokenPrivileges (hToken, FALSE, &tokenPriv, 0, NULL, NULL);
+	ret = AdjustTokenPrivileges (h_tok, FALSE, &tokenPriv, 0, NULL, NULL);
 	if (!ret) {
 		r_sys_perror ("Failed to change token privileges");
 	}
-err_enable_dbg_priv:
-	if (hToken) {
-		CloseHandle (hToken);
+err_w32_enable_dbg_priv:
+	if (h_tok) {
+		CloseHandle (h_tok);
 	}
 	return ret;
 }
@@ -170,7 +99,7 @@ static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
 	free (lib_info);
 }
 
-static void w32_dbg_free(RDebug *dbg) {
+void w32_dbg_free(RDebug *dbg) {
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	if (dbg_w32) {
 		r_list_free (dbg_w32->libs_loaded_list);
@@ -183,7 +112,7 @@ static void w32_dbg_free(RDebug *dbg) {
 	}
 }
 
-static RDebugW32 *w32_dbg_get(RDebug *dbg) {
+RDebugW32 *w32_dbg_get(RDebug *dbg) {
 	RDebugW32 *dbg_w32;
 
 	if (dbg->native_ptr) {
@@ -195,11 +124,11 @@ static RDebugW32 *w32_dbg_get(RDebug *dbg) {
 	return dbg_w32;
 }
 
-static int w32_dbg_init() {
+int w32_dbg_init() {
 	HMODULE h_mod;
 
 	/* escalate privs (required for win7/vista) */
-	enable_dbg_priv ();
+	w32_enable_dbg_priv ();
 	/****** KERNEL32 functions *****/
 	h_mod = GetModuleHandle (TEXT ("kernel32"));
 	/* lookup function pointers for portability */
@@ -264,7 +193,7 @@ inline static int w32_h2t(HANDLE h) {
 	return (int)(size_t)h; // XXX broken
 }
 
-static int w32_first_thread(int pid) {
+int w32_first_thread(int pid) {
 	HANDLE h_proc_snap;
 	THREADENTRY32 te32;
 	int ret = -1;
@@ -528,7 +457,7 @@ static void set_thread_info(RDebug *dbg, DEBUG_EVENT *de) {
 	th_info->exit_code = (int)de->u.ExitThread.dwExitCode;
 }
 
-static int w32_dbg_wait(RDebug *dbg, int pid) {
+int w32_dbg_wait(RDebug *dbg, int pid) {
 	DEBUG_EVENT de;
 	int tid, next_event = 0;
 	unsigned int code;
@@ -556,7 +485,7 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 			eprintf ("(%d) created process (%d:%p)\n",
 				pid, w32_h2t (de.u.CreateProcessInfo.hProcess),
 				de.u.CreateProcessInfo.lpStartAddress);
-			r_debug_native_continue (dbg, pid, tid, -1);
+			w32_dbg_continue (dbg, pid, tid);
 			next_event = 1;
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
@@ -589,12 +518,12 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
 			eprintf ("(%d) Debug string\n", pid);
-			r_debug_native_continue (dbg, pid, tid, -1);
+			w32_dbg_continue (dbg, pid, tid);
 			next_event = 1;
 			break;
 		case RIP_EVENT:
 			eprintf ("(%d) RIP event\n", pid);
-			r_debug_native_continue (dbg, pid, tid, -1);
+			w32_dbg_continue (dbg, pid, tid);
 			next_event = 1;
 			// XXX unknown ret = R_DEBUG_REASON_TRAP;
 			break;
@@ -621,7 +550,7 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 				}
 				else {
 					next_event = 1;
-					r_debug_native_continue (dbg, pid, tid, -1);
+					w32_dbg_continue (dbg, pid, tid);
 				}
 
 			}
@@ -634,7 +563,7 @@ static int w32_dbg_wait(RDebug *dbg, int pid) {
 	return ret;
 }
 
-static inline int is_pe_hdr(unsigned char *pe_hdr) {
+inline int is_pe_hdr(unsigned char *pe_hdr) {
 	IMAGE_DOS_HEADER *dos_header = (IMAGE_DOS_HEADER *)pe_hdr;
 	IMAGE_NT_HEADERS *nt_headers;
 
@@ -741,47 +670,65 @@ err_w32_pids:
 	return list;
 }
 
-int w32_dbg_detach (RDebug *dbg, int pid) {
+int w32_dbg_detach(int pid) {
 	if (pid == -1) {
 		return -1;
 	}
 	return w32_DebugActiveProcessStop (pid)? 0 : -1;
 }
 
-int w32_dbg_attach(RDebug *dbg, int pid)
+int w32_dbg_continue(RDebug *dbg, int pid, int tid)
+{ 
+	/* Honor the Windows-specific signal that instructs threads to process exceptions */
+	/* DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
+		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
+		*/
+	if (ContinueDebugEvent (pid, tid, DBG_CONTINUE) == 0) {
+		eprintf ("failed debug_contp pid %d tid %d\n", pid, tid);
+		r_sys_perror ("w32_dbg_continue/ContinueDebugEvent");
+		return -1;
+	}
+	return tid;
+}
+
+int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr)
 {
 	HANDLE h_proc = NULL;
 	DEBUG_EVENT de = {0};
-	int th_id;
 	int ret = -1;
 	bool attached = false;
 
 	/* we only can attach one process at a time */
-	w32_dbg_detach(dbg, pid);
-	th_id = w32_first_thread (pid);
-	if (th_id <= 0) {
-		goto err_w32_dbg_attach;
-	}
+	w32_dbg_detach(pid);
 	h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
 	if (!h_proc) {
 		r_sys_perror ("r_debug_native_attach/OpenProcess");
 		goto err_w32_dbg_attach;
 	}
-	if (DebugActiveProcess (pid)) {
-		attached = true;
-		if (WaitForDebugEvent (&de, INFINITE) == 0) {
-			r_sys_perror ("r_debug_native_attach/WaitForDebugEvent");
-			goto err_w32_dbg_attach;
-		}	
-		if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
-			eprintf ("r_debug_native_attach: unexpected debug event %04x\n", (uint32_t)de.dwDebugEventCode);
-			goto err_w32_dbg_attach;
-		}
+	if (!DebugActiveProcess (pid)) {
+		r_sys_perror ("r_debug_native_attach/DebugActiveProcess");
+		goto err_w32_dbg_attach;
 	}
-	ret = th_id;
+	attached = true;
+	if (WaitForDebugEvent (&de, INFINITE) == 0) {
+		r_sys_perror ("r_debug_native_attach/WaitForDebugEvent");
+		goto err_w32_dbg_attach;
+	}	
+	if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
+		eprintf ("r_debug_native_attach: unexpected debug event %04x\n", (uint32_t)de.dwDebugEventCode);
+		goto err_w32_dbg_attach;
+	}
+	if (base_addr) {
+		*base_addr = (ut64)(SIZE_T)de.u.CreateProcessInfo.lpStartAddress;
+	}
+	ret = de.dwThreadId;
 err_w32_dbg_attach:
-	if (h_proc) {
-		CloseHandle (h_proc);
+	if (!h_proc_) {
+		if (h_proc) {
+			CloseHandle (h_proc);
+		}
+	} else {
+		*h_proc_ = h_proc;		
 	}
 	if (ret == -1 && attached) {
 		w32_DebugActiveProcessStop (pid);
@@ -987,7 +934,7 @@ static void show_ctx(HANDLE hThread, CONTEXT * ctx) {
 	}
 }
 
-static int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
+int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 #ifdef _MSC_VER
 	CONTEXT ctx;
 #else
@@ -1031,7 +978,7 @@ err_w32_reg_read:
 	return ret_size;
 }
 
-static int w32_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
+int w32_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
 	BOOL ret = false;
 	HANDLE h_th;
 #if _MSC_VER
@@ -1127,7 +1074,7 @@ err_w32_info_user:
     free (tok_usr);
 }
 
-static void w32_info_exe(RDebug *dbg, RDebugInfo *rdi) {
+void w32_info_exe(RDebug *dbg, RDebugInfo *rdi) {
 	LPTSTR path = NULL;
 	HANDLE h_proc;
 	DWORD len;
@@ -1159,7 +1106,7 @@ err_w32_info_exe:
 	free (path);
 }
 
-static RDebugInfo* w32_info (RDebug *dbg, const char *arg) {
+RDebugInfo* w32_info (RDebug *dbg, const char *arg) {
 	RDebugInfo *rdi = R_NEW0 (RDebugInfo);
 	rdi->status = R_DBG_PROC_SLEEP; // TODO: Fix this
 	rdi->pid = dbg->pid;
@@ -1175,4 +1122,80 @@ static RDebugInfo* w32_info (RDebug *dbg, const char *arg) {
 	return rdi;
 }
 
-#include "maps/windows.c"
+RList *w32_desc_list (int pid) {
+	RDebugDesc *desc;
+	RList *ret = r_list_new();
+	int i;
+	HANDLE processHandle;
+	PSYSTEM_HANDLE_INFORMATION handleInfo;
+	NTSTATUS status;
+	ULONG handleInfoSize = 0x10000;
+	LPVOID buff;
+	if (!(processHandle = OpenProcess (0x0040, FALSE, pid))) {
+		eprintf ("win_desc_list: Error opening process.\n");
+		return NULL;
+	}
+	handleInfo = (PSYSTEM_HANDLE_INFORMATION)malloc(handleInfoSize);
+	#define STATUS_INFO_LENGTH_MISMATCH 0xc0000004
+	#define SystemHandleInformation 16
+	while ((status = w32_NtQuerySystemInformation(SystemHandleInformation,handleInfo,handleInfoSize,NULL)) == STATUS_INFO_LENGTH_MISMATCH)
+		handleInfo = (PSYSTEM_HANDLE_INFORMATION)realloc(handleInfo, handleInfoSize *= 2);
+	if (status) {
+		eprintf("win_desc_list: NtQuerySystemInformation failed!\n");
+		return NULL;
+	}
+	for (i = 0; i < handleInfo->HandleCount; i++) {
+		SYSTEM_HANDLE handle = handleInfo->Handles[i];
+		HANDLE dupHandle = NULL;
+		POBJECT_TYPE_INFORMATION objectTypeInfo;
+		PVOID objectNameInfo;
+		UNICODE_STRING objectName;
+		ULONG returnLength;
+		if (handle.ProcessId != pid)
+			continue;
+		if (handle.ObjectTypeNumber != 0x1c)
+			continue;
+		if (w32_NtDuplicateObject (processHandle, &handle.Handle, GetCurrentProcess(), &dupHandle, 0, 0, 0))
+			continue;
+		objectTypeInfo = (POBJECT_TYPE_INFORMATION)malloc(0x1000);
+		if (w32_NtQueryObject(dupHandle,2,objectTypeInfo,0x1000,NULL)) {
+			CloseHandle(dupHandle);
+			continue;
+		}
+		objectNameInfo = malloc(0x1000);
+		if (w32_NtQueryObject(dupHandle,1,objectNameInfo,0x1000,&returnLength)) {
+			objectNameInfo = realloc(objectNameInfo, returnLength);
+			if (w32_NtQueryObject(dupHandle, 1, objectNameInfo, returnLength, NULL)) {
+				free(objectTypeInfo);
+				free(objectNameInfo);
+				CloseHandle(dupHandle);
+				continue;
+			}
+		}
+		objectName = *(PUNICODE_STRING)objectNameInfo;
+		if (objectName.Length) {
+			//objectTypeInfo->Name.Length ,objectTypeInfo->Name.Buffer,objectName.Length / 2,objectName.Buffer
+			buff=malloc((objectName.Length/2)+1);
+			wcstombs(buff,objectName.Buffer,objectName.Length/2);
+			desc = r_debug_desc_new (handle.Handle,
+					buff, 0, '?', 0);
+			if (!desc) break;
+			r_list_append (ret, desc);
+			free(buff);
+		} else {
+			buff=malloc((objectTypeInfo->Name.Length / 2)+1);
+			wcstombs(buff,objectTypeInfo->Name.Buffer,objectTypeInfo->Name.Length);
+			desc = r_debug_desc_new (handle.Handle,
+					buff, 0, '?', 0);
+			if (!desc) break;
+			r_list_append (ret, desc);
+			free(buff);
+		}
+		free(objectTypeInfo);
+		free(objectNameInfo);
+		CloseHandle(dupHandle);
+	}
+	free(handleInfo);
+	CloseHandle(processHandle);
+	return ret;
+}

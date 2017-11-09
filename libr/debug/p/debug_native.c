@@ -32,8 +32,10 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 
 #if __WINDOWS__
 #include <windows.h>
+#include "native/windows/dbg.h"
+#include "native/windows/map.h"
+#include "native/windows/io_dbg.h"
 #define R_DEBUG_REG_T CONTEXT
-#include "native/w32.c"
 #ifdef NTSTATUS
 #undef NTSTATUS
 #endif
@@ -163,7 +165,7 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 #if __linux__
 	return linux_attach (dbg, pid);
 #elif __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_attach (dbg, pid);
+	return w32_dbg_attach (pid, NULL, NULL);
 #elif __CYGWIN__
 	#warning "r_debug_native_attach not supported on this platform"
 	return -1;
@@ -184,9 +186,9 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 #endif
 }
 
-static int r_debug_native_detach (RDebug *dbg, int pid) {
+static int r_debug_native_detach (RDebug *db, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_detach (dbg, pid);
+	return w32_dbg_detach (pid);
 #elif __CYGWIN__
 	#warning "r_debug_native_detach not supported on this platform"
 	return -1;
@@ -225,15 +227,7 @@ static void r_debug_native_stop(RDebug *dbg) {
 /* TODO: must return true/false */
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 #if __WINDOWS__ && !__CYGWIN__
-	/* Honor the Windows-specific signal that instructs threads to process exceptions */
-	DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
-		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
-	if (ContinueDebugEvent (pid, tid, continue_status) == 0) {
-		eprintf ("failed debug_contp pid %d tid %d\n", pid, tid);
-		r_sys_perror ("r_debug_native_continue/ContinueDebugEvent");
-		return false;
-	}
-	return tid;
+	return w32_dbg_continue (dbg, pid, tid);
 #elif __APPLE__
 	bool ret;
 	ret = xnu_continue (dbg, pid, tid, sig);
@@ -1354,7 +1348,11 @@ struct r_debug_desc_plugin_t r_debug_desc_plugin_native;
 static int r_debug_native_init (RDebug *dbg) {
 	dbg->h->desc = r_debug_desc_plugin_native;
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_init ();
+	if (w32_dbg_init ()) {
+		w32_io_dbg_init (dbg);
+		return true;
+	}
+	return false;
 #else
 	return true;
 #endif
@@ -1502,92 +1500,12 @@ static RList *xnu_desc_list (int pid) {
 }
 #endif
 
-#if __WINDOWS__
-static RList *win_desc_list (int pid) {
-	RDebugDesc *desc;
-	RList *ret = r_list_new();
-	int i;
-	HANDLE processHandle;
-	PSYSTEM_HANDLE_INFORMATION handleInfo;
-	NTSTATUS status;
-	ULONG handleInfoSize = 0x10000;
-	LPVOID buff;
-	if (!(processHandle = OpenProcess (0x0040, FALSE, pid))) {
-		eprintf ("win_desc_list: Error opening process.\n");
-		return NULL;
-	}
-	handleInfo = (PSYSTEM_HANDLE_INFORMATION)malloc(handleInfoSize);
-	#define STATUS_INFO_LENGTH_MISMATCH 0xc0000004
-	#define SystemHandleInformation 16
-	while ((status = w32_NtQuerySystemInformation(SystemHandleInformation,handleInfo,handleInfoSize,NULL)) == STATUS_INFO_LENGTH_MISMATCH)
-		handleInfo = (PSYSTEM_HANDLE_INFORMATION)realloc(handleInfo, handleInfoSize *= 2);
-	if (status) {
-		eprintf("win_desc_list: NtQuerySystemInformation failed!\n");
-		return NULL;
-	}
-	for (i = 0; i < handleInfo->HandleCount; i++) {
-		SYSTEM_HANDLE handle = handleInfo->Handles[i];
-		HANDLE dupHandle = NULL;
-		POBJECT_TYPE_INFORMATION objectTypeInfo;
-		PVOID objectNameInfo;
-		UNICODE_STRING objectName;
-		ULONG returnLength;
-		if (handle.ProcessId != pid)
-			continue;
-		if (handle.ObjectTypeNumber != 0x1c)
-			continue;
-		if (w32_NtDuplicateObject (processHandle, &handle.Handle, GetCurrentProcess(), &dupHandle, 0, 0, 0))
-			continue;
-		objectTypeInfo = (POBJECT_TYPE_INFORMATION)malloc(0x1000);
-		if (w32_NtQueryObject(dupHandle,2,objectTypeInfo,0x1000,NULL)) {
-			CloseHandle(dupHandle);
-			continue;
-		}
-		objectNameInfo = malloc(0x1000);
-		if (w32_NtQueryObject(dupHandle,1,objectNameInfo,0x1000,&returnLength)) {
-			objectNameInfo = realloc(objectNameInfo, returnLength);
-			if (w32_NtQueryObject(dupHandle, 1, objectNameInfo, returnLength, NULL)) {
-				free(objectTypeInfo);
-				free(objectNameInfo);
-				CloseHandle(dupHandle);
-				continue;
-			}
-		}
-		objectName = *(PUNICODE_STRING)objectNameInfo;
-		if (objectName.Length) {
-			//objectTypeInfo->Name.Length ,objectTypeInfo->Name.Buffer,objectName.Length / 2,objectName.Buffer
-			buff=malloc((objectName.Length/2)+1);
-			wcstombs(buff,objectName.Buffer,objectName.Length/2);
-			desc = r_debug_desc_new (handle.Handle,
-					buff, 0, '?', 0);
-			if (!desc) break;
-			r_list_append (ret, desc);
-			free(buff);
-		} else {
-			buff=malloc((objectTypeInfo->Name.Length / 2)+1);
-			wcstombs(buff,objectTypeInfo->Name.Buffer,objectTypeInfo->Name.Length);
-			desc = r_debug_desc_new (handle.Handle,
-					buff, 0, '?', 0);
-			if (!desc) break;
-			r_list_append (ret, desc);
-			free(buff);
-		}
-		free(objectTypeInfo);
-		free(objectNameInfo);
-		CloseHandle(dupHandle);
-	}
-	free(handleInfo);
-	CloseHandle(processHandle);
-	return ret;
-}
-#endif
-
 static RList *r_debug_desc_native_list (int pid) {
 // TODO: windows
 #if __APPLE__
 	return xnu_desc_list (pid);
 #elif __WINDOWS__
-	return win_desc_list(pid);
+	return w32_desc_list (pid);
 #elif __KFBSD__
 	RList *ret = NULL;
 	int perm, type, mib[4];

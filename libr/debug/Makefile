@@ -32,6 +32,12 @@ OBJS+= p/${NATIVE_OBJS}
 endif
 endif
 
+ifeq (${OSTYPE},windows)
+ifneq (${NATIVE_OBJS},)
+OBJS+=$(addprefix p/,$(NATIVE_OBJS))
+endif
+endif
+
 ifeq ($(OSTYPE),$(filter $(OSTYPE),gnulinux android))
 CFLAGS+=-I../bin/format/elf
 OBJS+=$(addprefix p/,$(NATIVE_OBJS))

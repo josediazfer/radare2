@@ -15,9 +15,9 @@ endif
 foo: all
 
 ALL_TARGETS=
-PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk shm.mk mach.mk w32dbg.mk procpid.mk windbg.mk bochs.mk qnx.mk r2k.mk ar.mk rbuf.mk
+PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk shm.mk mach.mk procpid.mk windbg.mk bochs.mk qnx.mk r2k.mk ar.mk rbuf.mk
 #zip.mk
-#PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk mach.mk w32dbg.mk procpid.mk
+#PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk mach.mk procpid.mk
 include ${PLUGINS}
 
 #ALL_TARGETS+=io_ewf.so

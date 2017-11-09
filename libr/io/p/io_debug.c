@@ -54,25 +54,6 @@ static void trace_me ();
  */
 #if __WINDOWS__
 #include <windows.h>
-#include <tlhelp32.h>
-#include <winbase.h>
-#include <psapi.h>
-
-typedef struct {
-	HANDLE hnd;
-	ut64 winbase;
-} RIOW32;
-
-typedef struct {
-	int pid;
-	int tid;
-	ut64 winbase;
-	PROCESS_INFORMATION pi;
-} RIOW32Dbg;
-
-static ut64 winbase;	//HACK
-static int wintid;
-
 static int setup_tokens() {
 	HANDLE tok = NULL;
 	TOKEN_PRIVILEGES tp;
@@ -104,9 +85,7 @@ err_enable:
 static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 	PROCESS_INFORMATION pi;
 	STARTUPINFO si = { 0 } ;
-	DEBUG_EVENT de;
 	int pid, tid;
-	HANDLE th = INVALID_HANDLE_VALUE;
 	if (!*cmd) {
 		return -1;
 	}
@@ -159,8 +138,8 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 	LPTSTR appname_ = r_sys_conv_utf8_to_utf16 (argv[0]);
 	LPTSTR cmdline_ = r_sys_conv_utf8_to_utf16 (cmdline);
 	if (!CreateProcess (appname_, cmdline_, NULL, NULL, FALSE,
-						 CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
-						 NULL, NULL, &si, &pi)) {
+				CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
+				NULL, NULL, &si, &pi)) {
 		r_sys_perror ("fork_and_ptraceme/CreateProcess");
 		free (appname_);
 		free (cmdline_);
@@ -173,29 +152,10 @@ static int fork_and_ptraceme(RIO *io, int bits, const char *cmd) {
 	/* get process id and thread id */
 	pid = pi.dwProcessId;
 	tid = pi.dwThreadId;
-
-	/* catch create process event */
-	if (!WaitForDebugEvent (&de, 10000)) goto err_fork;
-
-	/* check if is a create process debug event */
-	if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
-		eprintf ("exception code 0x%04x\n", (ut32)de.dwDebugEventCode);
-		goto err_fork;
-	}
-
-	if (th != INVALID_HANDLE_VALUE) {
-		CloseHandle (th);
-	}
+	CloseHandle (pi.hProcess);
+	CloseHandle (pi.hThread);
 	eprintf ("Spawned new process with pid %d, tid = %d\n", pid, tid);
-	winbase = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
-	wintid = tid;
 	return pid;
-
-err_fork:
-	eprintf ("ERRFORK\n");
-	TerminateProcess (pi.hProcess, 1);
-	if (th != INVALID_HANDLE_VALUE) CloseHandle (th);
-	return -1;
 }
 #else // windows
 
@@ -573,12 +533,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 			if (!_plugin || !_plugin->open) {
 				return NULL;
 			}
-			if ((ret = _plugin->open (io, uri, rw, mode))) {
-				RIOW32Dbg *w32 = (RIOW32Dbg *)ret->data;
-				w32->winbase = winbase;
-				w32->tid = wintid;
-			}
-
+			ret = _plugin->open (io, uri, rw, mode);
 #elif __APPLE__
 			sprintf (uri, "smach://%d", pid);		//s is for spawn
 			_plugin = r_io_plugin_resolve (io, (const char *)uri + 1, false);

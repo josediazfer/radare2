@@ -39,7 +39,8 @@ static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
 	ut16 *p16;
 	ut64 cursp, oldsp;
 	RList *list;
-
+	
+	eprintf ("BITS: %d\n", dbg->bits);
 	stacksize = 1024*512; // 512KB .. should get the size from the regions if possible
 	stack = malloc (stacksize);
 	if (at == UT64_MAX) {
@@ -72,9 +73,9 @@ static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
 		p32 = (ut32*)ptr;
 		p16 = (ut16*)ptr;
 		switch (wordsize) {
-		case 8: addr = *p64; break;
-		case 4: addr = *p32; break;
-		case 2: addr = *p16; break;
+		case R_SYS_BITS_64: addr = *p64; break;
+		case R_SYS_BITS_32: addr = *p32; break;
+		case R_SYS_BITS_16: addr = *p16; break;
 		default:
 			eprintf ("Invalid word size with asm.bits\n");
 			r_list_free (list);
