@@ -64,7 +64,7 @@ bool w32_enable_dbg_priv() {
 	//   Note: Enabling SeDebugPrivilege adapted from sample
 	//     MSDN @ http://msdn.microsoft.com/en-us/library/aa446619%28VS.85%29.aspx
 	// Enable SeDebugPrivilege
-	bool ret = false;
+	bool success = false;
 	TOKEN_PRIVILEGES tokenPriv;
 	HANDLE h_tok = NULL;
 	LUID luidDebug;
@@ -82,15 +82,15 @@ bool w32_enable_dbg_priv() {
 	tokenPriv.PrivilegeCount = 1;
 	tokenPriv.Privileges[0].Luid = luidDebug;
 	tokenPriv.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-	ret = AdjustTokenPrivileges (h_tok, FALSE, &tokenPriv, 0, NULL, NULL);
-	if (!ret) {
+	success = AdjustTokenPrivileges (h_tok, FALSE, &tokenPriv, 0, NULL, NULL);
+	if (!success) {
 		r_sys_perror ("Failed to change token privileges");
 	}
 err_w32_enable_dbg_priv:
 	if (h_tok) {
 		CloseHandle (h_tok);
 	}
-	return ret;
+	return success;
 }
 
 static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
@@ -600,6 +600,7 @@ static RDebugPid *build_debug_pid(PROCESSENTRY32 *pe) {
 RList *w32_pids (int pid, RList *list) {
 	HANDLE h_proc_snap;
 	PROCESSENTRY32 pe;
+	DWORD my_pid;
 	int show_all_pids = (pid == 0);
 
 	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPPROCESS, pid);
@@ -612,10 +613,11 @@ RList *w32_pids (int pid, RList *list) {
 		r_sys_perror ("w32_pids/Process32First");
 		goto err_w32_pids;
 	}
+	my_pid = GetCurrentProcessId ();
 	do {
-		if (show_all_pids ||
+		if (my_pid != pe.th32ProcessID && (show_all_pids ||
 			pe.th32ProcessID == pid ||
-			pe.th32ParentProcessID == pid) {
+			pe.th32ParentProcessID == pid)) {
 
 			RDebugPid *debug_pid = build_debug_pid (&pe);
 			if (debug_pid) {
@@ -652,27 +654,25 @@ int w32_dbg_detach(int pid) {
 }
 
 int w32_dbg_detach_cont(RDebug *dbg) {
+	int ret;
+
 	if (dbg->pid == -1) {
 		return -1;
 	}
 	w32_dbg_continue (dbg->pid, dbg->tid);
-	return w32_dbg_detach (dbg->pid);
+	if ((ret = w32_dbg_detach (dbg->pid)) != -1) {
+		dbg->pid = -1;
+	}
+	return ret;
 }
 
-int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr)
+int w32_dbg_attach(int pid, ut64 *base_addr)
 {
-	HANDLE h_proc = NULL;
 	DEBUG_EVENT de = {0};
 	int ret = -1;
 	bool attached = false;
 
-	/* we only can attach one process at a time */
-	w32_dbg_detach(pid);
-	h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
-	if (!h_proc) {
-		r_sys_perror ("r_debug_native_attach/OpenProcess");
-		goto err_w32_dbg_attach;
-	}
+	w32_dbg_detach (pid);
 	if (!DebugActiveProcess (pid)) {
 		r_sys_perror ("r_debug_native_attach/DebugActiveProcess");
 		goto err_w32_dbg_attach;
@@ -691,13 +691,6 @@ int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr)
 	}
 	ret = de.dwThreadId;
 err_w32_dbg_attach:
-	if (!h_proc_) {
-		if (h_proc) {
-			CloseHandle (h_proc);
-		}
-	} else {
-		*h_proc_ = h_proc;		
-	}
 	if (ret == -1 && attached) {
 		w32_DebugActiveProcessStop (pid);
 	}
@@ -1090,6 +1083,7 @@ RDebugInfo* w32_info (RDebug *dbg, const char *arg) {
 	return rdi;
 }
 
+/* TODO: refactory, leaks */
 RList *w32_desc_list (int pid) {
 	RDebugDesc *desc;
 	RList *ret = r_list_new();

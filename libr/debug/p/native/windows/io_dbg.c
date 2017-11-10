@@ -50,8 +50,14 @@ static int debug_os_read_at(RIOW32Dbg *dbg, void *buf, int len, ut64 addr) {
 }
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int len) {
-	memset (buf, '\xff', len); // TODO: only memset the non-readed bytes
-	return debug_os_read_at (fd->data, buf, len, io->off);
+	int ret = debug_os_read_at (fd->data, buf, len, io->off);
+	if (ret > 0) {
+		int i;
+		for (i = ret; i < len; i++ ) {
+			buf[i] = '\xff';
+		}
+	}
+	return ret;
 }
 
 static int w32dbg_write_at(RIOW32Dbg *dbg, const ut8 *buf, int len, ut64 addr) {
@@ -71,7 +77,11 @@ static bool __plugin_open(RIO *io, const char *file, bool many) {
 }
 
 static inline int __open_proc (RIOW32Dbg *dbg_io) {
-	dbg_io->tid = w32_dbg_attach (dbg_io->pid, &dbg_io->h_proc, &dbg_io->base_addr);
+
+	dbg_io->tid = w32_dbg_attach (dbg_io->pid, &dbg_io->base_addr);
+	if (dbg_io->tid) {
+		dbg_io->h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE, FALSE, dbg_io->pid);
+	}
 	return dbg_io->tid;
 }
 

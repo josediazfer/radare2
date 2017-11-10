@@ -99,7 +99,7 @@ bool w32_terminate_process(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
 int w32_dbg_continue(int pid, int tid);
 int w32_first_thread(int pid);
-int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr);
+int w32_dbg_attach(int pid, ut64 *base_addr);
 bool w32_enable_dbg_priv();
 
 #endif
