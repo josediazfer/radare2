@@ -4,7 +4,7 @@
 #include <tlhelp32.h>
 #include <r_debug.h>
 
-RList *w32_dbg_modules(RDebug *dbg);
-RList *w32_dbg_maps(RDebug *dbg);
+RList *w32_dbg_modules(int pid);
+RList *w32_dbg_maps(int pid);
 
 #endif

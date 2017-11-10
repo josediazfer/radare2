@@ -193,46 +193,6 @@ inline static int w32_h2t(HANDLE h) {
 	return (int)(size_t)h; // XXX broken
 }
 
-int w32_first_thread(int pid) {
-	HANDLE h_proc_snap;
-	THREADENTRY32 te32;
-	int ret = -1;
-
-	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
-	if (h_proc_snap == INVALID_HANDLE_VALUE) {
-		r_sys_perror ("w32_first_thread/CreateToolhelp32Snapshot");
-		goto err_w32_first_thread;
-	}
-	te32.dwSize = sizeof (THREADENTRY32);
-	if (!Thread32First (h_proc_snap, &te32)) {
-		r_sys_perror ("w32_first_thread/Thread32First");
-		goto err_w32_first_thread;
-	}
-	do {
-		/* get all threads of process */
-		if (te32.th32OwnerProcessID == pid) {
-			HANDLE h_th;
-
-			h_th = OpenThread (THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
-			if (!h_th) {
-				r_sys_perror ("w32_first_thread/OpenThread");
-				goto err_w32_first_thread;
-			}
-			CloseHandle (h_th);
-			ret = (int)te32.th32ThreadID;
-			break;
-		}
-	} while (Thread32Next (h_proc_snap, &te32));
-err_w32_first_thread:
-	if (ret < 0) {
-		eprintf ("Could not find an active thread for pid %d\n", pid);
-	}
-	if (h_proc_snap != INVALID_HANDLE_VALUE) {
-		CloseHandle (h_proc_snap);
-	}
-	return ret;
-}
-
 static char *get_w32_excep_name(unsigned long code) {
 	char *desc;
 	switch (code) {
@@ -259,7 +219,7 @@ static char *get_w32_excep_name(unsigned long code) {
 	return desc;
 }
 
-static int debug_exception_event (DEBUG_EVENT *de) {
+static int dbg_exception_event(DEBUG_EVENT *de) {
 	unsigned long code = de->u.Exception.ExceptionRecord.ExceptionCode;
 	switch (code) {
 	/* fatal exceptions */
@@ -286,7 +246,7 @@ static int debug_exception_event (DEBUG_EVENT *de) {
 	return 0;
 }
 
-static char *get_file_name_from_handle (HANDLE handle_file) {
+static char *get_file_name_from_handle(HANDLE handle_file) {
 	HANDLE handle_file_map = NULL;
 	LPTSTR filename = NULL, name = NULL;
 	DWORD file_size_high = 0;
@@ -356,10 +316,10 @@ err_get_file_name_from_handle:
 	return ret_filename;
 }
 
-static char *get_lib_from_mod (RDebug *dbg, ut64 lib_addr) {
+static char *get_lib_from_mod(RDebug *dbg, ut64 lib_addr) {
 	RListIter *iter;
 	RDebugMap *map;
-	RList *mods_list = w32_dbg_modules (dbg);
+	RList *mods_list = w32_dbg_modules (dbg->pid);
 	char *path = NULL;
 
 	r_list_foreach (mods_list, iter, map) {
@@ -544,7 +504,7 @@ int w32_dbg_wait(RDebug *dbg, int pid) {
 				next_event = 0;
 				break;
 			default:
-				if (!debug_exception_event (&de)) {
+				if (!dbg_exception_event (&de)) {
 					ret = R_DEBUG_REASON_TRAP;
 					next_event = 0;
 				}
@@ -719,7 +679,7 @@ int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr)
 		goto err_w32_dbg_attach;
 	}
 	if (base_addr) {
-		*base_addr = (ut64)(SIZE_T)de.u.CreateProcessInfo.lpStartAddress;
+		*base_addr = (ut64)(SIZE_T)de.u.CreateProcessInfo.lpBaseOfImage;
 	}
 	ret = de.dwThreadId;
 err_w32_dbg_attach:

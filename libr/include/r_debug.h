@@ -386,7 +386,6 @@ typedef struct r_debug_plugin_t {
 	int (*map_protect)(RDebug *dbg, ut64 addr, int size, int perms);
 	int (*init)(RDebug *dbg);
 	int (*drx)(RDebug *dbg, int n, ut64 addr, int size, int rwx, int g);
-	void (*io_bind)(RDebug *dbg, RIO *io);
 	RDebugDescPlugin desc;
 	// TODO: use RList here
 } RDebugPlugin;

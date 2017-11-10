@@ -1,5 +1,8 @@
 /* implementation */
 
+// 512KB .. should get the size from the regions if possible
+#define MAX_STACK_SIZE (512 * 1024)
+
 static int iscallret(RDebug *dbg, ut64 addr) {
 	ut8 buf[32];
 	if (addr == 0LL || addr == UT64_MAX)
@@ -29,44 +32,40 @@ static int iscallret(RDebug *dbg, ut64 addr) {
 }
 
 static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
-	ut8 *stack, *ptr;
+	ut8 *stack = NULL, *ptr;
 	int wordsize = dbg->bits; // XXX, dbg->bits is wordsize not bits
 	ut64 sp;
 	RIOBind *bio = &dbg->iob;
-	int i, stacksize;
+	int i;
 	ut64 *p64, addr = 0LL;
 	ut32 *p32;
 	ut16 *p16;
 	ut64 cursp, oldsp;
-	RList *list;
+	RList *list = NULL;
+	bool success = false;
 	
-	eprintf ("BITS: %d\n", dbg->bits);
-	stacksize = 1024*512; // 512KB .. should get the size from the regions if possible
-	stack = malloc (stacksize);
+	stack = malloc (MAX_STACK_SIZE);
 	if (at == UT64_MAX) {
 		RRegItem *ri;
 		RReg *reg = dbg->reg;
 		const char *spname = r_reg_get_name (reg, R_REG_NAME_SP);
 		if (!spname) {
 			eprintf ("Cannot find stack pointer register\n");
-			free (stack);
-			return NULL;
+			goto err_backtrace_fuzzy;
 		}
 		ri = r_reg_get (reg, spname, R_REG_TYPE_GPR);
 		if (!ri) {
 			eprintf ("Cannot find stack pointer register\n");
-			free (stack);
-			return NULL;
+			goto err_backtrace_fuzzy;
 		}
 		sp = r_reg_get_value (reg, ri);
 	} else {
 		sp = at;
 	}
 
-	list = r_list_new ();
-	list->free = free;
+	list = r_list_newf ((RListFree)free);
 	cursp = oldsp = sp;
-	(void)bio->read_at (bio->io, sp, stack, stacksize);
+	(void)bio->read_at (bio->io, sp, stack, MAX_STACK_SIZE);
 	ptr = stack;
 	for (i=0; i<dbg->btdepth; i++) {
 		p64 = (ut64*)ptr;
@@ -78,8 +77,7 @@ static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
 		case R_SYS_BITS_16: addr = *p16; break;
 		default:
 			eprintf ("Invalid word size with asm.bits\n");
-			r_list_free (list);
-			return NULL;
+			goto err_backtrace_fuzzy;
 		}
 		if (iscallret (dbg, addr)) {
 			RDebugFrame *frame = R_NEW0 (RDebugFrame);
@@ -94,5 +92,12 @@ static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
 		ptr += wordsize;
 		cursp += wordsize;
 	}
+	success = true;
+err_backtrace_fuzzy:
+	if (!success) {
+		r_list_free (list);
+		list = NULL;
+	}
+	free (stack);
 	return list;
 }

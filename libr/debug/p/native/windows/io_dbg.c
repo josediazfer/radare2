@@ -18,36 +18,32 @@ typedef struct {
 	HANDLE h_proc;
 } RIOW32Dbg;
 
-#define READ_BLOCK_SIZE 1 /* TODO: Fix read */
-
 static int debug_os_read_at(RIOW32Dbg *dbg, void *buf, int len, ut64 addr) {
 	int ret_len = -1;
 
-	/* If the read failed with ERROR_PARTIAL_COPY then we will to try read by blocks */
-	if (!ReadProcessMemory (dbg->h_proc, (PVOID)(size_t)addr, buf, len, (SIZE_T *)&ret_len) &&
-		GetLastError() == ERROR_PARTIAL_COPY && ret_len <= 0) {
-		SIZE_T blk_len;
-		bool rd_failed = false, is_rd_blk = false;
-		int rd_len = 0;
+	/* If the read failed with ERROR_PARTIAL_COPY then we will to try read to end of map */
+	if (!ReadProcessMemory (dbg->h_proc, (PVOID)(SIZE_T)addr, buf, len, (SIZE_T *)&ret_len)) {
+		if (GetLastError() == ERROR_PARTIAL_COPY && ret_len <= 0) {
+			RList *maps_list;
+			RDebugMap *map;
+			RListIter *iter;
+			int map_len = len;
 
-		while ((rd_len + READ_BLOCK_SIZE) <= len) { 
-			if (!ReadProcessMemory (dbg->h_proc, (void*)(size_t)(addr + rd_len), (PVOID)(char *)buf + rd_len, READ_BLOCK_SIZE, &blk_len)) {
-				rd_failed = true;
-				break;
+			ret_len = -1;
+			/* TODO: RInterval */
+			maps_list = w32_dbg_maps (dbg->pid);
+			r_list_foreach (maps_list, iter, map) {
+				if (addr >= map->addr && addr < map->addr_end) {
+					map_len = map->addr_end - addr - 1;
+					break;
+				}
 			}
-			is_rd_blk = true;
-			rd_len += (int)blk_len;
-		}
-		if (!rd_failed) {
-			SIZE_T last_blk_len = (SIZE_T)(len - rd_len);
-			if (last_blk_len > 0 && 
-				ReadProcessMemory (dbg->h_proc, (void*)(size_t)(addr + rd_len), (PVOID)(char *)buf + rd_len, last_blk_len, &blk_len)) {
-				is_rd_blk = true;
-				rd_len += (int)blk_len;
+			if (map_len != len && map_len > 0 &&
+					ReadProcessMemory (dbg->h_proc, (PVOID)(SIZE_T)addr,
+						buf, map_len, (SIZE_T *)&map_len)) {
+				ret_len = map_len;
 			}
-		}
-		if (len > 0 && is_rd_blk) {
-			ret_len = rd_len;
+			r_list_free (maps_list);
 		}
 	}
 	return ret_len;
@@ -60,7 +56,7 @@ static int __read(RIO *io, RIODesc *fd, ut8 *buf, int len) {
 
 static int w32dbg_write_at(RIOW32Dbg *dbg, const ut8 *buf, int len, ut64 addr) {
 	SIZE_T ret;
-	return 0 != WriteProcessMemory (dbg->h_proc, (void *)(size_t)addr, buf, len, &ret)? len: 0;
+	return WriteProcessMemory (dbg->h_proc, (PVOID)(SIZE_T)addr, buf, len, &ret)? (int)ret: 0;
 }
 
 static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int len) {
