@@ -445,7 +445,7 @@ int w32_dbg_wait(RDebug *dbg, int pid) {
 			eprintf ("(%d) created process (%d:%p)\n",
 				pid, w32_h2t (de.u.CreateProcessInfo.hProcess),
 				de.u.CreateProcessInfo.lpStartAddress);
-			w32_dbg_continue (dbg, pid, tid);
+			w32_dbg_continue (pid, tid);
 			next_event = 1;
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
@@ -478,12 +478,12 @@ int w32_dbg_wait(RDebug *dbg, int pid) {
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
 			eprintf ("(%d) Debug string\n", pid);
-			w32_dbg_continue (dbg, pid, tid);
+			w32_dbg_continue (pid, tid);
 			next_event = 1;
 			break;
 		case RIP_EVENT:
 			eprintf ("(%d) RIP event\n", pid);
-			w32_dbg_continue (dbg, pid, tid);
+			w32_dbg_continue (pid, tid);
 			next_event = 1;
 			// XXX unknown ret = R_DEBUG_REASON_TRAP;
 			break;
@@ -510,7 +510,7 @@ int w32_dbg_wait(RDebug *dbg, int pid) {
 				}
 				else {
 					next_event = 1;
-					w32_dbg_continue (dbg, pid, tid);
+					w32_dbg_continue (pid, tid);
 				}
 
 			}
@@ -630,14 +630,7 @@ err_w32_pids:
 	return list;
 }
 
-int w32_dbg_detach(int pid) {
-	if (pid == -1) {
-		return -1;
-	}
-	return w32_DebugActiveProcessStop (pid)? 0 : -1;
-}
-
-int w32_dbg_continue(RDebug *dbg, int pid, int tid)
+int w32_dbg_continue(int pid, int tid)
 { 
 	/* Honor the Windows-specific signal that instructs threads to process exceptions */
 	/* DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
@@ -649,6 +642,21 @@ int w32_dbg_continue(RDebug *dbg, int pid, int tid)
 		return -1;
 	}
 	return tid;
+}
+
+int w32_dbg_detach(int pid) {
+	if (pid == -1) {
+		return -1;
+	}
+	return w32_DebugActiveProcessStop (pid)? 0 : -1;
+}
+
+int w32_dbg_detach_cont(RDebug *dbg) {
+	if (dbg->pid == -1) {
+		return -1;
+	}
+	w32_dbg_continue (dbg->pid, dbg->tid);
+	return w32_dbg_detach (dbg->pid);
 }
 
 int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr)

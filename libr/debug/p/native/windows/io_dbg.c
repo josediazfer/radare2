@@ -193,6 +193,12 @@ RLibStruct radare_plugin = {
 
 void w32_io_dbg_init (RDebug *dbg) {
 #ifdef CORELIB
-	r_io_plugin_add (dbg->iob.io, &r_io_plugin_w32dbg);
+	RIOPlugin *plugin;
+
+	plugin = R_NEW0 (RIOPlugin);
+	if (plugin) {
+		*plugin = r_io_plugin_w32dbg;
+		r_io_plugin_add (dbg->iob.io, plugin);
+	}
 #endif
 }

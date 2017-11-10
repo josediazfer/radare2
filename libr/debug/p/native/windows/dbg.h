@@ -86,6 +86,7 @@ typedef struct _OBJECT_TYPE_INFORMATION
 
 int w32_dbg_wait(RDebug *dbg, int pid);
 int w32_dbg_detach(int pid);
+int w32_dbg_detach_cont(RDebug *dbg);
 RDebugInfo* w32_info(RDebug *dbg, const char *arg);
 RList *w32_pids(int pid, RList *list);
 RDebugW32 *w32_dbg_get(RDebug *dbg);
@@ -96,7 +97,7 @@ int w32_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
 int w32_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
 bool w32_terminate_process(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
-int w32_dbg_continue(RDebug *dbg, int pid, int tid);
+int w32_dbg_continue(int pid, int tid);
 int w32_first_thread(int pid);
 int w32_dbg_attach(int pid, PHANDLE h_proc_, ut64 *base_addr);
 bool w32_enable_dbg_priv();

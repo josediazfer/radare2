@@ -188,7 +188,7 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 
 static int r_debug_native_detach (RDebug *db, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_detach (pid);
+	return w32_dbg_detach_cont (db);
 #elif __CYGWIN__
 	#warning "r_debug_native_detach not supported on this platform"
 	return -1;
@@ -227,7 +227,7 @@ static void r_debug_native_stop(RDebug *dbg) {
 /* TODO: must return true/false */
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_continue (dbg, pid, tid);
+	return w32_dbg_continue (pid, tid);
 #elif __APPLE__
 	bool ret;
 	ret = xnu_continue (dbg, pid, tid, sig);
