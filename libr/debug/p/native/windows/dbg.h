@@ -98,8 +98,9 @@ int w32_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
 bool w32_terminate_process(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
 int w32_dbg_continue(int pid, int tid);
-int w32_first_thread(int pid);
-int w32_dbg_attach(int pid, ut64 *base_addr);
+int w32_dbg_attach(int pid);
 bool w32_enable_dbg_priv();
+int w32_dbg_new_proc(const char *cmd, int *tid);
+ut64 w32_get_proc_baddr(int pid);
 
 #endif

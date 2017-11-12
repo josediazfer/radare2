@@ -14,7 +14,7 @@
 typedef struct {
 	int pid;
 	int tid;
-	ut64 base_addr;
+	ut64 baddr;
 	HANDLE h_proc;
 } RIOW32Dbg;
 
@@ -78,11 +78,10 @@ static bool __plugin_open(RIO *io, const char *file, bool many) {
 
 static inline int __open_proc (RIOW32Dbg *dbg_io) {
 
-	dbg_io->tid = w32_dbg_attach (dbg_io->pid, &dbg_io->base_addr);
-	if (dbg_io->tid) {
+	if (w32_dbg_attach (dbg_io->pid) == 0) {
 		dbg_io->h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE, FALSE, dbg_io->pid);
 	}
-	return dbg_io->tid;
+	return dbg_io->pid;
 }
 
 static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
@@ -170,7 +169,10 @@ static int __gettid (RIODesc *fd) {
 static bool __getbase (RIODesc *fd, ut64 *base) {
 	RIOW32Dbg *dbg_io = (RIOW32Dbg *)(fd ? fd->data : NULL);
 	if (base && dbg_io) {
-		*base = dbg_io->base_addr;
+		if (!dbg_io->baddr) {
+			dbg_io->baddr = w32_get_proc_baddr (dbg_io->pid);
+		}
+		*base = dbg_io->baddr;
 		return true;
 	}
 	return false;

@@ -16,6 +16,7 @@
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
+static DWORD (WINAPI *w32_GetModuleFileNameEx)(HANDLE, HMODULE, LPTSTR, DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugActiveProcessStop)(DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugBreakProcess)(HANDLE) = NULL;
 static DWORD (WINAPI *w32_GetThreadId)(HANDLE) = NULL; // Vista
@@ -163,6 +164,8 @@ int w32_dbg_init() {
 	}
 	w32_GetMappedFileName = (DWORD (WINAPI *)(HANDLE, LPVOID, LPTSTR, DWORD))
 		GetProcAddress (h_mod, W32_TCALL ("GetMappedFileName"));
+	w32_GetModuleFileNameEx = (DWORD (WINAPI *)(HANDLE, HMODULE, LPTSTR, DWORD))
+		GetProcAddress (h_mod, W32_TCALL ("GetModuleFileNameEx"));
 	/****** NTDLL functions *****/
 	h_mod = GetModuleHandle (TEXT ("ntdll"));
 	w32_NtQuerySystemInformation = (NTSTATUS  (WINAPI *)(ULONG, PVOID, ULONG, PULONG))
@@ -647,10 +650,11 @@ int w32_dbg_continue(int pid, int tid)
 }
 
 int w32_dbg_detach(int pid) {
-	if (pid == -1) {
-		return -1;
+	if (!w32_DebugActiveProcessStop (pid)) {
+		r_sys_perror ("w32_dbg_detach/DebugActiveProcessStop");
+		return 0;	
 	}
-	return w32_DebugActiveProcessStop (pid)? 0 : -1;
+	return -1;
 }
 
 int w32_dbg_detach_cont(RDebug *dbg) {
@@ -666,35 +670,12 @@ int w32_dbg_detach_cont(RDebug *dbg) {
 	return ret;
 }
 
-int w32_dbg_attach(int pid, ut64 *base_addr)
-{
-	DEBUG_EVENT de = {0};
-	int ret = -1;
-	bool attached = false;
-
-	w32_dbg_detach (pid);
+int w32_dbg_attach(int pid) {
 	if (!DebugActiveProcess (pid)) {
-		r_sys_perror ("r_debug_native_attach/DebugActiveProcess");
-		goto err_w32_dbg_attach;
+		r_sys_perror ("w32_dbg_attach/DebugActiveProcess");
+		return 0;	
 	}
-	attached = true;
-	if (WaitForDebugEvent (&de, INFINITE) == 0) {
-		r_sys_perror ("r_debug_native_attach/WaitForDebugEvent");
-		goto err_w32_dbg_attach;
-	}	
-	if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
-		eprintf ("r_debug_native_attach: unexpected debug event %04x\n", (uint32_t)de.dwDebugEventCode);
-		goto err_w32_dbg_attach;
-	}
-	if (base_addr) {
-		*base_addr = (ut64)(SIZE_T)de.u.CreateProcessInfo.lpBaseOfImage;
-	}
-	ret = de.dwThreadId;
-err_w32_dbg_attach:
-	if (ret == -1 && attached) {
-		w32_DebugActiveProcessStop (pid);
-	}
-	return ret;
+	return -1;
 }
 
 bool w32_terminate_process (RDebug *dbg, int pid) {
@@ -1160,4 +1141,116 @@ RList *w32_desc_list (int pid) {
 	free(handleInfo);
 	CloseHandle(processHandle);
 	return ret;
+}
+
+ut64 w32_get_proc_baddr (int pid) {
+	LPTSTR filename = NULL;
+	RList *mods_list = NULL;
+	char *map_name = NULL;
+	RListIter *iter;
+	RDebugMap *map;
+	ut64 baddr = 0;
+	HANDLE h_proc = OpenProcess (PROCESS_QUERY_INFORMATION, FALSE, pid);
+
+	if (!h_proc) {
+		r_sys_perror ("w32_get_proc_baddr/OpenProcess");
+		goto err_w32_get_proc_baddr;
+	}
+	filename = (LPTSTR)malloc (MAX_PATH * sizeof (TCHAR));
+	if (!filename) {
+		perror ("w32_get_proc_baddr/alloc filename");
+		goto err_w32_get_proc_baddr;
+	}
+	if (!w32_GetModuleFileNameEx (h_proc, NULL, filename, MAX_PATH)) {
+		r_sys_perror ("w32_get_proc_baddr/GetModuleFileNameEx");
+		goto err_w32_get_proc_baddr;
+	}
+	map_name = r_sys_conv_utf16_to_utf8 (filename);
+	mods_list = w32_dbg_modules (pid);
+	r_list_foreach (mods_list, iter, map) {
+		if (map->file && !stricmp (map->file, map_name)) {
+			baddr = map->addr;
+			break;
+		}
+	}
+err_w32_get_proc_baddr:
+	free (map_name);
+	free (filename);
+	r_list_free (mods_list);
+	if (h_proc) {
+		CloseHandle (h_proc);
+	}
+	return baddr;
+}
+
+int w32_dbg_new_proc(const char *cmd, int *tid) {
+	PROCESS_INFORMATION pi;
+	STARTUPINFO si = { 0 };
+	int pid = -1;
+	LPTSTR appname_ = NULL, cmdline_ = NULL;
+	char *cmdline = NULL;
+	char **argv;
+	int cmd_len = 0;
+	int i = 0;
+
+	if (!*cmd) {
+		return -1;
+	}
+	argv = r_str_argv (strdup (cmd), NULL);
+	// We need to build a command line with quoted argument and escaped quotes
+	w32_enable_dbg_priv();
+	si.cb = sizeof (si);
+	while (argv[i]) {
+		char *current = argv[i];
+		int quote_count = 0;
+		while ((current = strchr (current, '"'))) {
+			quote_count ++;
+		}
+		cmd_len += strlen (argv[i]);
+		cmd_len += quote_count; // The quotes will add one backslash each
+		cmd_len += 2; // Add two enclosing quotes;
+		i++;
+	}
+	cmd_len += i-1; // Add argc-1 spaces
+	cmdline = malloc ((cmd_len + 1) * sizeof (char));
+	int cmd_i = 0; // Next character to write in cmdline
+	i = 0;
+	while (argv[i]) {
+		if (i != 0) {
+			cmdline[cmd_i++] = ' ';
+		}
+		cmdline[cmd_i++] = '"';
+
+		int arg_i = 0; // Index of current character in orginal argument
+		while (argv[i][arg_i]) {
+			char c = argv[i][arg_i];
+			if (c == '"') {
+				cmdline[cmd_i++] = '\\';
+			}
+			cmdline[cmd_i++] = c;
+			arg_i++;
+		}
+
+		cmdline[cmd_i++] = '"';
+		i++;
+	}
+	cmdline[cmd_i] = '\0';
+	appname_ = r_sys_conv_utf8_to_utf16 (argv[0]);
+	cmdline_ = r_sys_conv_utf8_to_utf16 (cmdline);
+	if (!CreateProcess (appname_, cmdline_, NULL, NULL, FALSE,
+				CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
+				NULL, NULL, &si, &pi)) {
+		r_sys_perror ("w32_dbg_new_proc/CreateProcess");
+		goto err_w32_dbg_new_proc;
+	}
+	pid = pi.dwProcessId;
+	*tid = pi.dwThreadId;
+	CloseHandle (pi.hProcess);
+	CloseHandle (pi.hThread);
+err_w32_dbg_new_proc:
+	free (appname_);
+	free (cmdline_);
+	free (cmdline);
+	r_str_argv_free (argv);
+	return pid;
 }
