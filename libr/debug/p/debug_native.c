@@ -165,7 +165,6 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 #if __linux__
 	return linux_attach (dbg, pid);
 #elif __WINDOWS__ && !__CYGWIN__
-	w32_dbg_detach_cont (dbg);
 	return w32_dbg_attach (pid);
 #elif __CYGWIN__
 	#warning "r_debug_native_attach not supported on this platform"

@@ -523,17 +523,27 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 			pid = -1;
 		}
 		if (pid == -1) {
+#if !__WINDOWS__
 			pid = fork_and_ptraceme (io, io->bits, file + 6);
 			if (pid == -1) {
 				return NULL;
 			}
+#endif
 #if __WINDOWS__
-			sprintf (uri, "w32dbg://%d", pid);
-			_plugin = r_io_plugin_resolve (io, (const char *)uri, false);
-			if (!_plugin || !_plugin->open) {
+			char *uri_file;
+
+			uri_file = (char *)malloc (MAX_PATH + 9);
+			if (!uri_file) {
 				return NULL;
 			}
-			ret = _plugin->open (io, uri, rw, mode);
+			snprintf (uri_file, MAX_PATH + 9, "w32dbg://%s", file + 6);
+			_plugin = r_io_plugin_resolve (io, (const char *)uri_file, false);
+			if (!_plugin || !_plugin->open) {
+				free (uri_file);
+				return NULL;
+			}
+			ret = _plugin->open (io, uri_file, rw, mode);
+			free (uri_file);
 #elif __APPLE__
 			sprintf (uri, "smach://%d", pid);		//s is for spawn
 			_plugin = r_io_plugin_resolve (io, (const char *)uri + 1, false);

@@ -76,34 +76,38 @@ static bool __plugin_open(RIO *io, const char *file, bool many) {
 	return !strncmp (file, "w32dbg://", 9);
 }
 
-static inline int __open_proc (RIOW32Dbg *dbg_io) {
-
-	if (w32_dbg_attach (dbg_io->pid) == 0) {
-		dbg_io->h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE, FALSE, dbg_io->pid);
-	}
-	return dbg_io->pid;
-}
-
 static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
-	if (__plugin_open (io, file, 0)) {
-		char *pidpath;
-		RIODesc *ret;
-		RIOW32Dbg *dbg_io = R_NEW0 (RIOW32Dbg);
-		if (!dbg_io) {
-			return NULL;
+	RIODesc *ret = NULL;
+	RIOW32Dbg *dbg_io = NULL;
+
+	if (!__plugin_open (io, file, 0)) {
+		return NULL;
+	}
+	dbg_io = R_NEW0 (RIOW32Dbg);
+	dbg_io->pid = -1;
+	if (!strncmp (file, "w32dbg://", 9)) {
+		dbg_io->pid = w32_dbg_new_proc (file + 9);
+		if (dbg_io->pid == -1) {
+			goto err__open;
 		}
+	} else if (!strncmp (file, "attach://", 9)) {
 		dbg_io->pid = atoi (file + 9);
-		if (__open_proc (dbg_io) == -1) {
-			free (dbg_io);
-			return NULL;
+		if (w32_dbg_attach (dbg_io->pid) == -1) {
+			goto err__open;
 		}
-		pidpath = r_sys_pid_to_path (dbg_io->pid);
+	}
+	if (dbg_io->pid != -1) {
+		dbg_io->h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ |
+						PROCESS_VM_WRITE, FALSE, dbg_io->pid);
 		ret = r_io_desc_new (io, &r_io_plugin_w32dbg,
 				file, rw | R_IO_EXEC, mode, dbg_io);
-		ret->name = pidpath;
-		return ret;
+		ret->name = r_sys_pid_to_path (dbg_io->pid);
 	}
-	return NULL;
+err__open:
+	if (!ret) {
+		free (dbg_io);
+	}
+	return ret;
 }
 
 static ut64 __lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {

@@ -641,7 +641,7 @@ int w32_dbg_continue(int pid, int tid)
 	/* DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
 		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
 		*/
-	if (ContinueDebugEvent (pid, tid, DBG_CONTINUE) == 0) {
+	if (tid > 0 && ContinueDebugEvent (pid, tid, DBG_CONTINUE) == 0) {
 		eprintf ("failed debug_contp pid %d tid %d\n", pid, tid);
 		r_sys_perror ("w32_dbg_continue/ContinueDebugEvent");
 		return -1;
@@ -1168,6 +1168,7 @@ ut64 w32_get_proc_baddr (int pid) {
 	map_name = r_sys_conv_utf16_to_utf8 (filename);
 	mods_list = w32_dbg_modules (pid);
 	r_list_foreach (mods_list, iter, map) {
+		eprintf ("map %s %s\n", map->file, map_name);
 		if (map->file && !stricmp (map->file, map_name)) {
 			baddr = map->addr;
 			break;
@@ -1183,7 +1184,7 @@ err_w32_get_proc_baddr:
 	return baddr;
 }
 
-int w32_dbg_new_proc(const char *cmd, int *tid) {
+int w32_dbg_new_proc(const char *cmd) {
 	PROCESS_INFORMATION pi;
 	STARTUPINFO si = { 0 };
 	int pid = -1;
@@ -1197,8 +1198,6 @@ int w32_dbg_new_proc(const char *cmd, int *tid) {
 		return -1;
 	}
 	argv = r_str_argv (strdup (cmd), NULL);
-	// We need to build a command line with quoted argument and escaped quotes
-	w32_enable_dbg_priv();
 	si.cb = sizeof (si);
 	while (argv[i]) {
 		char *current = argv[i];
@@ -1244,7 +1243,6 @@ int w32_dbg_new_proc(const char *cmd, int *tid) {
 		goto err_w32_dbg_new_proc;
 	}
 	pid = pi.dwProcessId;
-	*tid = pi.dwThreadId;
 	CloseHandle (pi.hProcess);
 	CloseHandle (pi.hThread);
 err_w32_dbg_new_proc:

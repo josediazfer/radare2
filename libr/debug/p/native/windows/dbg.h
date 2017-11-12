@@ -100,7 +100,7 @@ RList *w32_desc_list(int pid);
 int w32_dbg_continue(int pid, int tid);
 int w32_dbg_attach(int pid);
 bool w32_enable_dbg_priv();
-int w32_dbg_new_proc(const char *cmd, int *tid);
+int w32_dbg_new_proc(const char *cmd);
 ut64 w32_get_proc_baddr(int pid);
 
 #endif
