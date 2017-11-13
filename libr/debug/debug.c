@@ -1545,15 +1545,16 @@ R_API ut64 r_debug_get_baddr(RDebug *dbg, const char *file) {
 		// Tell gdb that we want baddr, not full mem map
 		dbg->iob.system(dbg->iob.io, "baddr");
 	}
-	int pid = r_io_desc_get_pid (dbg->iob.io->desc);
-	int tid = r_io_desc_get_tid (dbg->iob.io->desc);
-	if (r_debug_attach (dbg, pid) == -1) {
-		return 0LL;
-	}
 #if __WINDOWS__
 	ut64 base;
 	return r_io_desc_get_base (dbg->iob.io->desc, &base), base;
 #else
+	int pid = r_io_desc_get_pid (dbg->iob.io->desc);
+	int tid = r_io_desc_get_tid (dbg->iob.io->desc);
+
+	if (r_debug_attach (dbg, pid) == -1) {
+		return 0LL;
+	}
 	r_debug_select (dbg, pid, tid);
 	r_debug_map_sync (dbg);
 	abspath = r_sys_pid_to_path (pid);

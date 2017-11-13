@@ -649,7 +649,7 @@ int w32_dbg_continue(int pid, int tid)
 	return tid;
 }
 
-int w32_dbg_detach(int pid) {
+int w32_detach(int pid) {
 	if (!w32_DebugActiveProcessStop (pid)) {
 		r_sys_perror ("w32_dbg_detach/DebugActiveProcessStop");
 		return 0;	
@@ -664,18 +664,128 @@ int w32_dbg_detach_cont(RDebug *dbg) {
 		return -1;
 	}
 	w32_dbg_continue (dbg->pid, dbg->tid);
-	if ((ret = w32_dbg_detach (dbg->pid)) != -1) {
+	if ((ret = w32_detach (dbg->pid)) != -1) {
 		dbg->pid = -1;
 	}
 	return ret;
 }
 
-int w32_dbg_attach(int pid) {
-	if (!DebugActiveProcess (pid)) {
-		r_sys_perror ("w32_dbg_attach/DebugActiveProcess");
-		return 0;	
+static bool wait_dbg_proc (int pid, RDebugW32ProcInfo *proc_info) {
+	DEBUG_EVENT de;
+
+	if (WaitForDebugEvent (&de, 5000) == 0) {
+		r_sys_perror ("w32_dbg_proc/WaitForDebugEvent");
+		return false;
 	}
-	return -1;
+	if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
+		eprintf ("w32_dbg_proc/unexpected debug event %d\n", (int)de.dwDebugEventCode);
+		return false;
+	}
+	if (proc_info) {
+		proc_info->baddr = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
+		proc_info->pid = de.dwProcessId;
+		proc_info->tid = de.dwThreadId;
+	}
+	return true;
+}
+
+int w32_attach(int pid, RDebugW32ProcInfo *proc_info) {
+	bool attached = false;
+	RDebugW32ProcInfo proc_info_;
+	int ret = -1;
+
+	if (pid <= 0) {
+		return -1;
+	}
+	if (!DebugActiveProcess (pid)) {
+		r_sys_perror ("w32_attach/DebugActiveProcess");
+		goto err_w32_attach;
+	}
+	attached = true;
+	if (!wait_dbg_proc (pid, &proc_info_)) {
+		goto err_w32_attach;
+	}
+	ret = proc_info_.tid;
+	if (proc_info) {
+		*proc_info = proc_info_;
+	}
+err_w32_attach:
+	if (ret == -1 && attached) {
+		w32_DebugActiveProcessStop (pid);
+	}
+	return ret;
+}
+
+int w32_new_proc(const char *cmd, RDebugW32ProcInfo *proc_info) {
+	PROCESS_INFORMATION pi;
+	STARTUPINFO si = {0};
+	int pid = -1;
+	LPTSTR appname_ = NULL, cmdline_ = NULL;
+	char *cmdline = NULL;
+	char **argv;
+	int cmd_len = 0;
+	int i = 0;
+
+	if (!*cmd) {
+		return -1;
+	}
+	argv = r_str_argv (strdup (cmd), NULL);
+	si.cb = sizeof (si);
+	while (argv[i]) {
+		char *current = argv[i];
+		int quote_count = 0;
+		while ((current = strchr (current, '"'))) {
+			quote_count ++;
+		}
+		cmd_len += strlen (argv[i]);
+		cmd_len += quote_count; // The quotes will add one backslash each
+		cmd_len += 2; // Add two enclosing quotes;
+		i++;
+	}
+	cmd_len += i-1; // Add argc-1 spaces
+	cmdline = malloc ((cmd_len + 1) * sizeof (char));
+	int cmd_i = 0; // Next character to write in cmdline
+	i = 0;
+	while (argv[i]) {
+		if (i != 0) {
+			cmdline[cmd_i++] = ' ';
+		}
+		cmdline[cmd_i++] = '"';
+
+		int arg_i = 0; // Index of current character in orginal argument
+		while (argv[i][arg_i]) {
+			char c = argv[i][arg_i];
+			if (c == '"') {
+				cmdline[cmd_i++] = '\\';
+			}
+			cmdline[cmd_i++] = c;
+			arg_i++;
+		}
+
+		cmdline[cmd_i++] = '"';
+		i++;
+	}
+	cmdline[cmd_i] = '\0';
+	appname_ = r_sys_conv_utf8_to_utf16 (argv[0]);
+	cmdline_ = r_sys_conv_utf8_to_utf16 (cmdline);
+	if (!CreateProcess (appname_, cmdline_, NULL, NULL, FALSE,
+				CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
+				NULL, NULL, &si, &pi)) {
+		r_sys_perror ("w32_new_proc/CreateProcess");
+		goto err_w32_new_proc;
+	}
+	CloseHandle (pi.hProcess);
+	CloseHandle (pi.hThread);
+	if (!wait_dbg_proc (pi.dwProcessId, proc_info)) {
+		goto err_w32_new_proc;
+	}
+	pid = proc_info->pid;
+err_w32_new_proc:
+	free (appname_);
+	free (cmdline_);
+	free (cmdline);
+	r_str_argv_free (argv);
+	return pid;
 }
 
 bool w32_terminate_process (RDebug *dbg, int pid) {
@@ -1142,7 +1252,7 @@ RList *w32_desc_list (int pid) {
 	CloseHandle(processHandle);
 	return ret;
 }
-
+#if 0
 ut64 w32_get_proc_baddr (int pid) {
 	LPTSTR filename = NULL;
 	RList *mods_list = NULL;
@@ -1150,7 +1260,7 @@ ut64 w32_get_proc_baddr (int pid) {
 	RListIter *iter;
 	RDebugMap *map;
 	ut64 baddr = 0;
-	HANDLE h_proc = OpenProcess (PROCESS_QUERY_INFORMATION, FALSE, pid);
+	HANDLE h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
 	if (!h_proc) {
 		r_sys_perror ("w32_get_proc_baddr/OpenProcess");
@@ -1162,6 +1272,7 @@ ut64 w32_get_proc_baddr (int pid) {
 		goto err_w32_get_proc_baddr;
 	}
 	if (!w32_GetModuleFileNameEx (h_proc, NULL, filename, MAX_PATH)) {
+		eprintf ("GetLastError %d\n", GetLastError());
 		r_sys_perror ("w32_get_proc_baddr/GetModuleFileNameEx");
 		goto err_w32_get_proc_baddr;
 	}
@@ -1183,72 +1294,4 @@ err_w32_get_proc_baddr:
 	}
 	return baddr;
 }
-
-int w32_dbg_new_proc(const char *cmd) {
-	PROCESS_INFORMATION pi;
-	STARTUPINFO si = { 0 };
-	int pid = -1;
-	LPTSTR appname_ = NULL, cmdline_ = NULL;
-	char *cmdline = NULL;
-	char **argv;
-	int cmd_len = 0;
-	int i = 0;
-
-	if (!*cmd) {
-		return -1;
-	}
-	argv = r_str_argv (strdup (cmd), NULL);
-	si.cb = sizeof (si);
-	while (argv[i]) {
-		char *current = argv[i];
-		int quote_count = 0;
-		while ((current = strchr (current, '"'))) {
-			quote_count ++;
-		}
-		cmd_len += strlen (argv[i]);
-		cmd_len += quote_count; // The quotes will add one backslash each
-		cmd_len += 2; // Add two enclosing quotes;
-		i++;
-	}
-	cmd_len += i-1; // Add argc-1 spaces
-	cmdline = malloc ((cmd_len + 1) * sizeof (char));
-	int cmd_i = 0; // Next character to write in cmdline
-	i = 0;
-	while (argv[i]) {
-		if (i != 0) {
-			cmdline[cmd_i++] = ' ';
-		}
-		cmdline[cmd_i++] = '"';
-
-		int arg_i = 0; // Index of current character in orginal argument
-		while (argv[i][arg_i]) {
-			char c = argv[i][arg_i];
-			if (c == '"') {
-				cmdline[cmd_i++] = '\\';
-			}
-			cmdline[cmd_i++] = c;
-			arg_i++;
-		}
-
-		cmdline[cmd_i++] = '"';
-		i++;
-	}
-	cmdline[cmd_i] = '\0';
-	appname_ = r_sys_conv_utf8_to_utf16 (argv[0]);
-	cmdline_ = r_sys_conv_utf8_to_utf16 (cmdline);
-	if (!CreateProcess (appname_, cmdline_, NULL, NULL, FALSE,
-				CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
-				NULL, NULL, &si, &pi)) {
-		r_sys_perror ("w32_dbg_new_proc/CreateProcess");
-		goto err_w32_dbg_new_proc;
-	}
-	pid = pi.dwProcessId;
-	CloseHandle (pi.hProcess);
-	CloseHandle (pi.hThread);
-err_w32_dbg_new_proc:
-	free (appname_);
-	free (cmdline_);
-	free (cmdline);
-	r_str_argv_free (argv);
-	return pid;
-}
+#endif
