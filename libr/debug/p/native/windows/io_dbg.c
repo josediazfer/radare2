@@ -79,8 +79,9 @@ static bool __plugin_open(RIO *io, const char *file, bool many) {
 static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	RIODesc *ret = NULL;
 	RIOW32Dbg *dbg_io = NULL;
-	RDebugW32ProcInfo proc_info;
+	RDebugW32ProcInfo *proc_info;
 	bool opened = false;
+	RDebug *dbg = (RDebug *)io->user;
 
 	if (!__plugin_open (io, file, 0)) {
 		return NULL;
@@ -89,16 +90,16 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	if (!strncmp (file, "w32dbg://", 9)) {
 		const char *cmd = file + 9;
 
-		opened = w32_new_proc (cmd, &proc_info) != -1;
+		opened = w32_dbg_new_proc (dbg, cmd, &proc_info) != -1;
 	} else if (!strncmp (file, "attach://", 9)) {
 		int pid = atoi (file + 9);
 
-		opened = w32_attach (pid, &proc_info) != -1;
+		opened = w32_dbg_attach (dbg, pid, &proc_info) != -1;
 	}
 	if (opened) {
-		dbg_io->pid = proc_info.pid;
-		dbg_io->tid = proc_info.tid;
-		dbg_io->baddr = proc_info.baddr;
+		dbg_io->pid = proc_info->pid;
+		dbg_io->tid = proc_info->tid;
+		dbg_io->baddr = proc_info->base_addr;
 		dbg_io->h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ |
 						PROCESS_VM_WRITE, FALSE, dbg_io->pid);
 		ret = r_io_desc_new (io, &r_io_plugin_w32dbg,

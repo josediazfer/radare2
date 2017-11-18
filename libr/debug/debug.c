@@ -884,6 +884,7 @@ R_API int r_debug_step(RDebug *dbg, int steps) {
 R_API void r_debug_io_bind(RDebug *dbg, RIO *io) {
 	r_io_bind (io, &dbg->bp->iob);
 	r_io_bind (io, &dbg->iob);
+	io->user = dbg;
 }
 
 R_API int r_debug_step_over(RDebug *dbg, int steps) {
