@@ -699,38 +699,39 @@ R_API char *r_str_newlen(const char *str, int len) {
 // Returns a new heap-allocated string that matches the format-string
 // specification.
 R_API char *r_str_newf(const char *fmt, ...) {
-	int ret, ret2;
-	char *tmp, *p, string[1024];
-	va_list ap, ap2;
-	va_start (ap, fmt);
-	va_start (ap2, fmt);
+	char *tmp = NULL, string[1024];
+	va_list ap;
+	int ret;
+
 	if (!strchr (fmt, '%')) {
-		va_end (ap2);
-		va_end (ap);
 		return strdup (fmt);
 	}
-	ret = vsnprintf (string, sizeof (string) - 1, fmt, ap);
-	if (ret < 1 || ret >= sizeof (string)) {
-		p = calloc (1, ret + 3);
-		if (!p) {
-			va_end (ap2);
+	va_start (ap, fmt);
+	ret = vsnprintf (string, sizeof (string), fmt, ap);
+	va_end (ap);
+	if (ret < 0 || ret >= sizeof (string)) {
+		int ret2;
+#if __WINDOWS__
+		if (ret == -1) {
+			va_start (ap, fmt);
+			ret = _vscprintf (fmt, ap);
 			va_end (ap);
-			return NULL;
 		}
-		ret2 = vsnprintf (p, ret + 1, fmt, ap2);
-		if (ret2 < 1 || ret2 > ret + 1) {
-			free (p);
-			va_end (ap2);
-			va_end (ap);
-			return NULL;
+#endif
+		if (ret > 0) {
+			tmp = calloc (1, ret + 1);
+			if (tmp) {
+				va_start (ap, fmt);
+				ret2 = vsnprintf (tmp, ret + 1, fmt, ap);
+				va_end (ap);
+				if (ret2 < 0 || ret2 >= ret + 1) {
+					R_FREE (tmp);
+				}
+			}
 		}
-		tmp = r_str_new (p);
-		free (p);
 	} else {
 		tmp = r_str_new (string);
 	}
-	va_end (ap2);
-	va_end (ap);
 	return tmp;
 }
 
