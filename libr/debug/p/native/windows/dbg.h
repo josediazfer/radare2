@@ -33,6 +33,7 @@ typedef struct {
 
 typedef struct {
 	RList *proc_list;
+	bool init;
 } RDebugW32;
 
 typedef struct _SYSTEM_HANDLE

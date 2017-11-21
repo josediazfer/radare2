@@ -14,6 +14,10 @@
 #define WINAPI
 #endif
 
+#ifndef EXCEPTION_HEAP_CORRUPTION
+#define EXCEPTION_HEAP_CORRUPTION 0xc0000374
+#endif
+
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
 static DWORD (WINAPI *w32_GetModuleFileNameEx)(HANDLE, HMODULE, LPTSTR, DWORD) = NULL;
@@ -132,6 +136,7 @@ static bool proc_info_delete(RDebug *dbg, int pid) {
 }
 
 static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
+	eprintf ("free lib_info: %llx\n", lib_info);
 	free (lib_info->path);
 	free (lib_info->name);
 	free (lib_info);
@@ -159,6 +164,9 @@ int w32_dbg_init(RDebug *dbg) {
 	HMODULE h_mod;
 	RDebugW32 *dbg_w32;
 
+	if (dbg->native_ptr) {
+		return true;
+	}
 	/* escalate privs (required for win7/vista) */
 	w32_enable_dbg_priv ();
 	/****** KERNEL32 functions *****/
@@ -216,6 +224,7 @@ int w32_dbg_init(RDebug *dbg) {
 			w32_DebugActiveProcessStop, w32_DebugBreakProcess, w32_GetThreadId);
 		return false;
 	}
+
 	dbg_w32 = R_NEW0 (RDebugW32);
 	dbg_w32->proc_list = r_list_newf ((RListFree)r_proc_info_free);
 	dbg->native_ptr = dbg_w32;
@@ -249,6 +258,9 @@ static char *get_w32_excep_name(unsigned long code) {
 	case EXCEPTION_STACK_OVERFLOW:
 		desc = "stack overflow";
 		break;
+	case EXCEPTION_HEAP_CORRUPTION:
+		desc = "heap corruption";
+		break;
 	default:
 		desc = "unknown";
 	}
@@ -265,6 +277,7 @@ static int dbg_exception_event(DEBUG_EVENT *de) {
 	case EXCEPTION_ILLEGAL_INSTRUCTION:
 	case EXCEPTION_INT_DIVIDE_BY_ZERO:
 	case EXCEPTION_STACK_OVERFLOW:
+	case EXCEPTION_HEAP_CORRUPTION:
 		eprintf ("(%d) Fatal exception (%s) in thread %d\n",
 			(int)de->dwProcessId, 
 			get_w32_excep_name(code),
@@ -476,7 +489,7 @@ int w32_dbg_wait(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 		pid = de.dwProcessId;
 		proc_info_ = proc_info_find (dbg, pid, NULL);
 		if (!proc_info_) {
-			eprintf ("unregistered process %d\n", pid);
+			eprintf ("unregistered pid %d, ignoring...\n", pid);
 			return -1;
 		}
 		*proc_info = proc_info_;
@@ -493,7 +506,7 @@ int w32_dbg_wait(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
 		case EXIT_PROCESS_DEBUG_EVENT:
-			eprintf ("(%d) Process %d exited with exit code %d\n", (int)de.dwProcessId, (int)de.dwProcessId,
+			eprintf ("(%d) process %d exited with exit code %d\n", (int)de.dwProcessId, (int)de.dwProcessId,
 				(int)de.u.ExitProcess.dwExitCode);
 			next_event = 0;
 			exited_already = pid;
@@ -520,7 +533,7 @@ int w32_dbg_wait(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 			ret = R_DEBUG_REASON_EXIT_LIB;
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
-			eprintf ("(%d) Debug string\n", pid);
+			eprintf ("(%d) debug string\n", pid);
 			w32_dbg_continue (pid, tid);
 			next_event = 1;
 			break;
@@ -689,7 +702,7 @@ int w32_dbg_continue(int pid, int tid)
 	return tid;
 }
 
-int w32_detach(int pid) {
+static int w32_detach(int pid) {
 	if (!w32_DebugActiveProcessStop (pid)) {
 		r_sys_perror ("w32_dbg_detach/DebugActiveProcessStop");
 		return 0;	
@@ -730,33 +743,6 @@ static bool wait_dbg_proc (int pid, RDebugW32ProcInfo *proc_info) {
 	return true;
 }
 
-int w32_attach(int pid, RDebugW32ProcInfo *proc_info) {
-	bool attached = false;
-	RDebugW32ProcInfo proc_info_;
-	int ret = -1;
-
-	if (pid <= 0) {
-		return -1;
-	}
-	if (!DebugActiveProcess (pid)) {
-		r_sys_perror ("w32_attach/DebugActiveProcess");
-		goto err_w32_attach;
-	}
-	attached = true;
-	if (!wait_dbg_proc (pid, &proc_info_)) {
-		goto err_w32_attach;
-	}
-	ret = proc_info_.tid;
-	if (proc_info) {
-		*proc_info = proc_info_;
-	}
-err_w32_attach:
-	if (ret == -1 && attached) {
-		w32_DebugActiveProcessStop (pid);
-	}
-	return ret;
-}
-
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 	RDebugW32ProcInfo *proc_info_ = NULL;
 	int ret = -1;
@@ -766,10 +752,15 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 		if (proc_info) {
 			*proc_info = proc_info_;
 		}
+		eprintf ("was attached\n");
 		return proc_info_->tid;
 	}
 	proc_info_ = R_NEW0 (RDebugW32ProcInfo);
-	if (w32_attach (pid, proc_info_) == -1) {
+	if (!DebugActiveProcess (pid)) {
+		r_sys_perror ("w32_dbg_attach/DebugActiveProcess");
+		goto err_w32_dbg_attach;
+	}
+	if (!wait_dbg_proc (pid, proc_info_)) {
 		goto err_w32_dbg_attach;
 	}
 	if (proc_info) {
@@ -793,12 +784,12 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32ProcInfo **proc_info
 	char **argv;
 	int cmd_len = 0;
 	int i = 0;
-	RDebugW32ProcInfo *proc_info_;
+	RDebugW32ProcInfo *proc_info_ = NULL;
 
 	if (!*cmd) {
 		return -1;
 	}
-	argv = r_str_argv (strdup (cmd), NULL);
+	argv = r_str_argv (cmd, NULL);
 	si.cb = sizeof (si);
 	while (argv[i]) {
 		char *current = argv[i];
@@ -840,7 +831,7 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32ProcInfo **proc_info
 	if (!CreateProcess (appname_, cmdline_, NULL, NULL, FALSE,
 				CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
 				NULL, NULL, &si, &pi)) {
-		r_sys_perror ("w32_new_proc/CreateProcess");
+		r_sys_perror ("w32_dbg_new_proc/CreateProcess");
 		goto err_w32_new_proc;
 	}
 	CloseHandle (pi.hProcess);
