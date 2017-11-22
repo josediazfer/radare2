@@ -227,7 +227,7 @@ static void r_debug_native_stop(RDebug *dbg) {
 /* TODO: must return true/false */
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_continue (pid, tid);
+	return w32_dbg_continue (dbg, pid);
 #elif __APPLE__
 	bool ret;
 	ret = xnu_continue (dbg, pid, tid, sig);
@@ -322,7 +322,7 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
 	RDebugW32ProcInfo *proc_info = NULL;
 
-	reason = w32_dbg_wait (dbg, pid, &proc_info);
+	reason = w32_dbg_wait (dbg, &proc_info);
 	if (reason == R_DEBUG_REASON_NEW_LIB) {
 		if (proc_info->lib_info) {
 			if (tracelib (dbg, pid, "load", proc_info->lib_info)) {
@@ -366,6 +366,9 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 	} else if (reason == R_DEBUG_REASON_EXIT_TID) {
 		RDebugW32ThreadInfo *item = &proc_info->th_info;
 		eprintf ("(%d) finished thread %d exit code %d\n", pid, dbg->tid, item->exit_code);
+	} else if (reason == R_DEBUG_REASON_EXIT_PID && proc_info) {
+		// on exit, try to select next proc
+		r_debug_select(dbg, proc_info->pid, proc_info->tid);
 	}
 #else
 	if (pid == -1) {
@@ -682,14 +685,15 @@ static RList *r_debug_native_pids (RDebug *dbg, int pid) {
 }
 
 static RList *r_debug_native_threads (RDebug *dbg, int pid) {
+#if __WINDOWS__ && !__CYGWIN__
+	return w32_thread_list (pid);
+#else
 	RList *list = r_list_new ();
 	if (!list) {
 		eprintf ("No list?\n");
 		return NULL;
 	}
-#if __WINDOWS__ && !__CYGWIN__
-	return w32_thread_list (pid, list);
-#elif __APPLE__
+#if __APPLE__
 	return xnu_thread_list (dbg, pid, list);
 #elif __linux__
 	return linux_thread_list (pid, list);
@@ -697,6 +701,7 @@ static RList *r_debug_native_threads (RDebug *dbg, int pid) {
 	eprintf ("TODO: list threads\n");
 	r_list_free (list);
 	return NULL;
+#endif
 #endif
 }
 

@@ -3764,7 +3764,8 @@ static int cmd_debug_continue (RCore *core, const char *input) {
 		pid = atoi (input + 2);
 		r_reg_arena_swap (core->dbg->reg, true);
 		r_debug_select (core->dbg, pid, core->dbg->tid);
-		r_debug_continue (core->dbg);
+		r_debug_continue_only (core->dbg);
+		//r_debug_continue (core->dbg);
 		r_debug_select (core->dbg, old_pid, core->dbg->tid);
 		break;
 	case 't':

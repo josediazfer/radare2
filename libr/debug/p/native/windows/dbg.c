@@ -106,7 +106,7 @@ static RDebugW32ProcInfo *proc_info_find(RDebug *dbg, int pid, RListIter **iter)
 	RDebugW32ProcInfo *proc_info;
 
 	r_list_foreach (proc_list, iter_, proc_info) {
-		if (proc_info->pid == pid) {
+		if (proc_info->pid == pid || pid == -1) {
 			if (iter) {
 				*iter = iter_;
 			}
@@ -136,7 +136,6 @@ static bool proc_info_delete(RDebug *dbg, int pid) {
 }
 
 static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
-	eprintf ("free lib_info: %llx\n", lib_info);
 	free (lib_info->path);
 	free (lib_info->name);
 	free (lib_info);
@@ -229,14 +228,6 @@ int w32_dbg_init(RDebug *dbg) {
 	dbg_w32->proc_list = r_list_newf ((RListFree)r_proc_info_free);
 	dbg->native_ptr = dbg_w32;
 	return true;
-}
-
-inline static int w32_h2t(HANDLE h) {
-	if (w32_GetThreadId != NULL) // >= Windows Vista
-		return w32_GetThreadId (h);
-	if (w32_GetProcessId != NULL) // >= Windows XP1
-		return w32_GetProcessId (h);
-	return (int)(size_t)h; // XXX broken
 }
 
 static char *get_w32_excep_name(unsigned long code) {
@@ -465,51 +456,49 @@ static void set_thread_info(RDebugW32ProcInfo *proc_info, DEBUG_EVENT *de) {
 	th_info->exit_code = (int)de->u.ExitThread.dwExitCode;
 }
 
-int w32_dbg_wait(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
+int w32_dbg_wait(RDebug *dbg, RDebugW32ProcInfo **proc_info) {
 	DEBUG_EVENT de;
-	int tid, next_event = 0;
+	int tid, pid, next_event = 0;
 	unsigned int code;
 	int ret = R_DEBUG_REASON_UNKNOWN;
-	static int exited_already = 0;
 	/* handle debug events */
 	do {
 		RDebugW32ProcInfo *proc_info_;
 
-		/* do not continue when already exited but still open for examination */
-		if (exited_already == pid) {
-			return -1;
-		}
 		memset (&de, 0, sizeof (DEBUG_EVENT));
 		if (WaitForDebugEvent (&de, INFINITE) == 0) {
 			r_sys_perror ("w32_dbg_wait/WaitForDebugEvent");
 			return -1;
 		}
 		code = de.dwDebugEventCode;
-		tid = de.dwThreadId;
-		pid = de.dwProcessId;
+		tid = (int)de.dwThreadId;
+		pid = (int)de.dwProcessId;
 		proc_info_ = proc_info_find (dbg, pid, NULL);
 		if (!proc_info_) {
 			eprintf ("unregistered pid %d, ignoring...\n", pid);
 			return -1;
 		}
-		*proc_info = proc_info_;
+		proc_info_->tid = tid;
+		proc_info_->cont = true;
+		if (proc_info) {
+			*proc_info = proc_info_;
+		}
 		dbg->tid = tid;
 		dbg->pid = pid;
 		/* TODO: DEBUG_CONTROL_C */
 		switch (code) {
 		case CREATE_PROCESS_DEBUG_EVENT:
-			eprintf ("(%d) created process (%d:%p)\n",
-				pid, w32_h2t (de.u.CreateProcessInfo.hProcess),
-				de.u.CreateProcessInfo.lpStartAddress);
-			w32_dbg_continue (pid, tid);
+			eprintf ("(%d) created process (%p)\n", pid, de.u.CreateProcessInfo.lpStartAddress);
+			CloseHandle (de.u.CreateProcessInfo.hFile);
+			w32_dbg_continue (dbg, pid);
 			next_event = 1;
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
 		case EXIT_PROCESS_DEBUG_EVENT:
-			eprintf ("(%d) process %d exited with exit code %d\n", (int)de.dwProcessId, (int)de.dwProcessId,
+			eprintf ("(%d) process %d exited with exit code %d\n", pid, pid,
 				(int)de.u.ExitProcess.dwExitCode);
 			next_event = 0;
-			exited_already = pid;
+			proc_info_delete (dbg, pid);
 			ret = R_DEBUG_REASON_EXIT_PID;
 			break;
 		case CREATE_THREAD_DEBUG_EVENT:
@@ -534,12 +523,12 @@ int w32_dbg_wait(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
 			eprintf ("(%d) debug string\n", pid);
-			w32_dbg_continue (pid, tid);
+			w32_dbg_continue (dbg, pid);
 			next_event = 1;
 			break;
 		case RIP_EVENT:
 			eprintf ("(%d) RIP event\n", pid);
-			w32_dbg_continue (pid, tid);
+			w32_dbg_continue (dbg, pid);
 			next_event = 1;
 			// XXX unknown ret = R_DEBUG_REASON_TRAP;
 			break;
@@ -566,7 +555,7 @@ int w32_dbg_wait(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 				}
 				else {
 					next_event = 1;
-					w32_dbg_continue (pid, tid);
+					w32_dbg_continue (dbg, pid);
 				}
 
 			}
@@ -592,9 +581,11 @@ inline int is_pe_hdr(unsigned char *pe_hdr) {
 	return 0;
 }
 
-RList *w32_thread_list(int pid, RList *list) {
+RList *w32_thread_list(int pid) {
         HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
         THREADENTRY32 te32;
+	RList *list = NULL;
+	bool success = false;
 
         h_proc_snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
         if (h_proc_snap == INVALID_HANDLE_VALUE) {
@@ -606,6 +597,7 @@ RList *w32_thread_list(int pid, RList *list) {
 		r_sys_perror ("w32_thread_list/Thread32First");
                 goto err_w32_thread_list;
 	}
+	list = r_list_newf ((RListFree)r_debug_pid_free);
         do {
                 /* get all threads of process */
                 if (te32.th32OwnerProcessID == pid) {
@@ -621,7 +613,12 @@ RList *w32_thread_list(int pid, RList *list) {
 			r_list_append (list, r_debug_pid_new ("???", te32.th32ThreadID, 0, 's', 0));
                 }
         } while (Thread32Next (h_proc_snap, &te32));
+	success = true;
 err_w32_thread_list:
+	if (!success) {
+		r_list_free (list);
+		list = NULL;
+	}
         if (h_proc_snap != INVALID_HANDLE_VALUE) {
                 CloseHandle (h_proc_snap);
 	}
@@ -688,26 +685,23 @@ err_w32_pids:
 	return list;
 }
 
-int w32_dbg_continue(int pid, int tid)
-{ 
+int w32_dbg_continue(RDebug *dbg, int pid) {
+	RDebugW32ProcInfo *proc_info = proc_info_find (dbg, pid, NULL);
+
+	if (!proc_info) {
+		return -1;
+	}
 	/* Honor the Windows-specific signal that instructs threads to process exceptions */
 	/* DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
 		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
 		*/
-	if (tid > 0 && ContinueDebugEvent (pid, tid, DBG_CONTINUE) == 0) {
-		eprintf ("failed debug_contp pid %d tid %d\n", pid, tid);
+	if (proc_info->cont && ContinueDebugEvent (proc_info->pid, proc_info->tid, DBG_CONTINUE) == 0) {
+		eprintf ("failed debug_contp pid %d tid %d\n", proc_info->pid, proc_info->tid);
 		r_sys_perror ("w32_dbg_continue/ContinueDebugEvent");
 		return -1;
 	}
-	return tid;
-}
-
-static int w32_detach(int pid) {
-	if (!w32_DebugActiveProcessStop (pid)) {
-		r_sys_perror ("w32_dbg_detach/DebugActiveProcessStop");
-		return 0;	
-	}
-	return -1;
+	proc_info->cont  = false;
+	return 0;
 }
 
 int w32_dbg_detach(RDebug *dbg, int pid) {
@@ -717,30 +711,50 @@ int w32_dbg_detach(RDebug *dbg, int pid) {
 	if (!proc_info) {
 		return -1;
 	}
-	w32_dbg_continue (pid, proc_info->tid);
-	if ((ret = w32_detach (pid)) != -1) {
-		proc_info_delete (dbg, pid);
-	}
+	w32_dbg_continue (dbg, pid);
+	ret = w32_DebugActiveProcessStop (pid)? 0 : -1;
+	proc_info_delete (dbg, pid);
 	return ret;
 }
 
-static bool wait_dbg_proc (int pid, RDebugW32ProcInfo *proc_info) {
-	DEBUG_EVENT de;
+static void set_proc_state (RDebug *dbg, int pid, boolean enable) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RList *proc_list = dbg_w32->proc_list;
+	RListIter *iter;
+	RDebugW32ProcInfo *proc_info;
 
+	r_list_foreach (proc_list, iter, proc_info) {
+		if (proc_info->pid != pid) {
+			if (enable) {
+				DebugActiveProcess (proc_info->pid);
+			} else {
+				w32_DebugActiveProcessStop (proc_info->pid);
+			}
+		}
+	}
+}
+
+static bool wait_dbg_proc (RDebug *dbg, int pid, RDebugW32ProcInfo *proc_info) {
+	DEBUG_EVENT de;
+	bool ret = false;
+
+	set_proc_state (dbg, pid, false); 
 	if (WaitForDebugEvent (&de, 5000) == 0) {
 		r_sys_perror ("w32_dbg_proc/WaitForDebugEvent");
-		return false;
+		goto err_wait_dbg_proc;
 	}
 	if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
 		eprintf ("w32_dbg_proc/unexpected debug event %d\n", (int)de.dwDebugEventCode);
-		return false;
+		goto err_wait_dbg_proc;
 	}
-	if (proc_info) {
-		proc_info->base_addr = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
-		proc_info->pid = de.dwProcessId;
-		proc_info->tid = de.dwThreadId;
-	}
-	return true;
+	proc_info->base_addr = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
+	proc_info->pid = de.dwProcessId;
+	proc_info->tid = de.dwThreadId;
+	proc_info->cont = true;
+	ret = true;
+err_wait_dbg_proc:
+	set_proc_state (dbg, pid, true);
+	return ret;
 }
 
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
@@ -752,25 +766,26 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info) {
 		if (proc_info) {
 			*proc_info = proc_info_;
 		}
-		eprintf ("was attached\n");
 		return proc_info_->tid;
 	}
-	proc_info_ = R_NEW0 (RDebugW32ProcInfo);
 	if (!DebugActiveProcess (pid)) {
 		r_sys_perror ("w32_dbg_attach/DebugActiveProcess");
 		goto err_w32_dbg_attach;
 	}
-	if (!wait_dbg_proc (pid, proc_info_)) {
+	proc_info_ = R_NEW0 (RDebugW32ProcInfo);
+	if (!wait_dbg_proc (dbg, pid, proc_info_)) {
 		goto err_w32_dbg_attach;
 	}
+	proc_info_append (dbg, proc_info_);
 	if (proc_info) {
 		*proc_info = proc_info_;
 	}
-	proc_info_append (dbg, proc_info_);
+	dbg->pid = proc_info_->pid;
+	dbg->tid = proc_info_->tid;
 	ret = proc_info_->tid;
 err_w32_dbg_attach:
-	if (ret == -1) {
-		free (proc_info_);
+	if (ret == -1 && proc_info_) {
+		proc_info_delete (dbg, proc_info_->pid);
 	}
 	return ret; 
 }
@@ -837,17 +852,19 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32ProcInfo **proc_info
 	CloseHandle (pi.hProcess);
 	CloseHandle (pi.hThread);
 	proc_info_ = R_NEW0 (RDebugW32ProcInfo);
-	if (!wait_dbg_proc (pi.dwProcessId, proc_info_)) {
+	if (!wait_dbg_proc (dbg, pi.dwProcessId, proc_info_)) {
 		goto err_w32_new_proc;
 	}
+	proc_info_append (dbg, proc_info_);
 	if (proc_info) {
 		*proc_info = proc_info_;
 	}
-	proc_info_append (dbg, proc_info_);
+	dbg->pid = proc_info_->pid;
+	dbg->tid = proc_info_->tid;
 	pid = proc_info_->pid;
 err_w32_new_proc:
-	if (pid == -1) {
-		r_proc_info_free (proc_info_);
+	if (pid == -1 && proc_info_) {
+		proc_info_delete (dbg, proc_info_->pid);
 	}
 	free (appname_);
 	free (cmdline_);
