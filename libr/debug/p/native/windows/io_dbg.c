@@ -62,7 +62,7 @@ static int __read(RIO *io, RIODesc *fd, ut8 *buf, int len) {
 
 static int w32dbg_write_at(RIOW32Dbg *dbg, const ut8 *buf, int len, ut64 addr) {
 	SIZE_T ret;
-	return WriteProcessMemory (dbg->h_proc, (PVOID)(SIZE_T)addr, buf, len, &ret)? (int)ret: 0;
+	return WriteProcessMemory (dbg->h_proc, (PVOID)(SIZE_T)addr, buf, len, &ret)? (int)ret: 0; 
 }
 
 static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int len) {
@@ -76,20 +76,19 @@ static bool __plugin_open(RIO *io, const char *file, bool many) {
 	return !strncmp (file, "w32dbg://", 9);
 }
 
-static void set_io_proc_info (RIOW32Dbg *dbg_io, RDebugW32ProcInfo *proc_info) {
+static void set_io_proc (RIOW32Dbg *dbg_io, RDebugW32Proc *proc) {
 	if (dbg_io->h_proc) {
 		CloseHandle (dbg_io->h_proc);
 	}
-	dbg_io->pid = proc_info->pid;
-	dbg_io->tid = proc_info->tid;
-	dbg_io->baddr = proc_info->base_addr;
-	dbg_io->h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ |
-					PROCESS_VM_WRITE, FALSE, dbg_io->pid);
+	dbg_io->pid = proc->pid;
+	dbg_io->tid = proc->tid;
+	dbg_io->baddr = proc->base_addr;
+	dbg_io->h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, dbg_io->pid);
 }
 
 static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	RIODesc *ret = NULL;
-	RDebugW32ProcInfo *proc_info;
+	RDebugW32Proc *proc;
 	bool opened = false;
 	RDebug *dbg = (RDebug *)io->user;
 
@@ -99,16 +98,16 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	if (!strncmp (file, "w32dbg://", 9)) {
 		const char *cmd = file + 9;
 
-		opened = w32_dbg_new_proc (dbg, cmd, &proc_info) != -1;
+		opened = w32_dbg_new_proc (dbg, cmd, &proc) != -1;
 	} else if (!strncmp (file, "attach://", 9)) {
 		int pid = atoi (file + 9);
 
-		opened = w32_dbg_attach (dbg, pid, &proc_info) != -1;
+		opened = w32_dbg_attach (dbg, pid, &proc) != -1;
 	}
 	if (opened) {
 		RIOW32Dbg *dbg_io = R_NEW0 (RIOW32Dbg);
 		if (dbg_io) {
-			set_io_proc_info (dbg_io, proc_info);
+			set_io_proc (dbg_io, proc);
 			ret = r_io_desc_new (io, &r_io_plugin_w32dbg,
 					file, rw | R_IO_EXEC, mode, dbg_io);
 			ret->name = r_sys_pid_to_path (dbg_io->pid);
@@ -147,11 +146,11 @@ static char *__system(RIO *io, RIODesc *fd, const char *cmd) {
 		if (cmd[3] == ' ') {
 			int pid = atoi (cmd + 3);
 			if (pid > 0 && pid != dbg_io->pid) {
-				RDebugW32ProcInfo *proc_info;
+				RDebugW32Proc *proc;
 				RDebug *dbg = (RDebug *)io->user;
 
-				if (w32_dbg_attach (dbg, pid, &proc_info) != -1) {
-					set_io_proc_info (dbg_io, proc_info);
+				if (w32_dbg_attach (dbg, pid, &proc) != -1) {
+					set_io_proc (dbg_io, proc);
 				} else {
 					eprintf ("Cannot open process %d\n", pid);
 				}
@@ -216,6 +215,9 @@ void w32_io_dbg_init (RDebug *dbg) {
 #ifdef CORELIB
 	RIOPlugin *plugin;
 
+	if (r_io_plugin_resolve (dbg->iob.io, "w32dbg://", false) != NULL) {
+		return;
+	}
 	plugin = R_NEW0 (RIOPlugin);
 	if (plugin) {
 		*plugin = r_io_plugin_w32dbg;

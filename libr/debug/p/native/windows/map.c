@@ -6,9 +6,14 @@ typedef struct {
 	RDebugMap *map;
 	IMAGE_SECTION_HEADER *sect_hdr;
 	int sect_count;
-} RWinModInfo;
+} RDebugW32Mod;
 
-static char *get_map_type(MEMORY_BASIC_INFORMATION *mbi) {
+typedef struct {
+	MEMORY_BASIC_INFORMATION mbi;
+	char *sect_name;
+} RDebugW32Map;
+
+static const char *get_map_type(MEMORY_BASIC_INFORMATION *mbi) {
 	char *type;
 	switch (mbi->Type) {
 	case MEM_IMAGE:
@@ -26,11 +31,20 @@ static char *get_map_type(MEMORY_BASIC_INFORMATION *mbi) {
 	return type;
 }
 
+static void w32_map_free (void *native_ptr) {
+	RDebugW32Map *map_w32;
+
+	if (!native_ptr) {
+		return;
+	}
+	map_w32 = (RDebugW32Map *)native_ptr;
+	free (map_w32->sect_name);
+	free (map_w32);
+}
+
 static RDebugMap *add_map(RList *list, const char *name, ut64 addr, ut64 len, MEMORY_BASIC_INFORMATION *mbi) {
-	RDebugMap *mr;
+	RDebugMap *map;
 	int perm;
-	char *map_type = get_map_type (mbi);
-	char *map_name;
 
 	switch (mbi->Protect) {
 	case PAGE_EXECUTE:
@@ -57,20 +71,19 @@ static RDebugMap *add_map(RList *list, const char *name, ut64 addr, ut64 len, ME
 	default:
 		perm = 0;
 	}
-	map_name = r_str_newf ("%-8s %s", map_type, name);
-	if (!map_name) {
-		perror ("r_str_newf");
-		goto err_add_map;
+	map = r_debug_map_new ((char *)name, addr, addr + len, perm, mbi->Type == MEM_PRIVATE);
+	if (map) {
+		RDebugW32Map *map_w32;
+
+		map_w32 = R_NEW0 (RDebugW32Map);
+		if (map_w32) {
+			map_w32->mbi = *mbi;	
+			map->native_ptr = map_w32;
+			map->native_free = w32_map_free;
+		}
+		r_list_append (list, map);
 	}
-	mr = r_debug_map_new (map_name,
-				addr,
-				addr + len, perm, mbi->Type == MEM_PRIVATE);
-	if (mr) {
-		r_list_append (list, mr);
-	}
-err_add_map:
-	free (map_name);
-	return mr;
+	return map;
 }
 
 static inline RDebugMap *add_map_reg(RList *list, const char *name, MEMORY_BASIC_INFORMATION *mbi) {
@@ -92,7 +105,7 @@ static inline int is_pe_hdr(unsigned char *pe_hdr) {
 
 RList *w32_dbg_modules(int pid) {
 	MODULEENTRY32 me32;
-	RDebugMap *mr;
+	RDebugMap *map;
 	RList *list = r_list_newf ((RListFree)r_debug_map_free);
 	DWORD flags = TH32CS_SNAPMODULE;
 #if __MINGW64__ || _WIN64
@@ -113,11 +126,11 @@ RList *w32_dbg_modules(int pid) {
 		ut64 baddr = (ut64)(size_t)me32.modBaseAddr;
 
 		mod_name = r_sys_conv_utf16_to_utf8 (me32.szModule);
-		mr = r_debug_map_new (mod_name, baddr, baddr + me32.modBaseSize, 0, 0);
+		map = r_debug_map_new (mod_name, baddr, baddr + me32.modBaseSize, 0, 0);
 		free (mod_name);
-		if (mr) {
-			mr->file = r_sys_conv_utf16_to_utf8 (me32.szExePath);
-			r_list_append (list, mr);
+		if (map) {
+			map->file = r_sys_conv_utf16_to_utf8 (me32.szExePath);
+			r_list_append (list, map);
 		}
 	} while (Module32Next (h_mod_snap, &me32));
 err_w32_dbg_modules:
@@ -127,7 +140,7 @@ err_w32_dbg_modules:
 	return list;
 }
 
-static int set_mod_inf(HANDLE h_proc, RDebugMap *map, RWinModInfo *mod) {
+static int set_mod_inf(HANDLE h_proc, RDebugMap *map, RDebugW32Mod *mod) {
 	IMAGE_DOS_HEADER *dos_hdr;
 	IMAGE_NT_HEADERS *nt_hdrs;
 	IMAGE_NT_HEADERS32 *nt_hdrs32;
@@ -172,7 +185,7 @@ err_set_mod_info:
 	return mod_inf_fill;
 }
 
-static void proc_mem_img(HANDLE h_proc, RList *map_list, RList *mod_list, RWinModInfo *mod, SYSTEM_INFO *si, MEMORY_BASIC_INFORMATION *mbi) {
+static void proc_mem_img(HANDLE h_proc, RList *map_list, RList *mod_list, RDebugW32Mod *mod, SYSTEM_INFO *si, MEMORY_BASIC_INFORMATION *mbi) {
 	ut64 addr = (ut64)(size_t)mbi->BaseAddress;
 	ut64 len = (ut64)mbi->RegionSize;
 	if (!mod->map || addr < mod->map->addr || (addr + len) > mod->map->addr_end) {
@@ -180,7 +193,7 @@ static void proc_mem_img(HANDLE h_proc, RList *map_list, RList *mod_list, RWinMo
 		RDebugMap *map;
 
 		free (mod->sect_hdr);
-		memset (mod, 0, sizeof (RWinModInfo));
+		memset (mod, 0, sizeof (RDebugW32Mod));
 		r_list_foreach (mod_list, iter, map) {
 			if (addr >= map->addr && addr <= map->addr_end) {
 				mod->map = map;
@@ -209,17 +222,20 @@ static void proc_mem_img(HANDLE h_proc, RList *map_list, RList *mod_list, RWinMo
 				sect_found = 2;
 			}
 			if (sect_found) {
-				char *map_name = r_str_newf ("%s | %s", mod->map->name, sect_hdr->Name);
-				if (!map_name) {
-					perror ("r_str_newf");
-					goto err_proc_mem_img;
-				}
+				RDebugMap *map;
+
 				if (sect_found == 1) {
-					add_map (map_list, map_name, sect_addr, sect_len, mbi);
+					map = add_map (map_list, mod->map->name, sect_addr, sect_len, mbi);
 				} else {
-					add_map_reg (map_list, map_name, mbi);
+					map = add_map_reg (map_list, mod->map->name, mbi);
 				}
-				free (map_name);
+				if (map) {
+					RDebugW32Map *map_w32;
+					map_w32 = (RDebugW32Map *)map->native_ptr;
+					if (map_w32) {
+						map_w32->sect_name = r_str_new ((char *)sect_hdr->Name);
+					}
+				}
 				sect_count++;
 			}
 		}
@@ -233,8 +249,6 @@ static void proc_mem_img(HANDLE h_proc, RList *map_list, RList *mod_list, RWinMo
 			add_map_reg (map_list, mod->map->name, mbi);
 		}
 	}
-err_proc_mem_img:
-	;
 }
 
 static void proc_mem_map(HANDLE h_proc, RList *map_list, MEMORY_BASIC_INFORMATION *mbi) {
@@ -242,9 +256,15 @@ static void proc_mem_map(HANDLE h_proc, RList *map_list, MEMORY_BASIC_INFORMATIO
 
 	DWORD len = w32_GetMappedFileName (h_proc, mbi->BaseAddress, f_name, MAX_PATH);
 	if (len > 0) {
+		RDebugMap *map;
+
 		char *f_name_ = r_sys_conv_utf16_to_utf8 (f_name);
-		add_map_reg (map_list, f_name_, mbi);
-		free (f_name_);
+		map = add_map_reg (map_list, "", mbi);
+		if (map) {
+			map->file = f_name_;
+		} else {
+			free (f_name_);
+		}
 	} else {
 		add_map_reg (map_list, "", mbi);
 	}
@@ -255,7 +275,7 @@ RList *w32_dbg_maps(int pid) {
 	LPVOID cur_addr;
 	MEMORY_BASIC_INFORMATION mbi;
 	HANDLE h_proc;
-	RWinModInfo mod_inf = {0};
+	RDebugW32Mod mod_inf = {0};
 	RList *map_list = r_list_newf((RListFree)r_debug_map_free), *mod_list = NULL;
 
 	GetSystemInfo (&si);
@@ -288,4 +308,40 @@ err_w32_dbg_maps:
 	free (mod_inf.sect_hdr);
 	r_list_free (mod_list);		
 	return map_list;
+}
+
+bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {
+	RList *map_list = w32_dbg_maps (dbg->pid);
+	RListIter *iter;
+	RDebugMap *map;
+	char buf[128];
+
+	r_list_foreach (map_list, iter, map) {
+		const char *type = map->shared? "sys": "usr";
+		RDebugW32Map *map_w32 = (RDebugW32Map *)map->native_ptr;
+
+		r_num_units (buf, map->size);
+		dbg->cb_printf (dbg->bits & R_SYS_BITS_64
+				? "0x%016"PFMT64x" # 0x%016"PFMT64x" %c %s %6s %c %s%8s"
+				: "0x%08"PFMT64x" # 0x%08"PFMT64x" %c %s %6s %c %s%8s",
+				map->addr,
+				map->addr_end, 
+				(addr >= map->addr && addr < map->addr_end)?'*':'-',
+				type, buf,
+				map->user?'u':'s',
+				r_str_rwx_i (map->perm),
+				get_map_type (&map_w32->mbi));
+		switch (map_w32->mbi.Type) {
+		case MEM_IMAGE:
+			dbg->cb_printf (" %s %s\n", map->name, map_w32->sect_name? map_w32->sect_name : "");
+			break;
+		case MEM_MAPPED:
+			dbg->cb_printf (" %s\n", map->file? map->file : "");
+			break;
+		default:
+			dbg->cb_printf (" %s\n", map->name);
+		}
+	}
+	r_list_free (map_list);
+	return true;
 }

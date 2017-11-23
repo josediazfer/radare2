@@ -140,6 +140,8 @@ typedef struct r_debug_map_t {
 	int perm;
 	int user;
 	bool shared;
+	void *native_ptr; /* address to internal struct used by native code */
+	void (*native_free)(void *); /* callback function that free native_ptr */
 } RDebugMap;
 
 typedef struct r_debug_signal_t {
@@ -380,6 +382,7 @@ typedef struct r_debug_plugin_t {
 	char* (*reg_profile)(RDebug *dbg);
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
+	bool (*maps_print)(RDebug *dbg, ut64 addr, int rad);
 	RList *(*modules_get)(RDebug *dbg);
 	RDebugMap* (*map_alloc)(RDebug *dbg, ut64 addr, int size);
 	int (*map_dealloc)(RDebug *dbg, ut64 addr, int size);

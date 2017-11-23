@@ -78,6 +78,9 @@ R_API void r_debug_map_list(RDebug *dbg, ut64 addr, int rad) {
 		}
 		break;
 	default:
+		if (dbg->h && dbg->h->maps_print && dbg->h->maps_print (dbg, addr, rad)) {
+			return;
+		}
 		fmtstr = dbg->bits & R_SYS_BITS_64
 			? "0x%016"PFMT64x" # 0x%016"PFMT64x" %c %s %6s %c %s %s %s%s%s\n"
 			: "0x%08"PFMT64x" # 0x%08"PFMT64x" %c %s %6s %c %s %s %s%s%s\n";
@@ -300,6 +303,9 @@ R_API RDebugMap *r_debug_map_get(RDebug *dbg, ut64 addr) {
 
 R_API void r_debug_map_free(RDebugMap *map) {
 	if (map) {
+		if (map->native_free) {
+			map->native_free (map->native_ptr);
+		}
 		free (map->name);
 		free (map->file);
 		free (map);

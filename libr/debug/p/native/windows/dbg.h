@@ -30,7 +30,8 @@ typedef struct {
 	int pid;
 	int tid;
 	bool cont;
-} RDebugW32ProcInfo;
+	bool init;
+} RDebugW32Proc;
 
 typedef struct {
 	RList *proc_list;
@@ -93,7 +94,8 @@ typedef struct _OBJECT_TYPE_INFORMATION
 	ULONG NonPagedPoolUsage;
 } OBJECT_TYPE_INFORMATION, *POBJECT_TYPE_INFORMATION;
 
-int w32_dbg_wait(RDebug *dbg, RDebugW32ProcInfo **proc_info);
+int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **proc);
+int w32_dbg_proc_wait(RDebug *dbg, int pid, RDebugW32Proc **proc);
 int w32_dbg_detach(RDebug *dbg, int pid);
 RDebugInfo* w32_info(RDebug *dbg, const char *arg);
 RList *w32_pids(int pid, RList *list);
@@ -101,15 +103,16 @@ RDebugW32 *w32_dbg_get(RDebug *dbg);
 void w32_dbg_free(RDebug *dbg);
 int w32_dbg_init(RDebug *dbg);
 RList *w32_thread_list(int pid);
+int w32_thread_first(int pid);
 int w32_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
 int w32_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
 bool w32_terminate_process(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
 int w32_dbg_continue(RDebug *dbg, int pid);
-int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32ProcInfo **proc_info);
-int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32ProcInfo **proc_info);
+int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc);
+int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32Proc **ret_proc);
 bool w32_enable_dbg_priv();
 ut64 w32_get_proc_baddr(int pid);
-RDebugW32ProcInfo *find_dbg_proc(RDebug *dbg, int pid);
+RDebugW32Proc *find_dbg_proc(RDebug *dbg, int pid);
 
 #endif

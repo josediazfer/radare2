@@ -320,22 +320,22 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 	RDebugReasonType reason = R_DEBUG_REASON_UNKNOWN;
 
 #if __WINDOWS__ && !__CYGWIN__
-	RDebugW32ProcInfo *proc_info = NULL;
+	RDebugW32Proc *proc = NULL;
 
-	reason = w32_dbg_wait (dbg, &proc_info);
+	reason = w32_dbg_wait (dbg, &proc);
 	if (reason == R_DEBUG_REASON_NEW_LIB) {
-		if (proc_info->lib_info) {
-			if (tracelib (dbg, pid, "load", proc_info->lib_info)) {
+		if (proc->lib_info) {
+			if (tracelib (dbg, pid, "load", proc->lib_info)) {
 				reason = R_DEBUG_REASON_TRAP;
 			}
 			/* Check if autoload PDB is set, and load PDB information if yes */
 			RCore* core = dbg->corebind.core;
 			bool autoload_pdb = dbg->corebind.cfggeti (core, "pdb.autoload");
 			if (autoload_pdb) {
-				char* o_res = dbg->corebind.cmdstrf (core, "o %s", proc_info->lib_info->path);
+				char* o_res = dbg->corebind.cmdstrf (core, "o %s", proc->lib_info->path);
 				// File exists since we loaded it, however the "o" command fails sometimes hence the while loop
 				while (*o_res == 0) {
-					o_res = dbg->corebind.cmdstrf (core, "o %s", proc_info->lib_info->path);
+					o_res = dbg->corebind.cmdstrf (core, "o %s", proc->lib_info->path);
 				}
 				int fd = atoi (o_res);
 				dbg->corebind.cmdf (core, "o %d", fd);
@@ -353,22 +353,22 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 			eprintf ("loading unknown library.\n");
 		}
 	} else if (reason == R_DEBUG_REASON_EXIT_LIB) {
-		if (proc_info->lib_info) {
-			if (tracelib (dbg, pid, "unload", proc_info->lib_info)) {
+		if (proc->lib_info) {
+			if (tracelib (dbg, pid, "unload", proc->lib_info)) {
 				reason = R_DEBUG_REASON_TRAP;
 			}
 		} else {
 			eprintf ("unloading unknown library.\n");
 		}
 	} else if (reason == R_DEBUG_REASON_NEW_TID) {
-		RDebugW32ThreadInfo *item = &proc_info->th_info;
+		RDebugW32ThreadInfo *item = &proc->th_info;
 		eprintf ("(%d) created thread %d (start @ %08"PFMT64x")\n", pid, dbg->tid, item->entry_addr);
 	} else if (reason == R_DEBUG_REASON_EXIT_TID) {
-		RDebugW32ThreadInfo *item = &proc_info->th_info;
+		RDebugW32ThreadInfo *item = &proc->th_info;
 		eprintf ("(%d) finished thread %d exit code %d\n", pid, dbg->tid, item->exit_code);
-	} else if (reason == R_DEBUG_REASON_EXIT_PID && proc_info) {
+	} else if (reason == R_DEBUG_REASON_EXIT_PID && proc) {
 		// on exit, try to select next proc
-		r_debug_select(dbg, proc_info->pid, proc_info->tid);
+		r_debug_select(dbg, proc->pid, proc->tid);
 	}
 #else
 	if (pid == -1) {
@@ -1106,6 +1106,14 @@ static void _map_free(RDebugMap *map) {
 }
 #endif
 
+static bool r_debug_native_maps_print (RDebug *dbg, ut64 addr, int type) {
+	bool ret = false;
+#if __WINDOWS__
+	ret = w32_dbg_maps_print (dbg, addr, type);
+#endif
+	return ret;
+}
+
 static RList *r_debug_native_map_get (RDebug *dbg) {
 	RList *list = NULL;
 #if __KFBSD__
@@ -1751,6 +1759,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.map_alloc = r_debug_native_map_alloc,
 	.map_dealloc = r_debug_native_map_dealloc,
 	.map_get = r_debug_native_map_get,
+	.maps_print = r_debug_native_maps_print,
 	.modules_get = r_debug_native_modules_get,
 	.map_protect = r_debug_native_map_protect,
 	.breakpoint = r_debug_native_bp,
