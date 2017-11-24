@@ -10,6 +10,14 @@
 #define WINAPI
 #endif
 
+enum RDebugW32ProcState {
+	PROC_STATE_DETACHED,	/* process only is detached */
+	PROC_STATE_ATTACHED,	/* process only is attached */
+	PROC_STATE_STARTING,	/* registering process and libraries */
+	PROC_STATE_STARTED,	/* end of previous state */
+	PROC_STATE_READY	/* process ready for debugging */
+};
+
 typedef struct {
 	ut64 base_addr;
 	char *path;
@@ -30,7 +38,7 @@ typedef struct {
 	int pid;
 	int tid;
 	bool cont;
-	bool init;
+	int state;
 } RDebugW32Proc;
 
 typedef struct {

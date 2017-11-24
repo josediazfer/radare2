@@ -479,19 +479,36 @@ static void print_dbg_output(RDebugW32Proc *proc, DEBUG_EVENT *de) {
 #endif
 }
 
+static int proc_dbg_ready(RDebug *dbg) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RList *proc_list = dbg_w32->proc_list;
+	RListIter *iter;
+	RDebugW32Proc *proc;
+	int n_ready = 0;
+
+	r_list_foreach (proc_list, iter, proc) {
+		eprintf ("EPROC STATE %d %d\n", proc->pid, proc->state);
+		if (proc->state == PROC_STATE_STARTED &&
+			w32_dbg_continue (dbg, proc->pid) == 0) {
+		eprintf ("EPROC READY %d %d\n", proc->pid, proc->state);
+			proc->state = PROC_STATE_READY;
+			n_ready++;
+		}
+	}
+	return n_ready;
+}
+
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	DEBUG_EVENT de;
 	int tid, pid, next_event = 0;
 	unsigned int code;
 	int ret = R_DEBUG_REASON_UNKNOWN;
+
+	proc_dbg_ready (dbg);
 	/* handle debug events */
 	do {
 		RDebugW32Proc *proc;
 
-		if (!proc_dbg_find (dbg, -1, NULL)) {
-			eprintf ("not attached process exists!\n");
-			return -1;
-		}
 		memset (&de, 0, sizeof (DEBUG_EVENT));
 		if (WaitForDebugEvent (&de, INFINITE) == 0) {
 			r_sys_perror ("w32_dbg_wait/WaitForDebugEvent");
@@ -516,8 +533,9 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 		switch (code) {
 		case CREATE_PROCESS_DEBUG_EVENT:
 			CloseHandle (de.u.CreateProcessInfo.hFile);
-			if (!proc->init) {
+			if (proc->state == PROC_STATE_ATTACHED) {
 				proc->base_addr = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
+				proc->state = PROC_STATE_STARTING;
 			} else {
 				eprintf ("(%d) created process (%p)\n", pid, de.u.CreateProcessInfo.lpStartAddress);
 			}
@@ -534,7 +552,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			break;
 		case CREATE_THREAD_DEBUG_EVENT:
 			set_thread_info (proc, &de);
-			if (!proc->init) {
+			if (proc->state == PROC_STATE_STARTING) {
 				w32_dbg_continue (dbg, pid);
 				next_event = 1;
 			} else {
@@ -549,7 +567,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			break;
 		case LOAD_DLL_DEBUG_EVENT:
 			set_lib_info (proc, &de, true);
-			if (!proc->init) {
+			if (proc->state == PROC_STATE_STARTING) {
 				w32_dbg_continue (dbg, pid);
 				next_event = 1;
 			} else {
@@ -579,6 +597,10 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			case 0x4000001f: /* STATUS_WX86_BREAKPOINT */
 #endif
 			case EXCEPTION_BREAKPOINT:
+				eprintf ("proc->state: %d\n", proc->state);
+				if (proc->state == PROC_STATE_STARTING) {
+					proc->state = PROC_STATE_STARTED;
+				}
 				ret = R_DEBUG_REASON_BREAKPOINT;
 				next_event = 0;
 				break;
@@ -785,11 +807,26 @@ static void enable_dbg_proc_excep (RDebug *dbg, int pid, boolean enable) {
 			continue;
 		}
 		if (enable) {
-			DebugActiveProcess (proc->pid);
+			if (DebugActiveProcess (proc->pid)) {
+				proc->state = PROC_STATE_ATTACHED;
+			}
 		} else if (w32_DebugActiveProcessStop (proc->pid)) {
 			r_lib_proc_free (proc);
-			proc->init = false;
+			proc->state = PROC_STATE_DETACHED;
 		}
+	}
+	if (enable) {
+		bool proc_attach;
+		do {
+			proc_attach = false;
+			r_list_foreach (proc_list, iter, proc) {
+				if (proc->state == PROC_STATE_ATTACHED) {
+					w32_dbg_wait (dbg, NULL);
+					proc_attach = true;
+					break;
+				}
+			}	
+		} while (proc_attach);
 	}
 }
 
@@ -819,6 +856,7 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
 	}
 	proc = R_NEW0 (RDebugW32Proc);
 	proc->pid = pid;
+	proc->state = PROC_STATE_ATTACHED;
 	proc_dbg_append (dbg, proc);
 	if (w32_dbg_proc_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
 		eprintf ("w32_dbg_attach/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
@@ -895,6 +933,7 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32Proc **ret_proc) {
 	CloseHandle (pi.hThread);
 	proc = R_NEW0 (RDebugW32Proc);
 	proc->pid = pi.dwProcessId;
+	proc->state = PROC_STATE_ATTACHED;
 	proc_dbg_append (dbg, proc);
 	if (w32_dbg_proc_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
 		eprintf ("w32_dbg_attach/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
