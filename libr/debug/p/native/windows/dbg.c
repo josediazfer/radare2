@@ -18,6 +18,8 @@
 #define EXCEPTION_HEAP_CORRUPTION 0xc0000374
 #endif
 
+static int proc_dbg_continue(RDebugW32Proc *proc);
+
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
 static DWORD (WINAPI *w32_GetModuleFileNameEx)(HANDLE, HMODULE, LPTSTR, DWORD) = NULL;
@@ -98,9 +100,8 @@ err_w32_enable_dbg_priv:
 	return success;
 }
 
-static RDebugW32Proc *proc_dbg_find(RDebug *dbg, int pid, RListIter **iter)
+static RDebugW32Proc *proc_dbg_find(RDebugW32 *dbg_w32, int pid, RListIter **iter)
 {
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	RList *proc_list = dbg_w32->proc_list;
 	RListIter *iter_;
 	RDebugW32Proc *proc;
@@ -116,23 +117,16 @@ static RDebugW32Proc *proc_dbg_find(RDebug *dbg, int pid, RListIter **iter)
 	return NULL;
 }
 
-static void proc_dbg_append(RDebug *dbg, RDebugW32Proc *proc) {
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RList *proc_list = dbg_w32->proc_list;
-	r_list_append (proc_list, proc);
+static inline void proc_dbg_append(RDebugW32 *dbg_w32, RDebugW32Proc *proc) {
+	r_list_append (dbg_w32->proc_list, proc);
 }
 
-static bool proc_dbg_delete(RDebug *dbg, int pid) {
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RList *proc_list = dbg_w32->proc_list;
+static void proc_dbg_delete(RDebugW32 *dbg_w32, RDebugW32Proc *proc) {
 	RListIter *iter;
-	RDebugW32Proc *proc = proc_dbg_find (dbg, pid, &iter);
 
-	if (!proc) {
-		return false;
+	if (proc_dbg_find (dbg_w32, proc->pid, &iter)) {
+		r_list_delete (dbg_w32->proc_list, iter);
 	}
-	r_list_delete (proc_list, iter);
-	return true;
 }
 
 static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
@@ -155,6 +149,10 @@ static void r_proc_free(RDebugW32Proc *proc) {
 		return;
 	}
 	r_lib_proc_free (proc);
+	if (proc->h_proc) {
+		CloseHandle (proc->h_proc);
+		proc->h_proc = NULL;
+	}
 }
 
 void w32_dbg_free(RDebug *dbg) {
@@ -189,15 +187,15 @@ int w32_dbg_init(RDebug *dbg) {
 		GetProcAddress (h_mod, W32_TCALL ("QueryFullProcessImageName"));
 	// api to retrieve YMM from w7 sp1
 	w32_GetEnabledXStateFeatures = (ut64 (WINAPI *) ())
-		GetProcAddress(h_mod, "GetEnabledXStateFeatures");
+		GetProcAddress (h_mod, "GetEnabledXStateFeatures");
 	w32_InitializeContext = (BOOL (WINAPI *) (PVOID, DWORD, PCONTEXT*, PDWORD))
-		GetProcAddress(h_mod, "InitializeContext");
+		GetProcAddress (h_mod, "InitializeContext");
 	w32_GetXStateFeaturesMask = (BOOL (WINAPI *) (PCONTEXT Context, PDWORD64))
-		GetProcAddress(h_mod, "GetXStateFeaturesMask");
+		GetProcAddress (h_mod, "GetXStateFeaturesMask");
 	w32_LocateXStateFeature = (PVOID (WINAPI *) (PCONTEXT Context, DWORD ,PDWORD))
-		GetProcAddress(h_mod, "LocateXStateFeature");
+		GetProcAddress (h_mod, "LocateXStateFeature");
 	w32_SetXStateFeaturesMask = (BOOL (WINAPI *) (PCONTEXT Context, DWORD64))
-		GetProcAddress(h_mod, "SetXStateFeaturesMask");
+		GetProcAddress (h_mod, "SetXStateFeaturesMask");
 	/****** PSAPI functions *****/
 	h_mod = LoadLibrary (TEXT("psapi.dll"));
 	if (!h_mod) {
@@ -275,7 +273,7 @@ static int dbg_exception_event(DEBUG_EVENT *de) {
 	case EXCEPTION_HEAP_CORRUPTION:
 		eprintf ("(%d) Fatal exception (%s) in thread %d\n",
 			(int)de->dwProcessId, 
-			get_w32_excep_name(code),
+			get_w32_excep_name (code),
 			(int)de->dwThreadId);
 		break;
 	/* MS_VC_EXCEPTION */
@@ -461,41 +459,36 @@ static void set_thread_info(RDebugW32Proc *proc, DEBUG_EVENT *de) {
 }
 
 static void print_dbg_output(RDebugW32Proc *proc, DEBUG_EVENT *de) {
-#if 0
-	LPSTR dbg_msg = de->u.DebugString.lpDebugStringData;
+	LPVOID addr = de->u.DebugString.lpDebugStringData;
+	WORD len = de->u.DebugString.nDebugStringLength;
+	LPVOID msg = NULL;
+	bool unicode;
+	SIZE_T ret_len;
 
-	if (!dbg_msg) {
+	if (!addr || len <= 0) {
 		return;
 	}
-	if (de->u.DebugString.fUnicode) {
-		eprintf ("UNICODE\n");
-		eprintf ("(%d) debug output: %S", proc->pid, (LPWSTR)dbg_msg);
+	unicode = de->u.DebugString.fUnicode != 0;
+	if (unicode) {
+		msg = (LPVOID)malloc (sizeof (WCHAR) * len);
 	} else {
-		eprintf ("NORMAL\n");
-		fwrite (stderr, de->u.DebugString.
-		eprintf ("(%d) debug output: %s", proc->pid, dbg_msg);
+		msg = (LPVOID)malloc (sizeof (char) * len);
 	}
-	free (dbg_msg);
-#endif
-}
-
-static int proc_dbg_ready(RDebug *dbg) {
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RList *proc_list = dbg_w32->proc_list;
-	RListIter *iter;
-	RDebugW32Proc *proc;
-	int n_ready = 0;
-
-	r_list_foreach (proc_list, iter, proc) {
-		eprintf ("EPROC STATE %d %d\n", proc->pid, proc->state);
-		if (proc->state == PROC_STATE_STARTED &&
-			w32_dbg_continue (dbg, proc->pid) == 0) {
-		eprintf ("EPROC READY %d %d\n", proc->pid, proc->state);
-			proc->state = PROC_STATE_READY;
-			n_ready++;
-		}
+	if (!msg) {
+		perror ("print_dbg_output/malloc");
+		goto err_print_dbg_output;
 	}
-	return n_ready;
+	if (!ReadProcessMemory (proc->h_proc, addr, msg, len, &ret_len)) {
+		r_sys_perror ("print_dbg_output/ReadProcessMemory");
+		goto err_print_dbg_output;
+	}
+	if (unicode) {
+		eprintf ("(%d) debug output \"%S\"\n", proc->pid, (wchar_t *)msg);
+	} else {
+		eprintf ("(%d) debug output \"%s\"\n", proc->pid, (char *)msg);
+	}
+err_print_dbg_output:
+	free (msg);
 }
 
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
@@ -503,8 +496,8 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	int tid, pid, next_event = 0;
 	unsigned int code;
 	int ret = R_DEBUG_REASON_UNKNOWN;
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 
-	proc_dbg_ready (dbg);
 	/* handle debug events */
 	do {
 		RDebugW32Proc *proc;
@@ -517,7 +510,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 		code = de.dwDebugEventCode;
 		tid = (int)de.dwThreadId;
 		pid = (int)de.dwProcessId;
-		proc = proc_dbg_find (dbg, pid, NULL);
+		proc = proc_dbg_find (dbg_w32, pid, NULL);
 		if (!proc) {
 			eprintf ("unregistered pid %d, ignoring...\n", pid);
 			return -1;
@@ -536,10 +529,14 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			if (proc->state == PROC_STATE_ATTACHED) {
 				proc->base_addr = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
 				proc->state = PROC_STATE_STARTING;
+				if (proc->h_proc) {
+					CloseHandle (proc->h_proc);
+				}
+				proc->h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
 			} else {
 				eprintf ("(%d) created process (%p)\n", pid, de.u.CreateProcessInfo.lpStartAddress);
 			}
-			w32_dbg_continue (dbg, pid);
+			proc_dbg_continue (proc);
 			next_event = 1;
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
@@ -547,13 +544,13 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			eprintf ("(%d) process %d exited with exit code %d\n", pid, pid,
 				(int)de.u.ExitProcess.dwExitCode);
 			next_event = 0;
-			proc_dbg_delete (dbg, pid);
+			proc_dbg_delete (dbg_w32, proc);
 			ret = R_DEBUG_REASON_EXIT_PID;
 			break;
 		case CREATE_THREAD_DEBUG_EVENT:
 			set_thread_info (proc, &de);
 			if (proc->state == PROC_STATE_STARTING) {
-				w32_dbg_continue (dbg, pid);
+				proc_dbg_continue (proc);
 				next_event = 1;
 			} else {
 				next_event = 0;
@@ -568,7 +565,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 		case LOAD_DLL_DEBUG_EVENT:
 			set_lib_info (proc, &de, true);
 			if (proc->state == PROC_STATE_STARTING) {
-				w32_dbg_continue (dbg, pid);
+				proc_dbg_continue (proc);
 				next_event = 1;
 			} else {
 				next_event = 0;
@@ -581,13 +578,13 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			ret = R_DEBUG_REASON_EXIT_LIB;
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
-			print_dbg_output(proc, &de);
-			w32_dbg_continue (dbg, pid);
+			print_dbg_output (proc, &de);
+			proc_dbg_continue (proc);
 			next_event = 1;
 			break;
 		case RIP_EVENT:
 			eprintf ("(%d) RIP event\n", pid);
-			w32_dbg_continue (dbg, pid);
+			proc_dbg_continue (proc);
 			next_event = 1;
 			// XXX unknown ret = R_DEBUG_REASON_TRAP;
 			break;
@@ -597,7 +594,6 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			case 0x4000001f: /* STATUS_WX86_BREAKPOINT */
 #endif
 			case EXCEPTION_BREAKPOINT:
-				eprintf ("proc->state: %d\n", proc->state);
 				if (proc->state == PROC_STATE_STARTING) {
 					proc->state = PROC_STATE_STARTED;
 				}
@@ -619,7 +615,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				}
 				else {
 					next_event = 1;
-					w32_dbg_continue (dbg, pid);
+					proc_dbg_continue (proc);
 				}
 
 			}
@@ -651,12 +647,12 @@ RList *w32_thread_list(int pid) {
 	RList *list = NULL;
 	bool success = false;
 
-        h_proc_snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
+        h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
         if (h_proc_snap == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("w32_thread_list/CreateToolhelp32Snapshot");
                 goto err_w32_thread_list;
 	}
-        te32.dwSize = sizeof(THREADENTRY32);
+        te32.dwSize = sizeof (THREADENTRY32);
 	if (!Thread32First (h_proc_snap, &te32)) {
 		r_sys_perror ("w32_thread_list/Thread32First");
                 goto err_w32_thread_list;
@@ -687,19 +683,6 @@ err_w32_thread_list:
                 CloseHandle (h_proc_snap);
 	}
 	return list;
-}
-
-int w32_thread_first(int pid) {
-	RDebugPid *th;
-	int tid = -1;
-	RList *list = w32_thread_list (pid);
-
-	th = r_list_first (list);
-	if (th) {
-		tid = th->pid;
-	}
-	r_list_free (list);
-	return tid;
 }
 
 static RDebugPid *build_debug_pid(PROCESSENTRY32 *pe) {
@@ -762,41 +745,59 @@ err_w32_pids:
 	return list;
 }
 
-int w32_dbg_continue(RDebug *dbg, int pid) {
-	RDebugW32Proc *proc = proc_dbg_find (dbg, pid, NULL);
-
-	if (!proc) {
-		return -1;
-	}
+static int proc_dbg_continue(RDebugW32Proc *proc) {
 	/* Honor the Windows-specific signal that instructs threads to process exceptions */
 	/* DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
 		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
 		*/
 	if (proc->cont && ContinueDebugEvent (proc->pid, proc->tid, DBG_CONTINUE) == 0) {
 		eprintf ("failed debug_contp pid %d tid %d\n", proc->pid, proc->tid);
-		r_sys_perror ("w32_dbg_continue/ContinueDebugEvent");
+		r_sys_perror ("proc_dbg_continue/ContinueDebugEvent");
 		return -1;
 	}
 	proc->cont  = false;
 	return 0;
 }
 
+int w32_dbg_continue(RDebug *dbg, int pid) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RList *proc_list = dbg_w32->proc_list;
+	RListIter *iter;
+	RDebugW32Proc *proc;
+	int ret_cont = -1;
+
+	r_list_foreach (proc_list, iter, proc) {
+		if (proc->state == PROC_STATE_STARTED) {
+			int ret = proc_dbg_continue (proc);
+
+			proc->state = PROC_STATE_READY;
+			if (proc->pid == pid) {
+				ret_cont = ret;
+			}
+		} else if (proc->pid == pid) {
+			ret_cont = proc_dbg_continue (proc);
+		}
+	}
+	return ret_cont;
+}
+
 int w32_dbg_detach(RDebug *dbg, int pid) {
-	RDebugW32Proc *proc = proc_dbg_find (dbg, pid, NULL);
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, pid, NULL);
 	int ret;
 
 	if (!proc) {
 		return -1;
 	}
-	w32_dbg_continue (dbg, pid);
+	proc_dbg_continue (proc);
 	ret = w32_DebugActiveProcessStop (pid)? 0 : -1;
-	proc_dbg_delete (dbg, pid);
+	proc_dbg_delete (dbg_w32, proc);
 	dbg->pid = -1;
 	dbg->tid = -1;
 	return ret;
 }
 
-static void enable_dbg_proc_excep (RDebug *dbg, int pid, boolean enable) {
+static void proc_dbg_enable_excep (RDebug *dbg, int pid, boolean enable) {
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	RList *proc_list = dbg_w32->proc_list;
 	RListIter *iter;
@@ -820,7 +821,7 @@ static void enable_dbg_proc_excep (RDebug *dbg, int pid, boolean enable) {
 		do {
 			proc_attach = false;
 			r_list_foreach (proc_list, iter, proc) {
-				if (proc->state == PROC_STATE_ATTACHED) {
+				if (proc->pid != pid && proc->state == PROC_STATE_ATTACHED) {
 					w32_dbg_wait (dbg, NULL);
 					proc_attach = true;
 					break;
@@ -830,20 +831,21 @@ static void enable_dbg_proc_excep (RDebug *dbg, int pid, boolean enable) {
 	}
 }
 
-int w32_dbg_proc_wait(RDebug *dbg, int pid, RDebugW32Proc **proc) {
+static int proc_dbg_wait(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
 	int reason;
 
-	enable_dbg_proc_excep (dbg, pid, false);
-	reason = w32_dbg_wait (dbg, proc);
-	enable_dbg_proc_excep (dbg, pid, true);
+	proc_dbg_enable_excep (dbg, pid, false);
+	reason = w32_dbg_wait (dbg, ret_proc);
+	proc_dbg_enable_excep (dbg, pid, true);
 	return reason;
 }
 
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	RDebugW32Proc *proc = NULL;
 	int ret = -1;
 
-	proc = proc_dbg_find (dbg, pid, NULL);
+	proc = proc_dbg_find (dbg_w32, pid, NULL);
 	if (proc) {
 		if (ret_proc) {
 			*ret_proc = proc;
@@ -857,15 +859,15 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
 	proc = R_NEW0 (RDebugW32Proc);
 	proc->pid = pid;
 	proc->state = PROC_STATE_ATTACHED;
-	proc_dbg_append (dbg, proc);
-	if (w32_dbg_proc_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
+	proc_dbg_append (dbg_w32, proc);
+	if (proc_dbg_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
 		eprintf ("w32_dbg_attach/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
 		goto err_w32_dbg_attach;
 	}
 	ret = proc->tid;
 err_w32_dbg_attach:
 	if (ret == -1 && proc) {
-		proc_dbg_delete (dbg, proc->pid);
+		proc_dbg_delete (dbg_w32, proc);
 	}
 	return ret; 
 }
@@ -880,6 +882,7 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32Proc **ret_proc) {
 	int cmd_len = 0;
 	int i = 0;
 	RDebugW32Proc *proc = NULL;
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 
 	if (!*cmd) {
 		return -1;
@@ -934,15 +937,15 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32Proc **ret_proc) {
 	proc = R_NEW0 (RDebugW32Proc);
 	proc->pid = pi.dwProcessId;
 	proc->state = PROC_STATE_ATTACHED;
-	proc_dbg_append (dbg, proc);
-	if (w32_dbg_proc_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
+	proc_dbg_append (dbg_w32, proc);
+	if (proc_dbg_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
 		eprintf ("w32_dbg_attach/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
 		goto err_w32_new_proc;
 	}
 	pid = proc->pid;
 err_w32_new_proc:
 	if (pid == -1 && proc) {
-		proc_dbg_delete (dbg, proc->pid);
+		proc_dbg_delete (dbg_w32, proc);
 	}
 	free (appname_);
 	free (cmdline_);
@@ -952,7 +955,7 @@ err_w32_new_proc:
 }
 
 bool w32_terminate_process (RDebug *dbg, int pid) {
-	HANDLE h_proc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE , FALSE, pid);
+	HANDLE h_proc = OpenProcess (PROCESS_TERMINATE | SYNCHRONIZE , FALSE, pid);
 	bool ret = false;
 	if (!h_proc) {
 		r_sys_perror ("w32_terminate_process/OpenProcess");
@@ -1021,7 +1024,7 @@ static int get_avx (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
 		goto err_get_avx;
 	}
 	Success = w32_InitializeContext (NULL, CONTEXT_ALL | CONTEXT_XSTATE, NULL, &ContextSize);
-	if ((Success == TRUE) || (GetLastError() != ERROR_INSUFFICIENT_BUFFER)) {
+	if ((Success == TRUE) || (GetLastError () != ERROR_INSUFFICIENT_BUFFER)) {
 		r_sys_perror ("get_avx/InitializeContext");
 		goto err_get_avx;
 	}
@@ -1062,14 +1065,14 @@ static int get_avx (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
 	}
 	if ((FeatureMask & XSTATE_MASK_AVX) != 0) {
 		// check for AVX initialization and get the pointer.
-		Ymm = (ut128 *)w32_LocateXStateFeature(Context, XSTATE_AVX, NULL);
+		Ymm = (ut128 *)w32_LocateXStateFeature (Context, XSTATE_AVX, NULL);
 		for (Index = 0; Index < nRegs; Index++) {
 			ymm[Index].High = Ymm[Index].High;
 			ymm[Index].Low = Ymm[Index].Low;
 		}
 	}
 err_get_avx:
-	free(buffer);
+	free (buffer);
 	return nRegs;
 }
 
@@ -1169,7 +1172,7 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 		r_sys_perror ("w32_reg_read/OpenThread");
 		goto err_w32_reg_read;
 	}
-	memset(&ctx, 0, sizeof (CONTEXT));
+	memset (&ctx, 0, sizeof (CONTEXT));
 	ctx.ContextFlags = CONTEXT_ALL ;
 	if (!GetThreadContext (h_th, &ctx)) {
 		r_sys_perror ("w32_reg_read/GetThreadContext");
@@ -1340,7 +1343,7 @@ RDebugInfo* w32_info (RDebug *dbg, const char *arg) {
 /* TODO: refactory, leaks */
 RList *w32_desc_list (int pid) {
 	RDebugDesc *desc;
-	RList *ret = r_list_new();
+	RList *ret = r_list_new ();
 	int i;
 	HANDLE processHandle;
 	PSYSTEM_HANDLE_INFORMATION handleInfo;
@@ -1351,13 +1354,13 @@ RList *w32_desc_list (int pid) {
 		eprintf ("win_desc_list: Error opening process.\n");
 		return NULL;
 	}
-	handleInfo = (PSYSTEM_HANDLE_INFORMATION)malloc(handleInfoSize);
+	handleInfo = (PSYSTEM_HANDLE_INFORMATION)malloc (handleInfoSize);
 	#define STATUS_INFO_LENGTH_MISMATCH 0xc0000004
 	#define SystemHandleInformation 16
-	while ((status = w32_NtQuerySystemInformation(SystemHandleInformation,handleInfo,handleInfoSize,NULL)) == STATUS_INFO_LENGTH_MISMATCH)
-		handleInfo = (PSYSTEM_HANDLE_INFORMATION)realloc(handleInfo, handleInfoSize *= 2);
+	while ((status = w32_NtQuerySystemInformation (SystemHandleInformation,handleInfo,handleInfoSize,NULL)) == STATUS_INFO_LENGTH_MISMATCH)
+		handleInfo = (PSYSTEM_HANDLE_INFORMATION)realloc (handleInfo, handleInfoSize *= 2);
 	if (status) {
-		eprintf("win_desc_list: NtQuerySystemInformation failed!\n");
+		eprintf ("win_desc_list: NtQuerySystemInformation failed!\n");
 		return NULL;
 	}
 	for (i = 0; i < handleInfo->HandleCount; i++) {
@@ -1371,48 +1374,48 @@ RList *w32_desc_list (int pid) {
 			continue;
 		if (handle.ObjectTypeNumber != 0x1c)
 			continue;
-		if (w32_NtDuplicateObject (processHandle, &handle.Handle, GetCurrentProcess(), &dupHandle, 0, 0, 0))
+		if (w32_NtDuplicateObject (processHandle, &handle.Handle, GetCurrentProcess (), &dupHandle, 0, 0, 0))
 			continue;
-		objectTypeInfo = (POBJECT_TYPE_INFORMATION)malloc(0x1000);
-		if (w32_NtQueryObject(dupHandle,2,objectTypeInfo,0x1000,NULL)) {
-			CloseHandle(dupHandle);
+		objectTypeInfo = (POBJECT_TYPE_INFORMATION)malloc (0x1000);
+		if (w32_NtQueryObject (dupHandle,2,objectTypeInfo,0x1000,NULL)) {
+			CloseHandle (dupHandle);
 			continue;
 		}
-		objectNameInfo = malloc(0x1000);
-		if (w32_NtQueryObject(dupHandle,1,objectNameInfo,0x1000,&returnLength)) {
-			objectNameInfo = realloc(objectNameInfo, returnLength);
-			if (w32_NtQueryObject(dupHandle, 1, objectNameInfo, returnLength, NULL)) {
-				free(objectTypeInfo);
-				free(objectNameInfo);
-				CloseHandle(dupHandle);
+		objectNameInfo = malloc (0x1000);
+		if (w32_NtQueryObject (dupHandle,1,objectNameInfo,0x1000,&returnLength)) {
+			objectNameInfo = realloc (objectNameInfo, returnLength);
+			if (w32_NtQueryObject (dupHandle, 1, objectNameInfo, returnLength, NULL)) {
+				free (objectTypeInfo);
+				free (objectNameInfo);
+				CloseHandle (dupHandle);
 				continue;
 			}
 		}
 		objectName = *(PUNICODE_STRING)objectNameInfo;
 		if (objectName.Length) {
 			//objectTypeInfo->Name.Length ,objectTypeInfo->Name.Buffer,objectName.Length / 2,objectName.Buffer
-			buff=malloc((objectName.Length/2)+1);
-			wcstombs(buff,objectName.Buffer,objectName.Length/2);
+			buff=malloc ((objectName.Length/2)+1);
+			wcstombs (buff,objectName.Buffer,objectName.Length/2);
 			desc = r_debug_desc_new (handle.Handle,
 					buff, 0, '?', 0);
 			if (!desc) break;
 			r_list_append (ret, desc);
-			free(buff);
+			free (buff);
 		} else {
-			buff=malloc((objectTypeInfo->Name.Length / 2)+1);
-			wcstombs(buff,objectTypeInfo->Name.Buffer,objectTypeInfo->Name.Length);
+			buff=malloc ((objectTypeInfo->Name.Length / 2)+1);
+			wcstombs (buff,objectTypeInfo->Name.Buffer,objectTypeInfo->Name.Length);
 			desc = r_debug_desc_new (handle.Handle,
 					buff, 0, '?', 0);
 			if (!desc) break;
 			r_list_append (ret, desc);
-			free(buff);
+			free (buff);
 		}
-		free(objectTypeInfo);
-		free(objectNameInfo);
-		CloseHandle(dupHandle);
+		free (objectTypeInfo);
+		free (objectNameInfo);
+		CloseHandle (dupHandle);
 	}
-	free(handleInfo);
-	CloseHandle(processHandle);
+	free (handleInfo);
+	CloseHandle (processHandle);
 	return ret;
 }
 #if 0
@@ -1435,7 +1438,7 @@ ut64 w32_get_proc_baddr (int pid) {
 		goto err_w32_get_proc_baddr;
 	}
 	if (!w32_GetModuleFileNameEx (h_proc, NULL, filename, MAX_PATH)) {
-		eprintf ("GetLastError %d\n", GetLastError());
+		eprintf ("GetLastError %d\n", GetLastError ());
 		r_sys_perror ("w32_get_proc_baddr/GetModuleFileNameEx");
 		goto err_w32_get_proc_baddr;
 	}

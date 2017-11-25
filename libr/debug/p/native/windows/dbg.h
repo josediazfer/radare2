@@ -39,6 +39,7 @@ typedef struct {
 	int tid;
 	bool cont;
 	int state;
+	HANDLE h_proc;
 } RDebugW32Proc;
 
 typedef struct {
@@ -103,7 +104,6 @@ typedef struct _OBJECT_TYPE_INFORMATION
 } OBJECT_TYPE_INFORMATION, *POBJECT_TYPE_INFORMATION;
 
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **proc);
-int w32_dbg_proc_wait(RDebug *dbg, int pid, RDebugW32Proc **proc);
 int w32_dbg_detach(RDebug *dbg, int pid);
 RDebugInfo* w32_info(RDebug *dbg, const char *arg);
 RList *w32_pids(int pid, RList *list);
