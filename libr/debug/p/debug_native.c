@@ -286,31 +286,6 @@ static RDebugInfo* r_debug_native_info (RDebug *dbg, const char *arg) {
 #endif
 }
 
-#if __WINDOWS__ && !__CYGWIN__
-static bool tracelib(RDebug *dbg, int pid, const char *mode, RDebugW32LibInfo *item) {
-	const char *needle = NULL;
-	int tmp = 0;
-	if (mode) {
-		switch (mode[0]) {
-		case 'l': needle = dbg->glob_libs; break;
-		case 'u': needle = dbg->glob_unlibs; break;
-		}
-	}
-	eprintf ("(%d) %sing library at %08"PFMT64x, pid, mode, item->base_addr);
-	if (item->path) {
-		printf (" (%s)", item->path);
-	}
-	if (item->name) {
-		printf (" %s", item->name);
-	}
-	printf ("\n");
-	if (needle && strlen (needle)) {
-		tmp = r_str_glob (item->name, needle);
-	}
-	return !mode || !needle || tmp ;
-}
-#endif
-
 /*
  * Wait for an event and start trying to figure out what to do with it.
  *
@@ -320,56 +295,7 @@ static RDebugReasonType r_debug_native_wait (RDebug *dbg, int pid) {
 	RDebugReasonType reason = R_DEBUG_REASON_UNKNOWN;
 
 #if __WINDOWS__ && !__CYGWIN__
-	RDebugW32Proc *proc = NULL;
-
-	reason = w32_dbg_wait (dbg, &proc);
-	if (reason == R_DEBUG_REASON_NEW_LIB) {
-		if (proc->lib_info) {
-			if (tracelib (dbg, pid, "load", proc->lib_info)) {
-				reason = R_DEBUG_REASON_TRAP;
-			}
-			/* Check if autoload PDB is set, and load PDB information if yes */
-			RCore* core = dbg->corebind.core;
-			bool autoload_pdb = dbg->corebind.cfggeti (core, "pdb.autoload");
-			if (autoload_pdb) {
-				char* o_res = dbg->corebind.cmdstrf (core, "o %s", proc->lib_info->path);
-				// File exists since we loaded it, however the "o" command fails sometimes hence the while loop
-				while (*o_res == 0) {
-					o_res = dbg->corebind.cmdstrf (core, "o %s", proc->lib_info->path);
-				}
-				int fd = atoi (o_res);
-				dbg->corebind.cmdf (core, "o %d", fd);
-				char* pdb_path = dbg->corebind.cmdstr (core, "i~pdb");
-				if (*pdb_path == 0) {
-					eprintf ("Failure...\n");
-					dbg->corebind.cmd (core, "i");
-				} else {
-					pdb_path = strchr (pdb_path, ' ') + 1;
-					dbg->corebind.cmdf (core, ".idp* %s", pdb_path);
-				}
-				dbg->corebind.cmdf (core, "o-%d", fd);
-			}
-		} else {
-			eprintf ("loading unknown library.\n");
-		}
-	} else if (reason == R_DEBUG_REASON_EXIT_LIB) {
-		if (proc->lib_info) {
-			if (tracelib (dbg, pid, "unload", proc->lib_info)) {
-				reason = R_DEBUG_REASON_TRAP;
-			}
-		} else {
-			eprintf ("unloading unknown library.\n");
-		}
-	} else if (reason == R_DEBUG_REASON_NEW_TID) {
-		RDebugW32ThreadInfo *item = &proc->th_info;
-		eprintf ("(%d) created thread %d (start @ %08"PFMT64x")\n", pid, dbg->tid, item->entry_addr);
-	} else if (reason == R_DEBUG_REASON_EXIT_TID) {
-		RDebugW32ThreadInfo *item = &proc->th_info;
-		eprintf ("(%d) finished thread %d exit code %d\n", pid, dbg->tid, item->exit_code);
-	} else if (reason == R_DEBUG_REASON_EXIT_PID && proc) {
-		// on exit, try to select next proc
-		r_debug_select(dbg, proc->pid, proc->tid);
-	}
+	return w32_dbg_wait (dbg, NULL);
 #else
 	if (pid == -1) {
 		eprintf ("r_debug_native_wait called with -1 pid!\n");

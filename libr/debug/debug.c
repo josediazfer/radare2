@@ -644,7 +644,6 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 		if (reason == R_DEBUG_REASON_ERROR) {
 			return R_DEBUG_REASON_ERROR;
 		}
-
 		/* read general purpose registers */
 		if (!r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false)) {
 			return R_DEBUG_REASON_ERROR;

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <psapi.h>
 #include <tchar.h>
+#include <r_core.h>
 #include "dbg.h"
 #include "map.h"
 #include "io_dbg.h"
@@ -18,7 +19,7 @@
 #define EXCEPTION_HEAP_CORRUPTION 0xc0000374
 #endif
 
-static int proc_dbg_continue(RDebugW32Proc *proc);
+static int proc_dbg_continue(RDebugW32Proc *proc, bool handled);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
@@ -375,7 +376,31 @@ static char *get_lib_from_mod(int pid, ut64 lib_addr) {
 	return path;
 }
 
-static void set_lib_info(RDebugW32Proc *proc, DEBUG_EVENT *de, bool loaded) {
+static void load_lib_pdb(RDebug *dbg, RDebugW32LibInfo *lib_info) {
+	/* Check if autoload PDB is set, and load PDB information if yes */
+	RCore* core = dbg->corebind.core;
+	bool autoload_pdb = dbg->corebind.cfggeti (core, "pdb.autoload");
+	if (autoload_pdb) {
+		char* o_res = dbg->corebind.cmdstrf (core, "o %s", lib_info->path);
+		// File exists since we loaded it, however the "o" command fails sometimes hence the while loop
+		while (*o_res == 0) {
+			o_res = dbg->corebind.cmdstrf (core, "o %s", lib_info->path);
+		}
+		int fd = atoi (o_res);
+		dbg->corebind.cmdf (core, "o %d", fd);
+		char* pdb_path = dbg->corebind.cmdstr (core, "i~pdb");
+		if (*pdb_path == 0) {
+			eprintf ("Failure...\n");
+			dbg->corebind.cmd (core, "i");
+		} else {
+			pdb_path = strchr (pdb_path, ' ') + 1;
+			dbg->corebind.cmdf (core, ".idp* %s", pdb_path);
+		}
+		dbg->corebind.cmdf (core, "o-%d", fd);
+	}
+}
+
+static void set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT *de, bool loaded) {
 	char *path = NULL;
 	RDebugW32LibInfo *lib_info;
 	RList *lib_list;
@@ -409,6 +434,9 @@ static void set_lib_info(RDebugW32Proc *proc, DEBUG_EVENT *de, bool loaded) {
 			} else {
 				path = strdup ((const char *)image_name);
 			}
+		}
+		if (path) {
+			load_lib_pdb(dbg, lib_info);
 		}
 	} else {
 		RListIter *iter;
@@ -491,6 +519,30 @@ err_print_dbg_output:
 	free (msg);
 }
 
+static bool tracelib(RDebug *dbg, RDebugW32Proc *proc, char *mode) {
+	const char *needle = NULL;
+	RDebugW32LibInfo *lib_info = proc->lib_info;
+	int tmp = 0;
+	if (mode) {
+		switch (mode[0]) {
+		case 'l': needle = dbg->glob_libs; break;
+		case 'u': needle = dbg->glob_unlibs; break;
+		}
+	}
+	eprintf ("(%d) %sing library at %08"PFMT64x, proc->pid, mode, lib_info->base_addr);
+	if (lib_info->path) {
+		printf (" (%s)", lib_info->path);
+	}
+	if (lib_info->name) {
+		printf (" %s", lib_info->name);
+	}
+	printf ("\n");
+	if (needle && strlen (needle)) {
+		tmp = r_str_glob (lib_info->name, needle);
+	}
+	return !mode || !needle || tmp ;
+}
+
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	DEBUG_EVENT de;
 	int tid, pid, next_event = 0;
@@ -522,7 +574,6 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 		}
 		dbg->pid = pid;
 		dbg->tid = tid;
-		/* TODO: DEBUG_CONTROL_C */
 		switch (code) {
 		case CREATE_PROCESS_DEBUG_EVENT:
 			CloseHandle (de.u.CreateProcessInfo.hFile);
@@ -536,7 +587,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			} else {
 				eprintf ("(%d) created process (%p)\n", pid, de.u.CreateProcessInfo.lpStartAddress);
 			}
-			proc_dbg_continue (proc);
+			proc_dbg_continue (proc, true);
 			next_event = 1;
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
@@ -544,13 +595,15 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			eprintf ("(%d) process %d exited with exit code %d\n", pid, pid,
 				(int)de.u.ExitProcess.dwExitCode);
 			next_event = 0;
+			proc_dbg_continue (proc, true);
 			proc_dbg_delete (dbg_w32, proc);
 			ret = R_DEBUG_REASON_EXIT_PID;
 			break;
 		case CREATE_THREAD_DEBUG_EVENT:
 			set_thread_info (proc, &de);
+			eprintf ("(%d) created thread %d (start @ %08"PFMT64x")\n", pid, proc->tid, proc->th_info.entry_addr);
 			if (proc->state == PROC_STATE_STARTING) {
-				proc_dbg_continue (proc);
+				proc_dbg_continue (proc, true);
 				next_event = 1;
 			} else {
 				next_event = 0;
@@ -559,32 +612,39 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			break;
 		case EXIT_THREAD_DEBUG_EVENT:
 			set_thread_info (proc, &de);
+			eprintf ("(%d) finished thread %d exit code %d\n", pid, proc->tid, proc->th_info.exit_code);
 			next_event = 0;
 			ret = R_DEBUG_REASON_EXIT_TID;
 			break;
 		case LOAD_DLL_DEBUG_EVENT:
-			set_lib_info (proc, &de, true);
+			set_lib_info (dbg, proc, &de, true);
 			if (proc->state == PROC_STATE_STARTING) {
-				proc_dbg_continue (proc);
+				proc_dbg_continue (proc, true);
 				next_event = 1;
 			} else {
+				if (tracelib (dbg, proc, "load")) {
+					ret = R_DEBUG_REASON_TRAP;
+				}
 				next_event = 0;
 			}
 			ret = R_DEBUG_REASON_NEW_LIB;
 			break;
 		case UNLOAD_DLL_DEBUG_EVENT:
-			set_lib_info (proc, &de, false);
+			set_lib_info (dbg, proc, &de, false);
 			next_event = 0;
 			ret = R_DEBUG_REASON_EXIT_LIB;
+			if (tracelib (dbg, proc, "unload")) {
+				ret = R_DEBUG_REASON_TRAP;
+			}
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
 			print_dbg_output (proc, &de);
-			proc_dbg_continue (proc);
+			proc_dbg_continue (proc, true);
 			next_event = 1;
 			break;
 		case RIP_EVENT:
 			eprintf ("(%d) RIP event\n", pid);
-			proc_dbg_continue (proc);
+			proc_dbg_continue (proc, true);
 			next_event = 1;
 			// XXX unknown ret = R_DEBUG_REASON_TRAP;
 			break;
@@ -607,15 +667,19 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				ret = R_DEBUG_REASON_STEP;
 				next_event = 0;
 				break;
+			case DBG_CONTROL_C:
+				eprintf ("(%d) control+c event\n", proc->pid); 
+				next_event = 1;
+				proc_dbg_continue (proc, false);
+				break;
 			default:
-				eprintf ("DEBUG_EVENT: %d\n", code);
 				if (!dbg_exception_event (&de)) {
 					ret = R_DEBUG_REASON_TRAP;
 					next_event = 0;
 				}
 				else {
 					next_event = 1;
-					proc_dbg_continue (proc);
+					proc_dbg_continue (proc, true);
 				}
 
 			}
@@ -745,12 +809,12 @@ err_w32_pids:
 	return list;
 }
 
-static int proc_dbg_continue(RDebugW32Proc *proc) {
+static int proc_dbg_continue(RDebugW32Proc *proc, bool handled) {
 	/* Honor the Windows-specific signal that instructs threads to process exceptions */
 	/* DWORD continue_status = (sig == DBG_EXCEPTION_NOT_HANDLED)
 		? DBG_EXCEPTION_NOT_HANDLED : DBG_CONTINUE;
 		*/
-	if (proc->cont && ContinueDebugEvent (proc->pid, proc->tid, DBG_CONTINUE) == 0) {
+	if (proc->cont && ContinueDebugEvent (proc->pid, proc->tid, handled ? DBG_CONTINUE : DBG_EXCEPTION_NOT_HANDLED) == 0) {
 		eprintf ("failed debug_contp pid %d tid %d\n", proc->pid, proc->tid);
 		r_sys_perror ("proc_dbg_continue/ContinueDebugEvent");
 		return -1;
@@ -768,14 +832,14 @@ int w32_dbg_continue(RDebug *dbg, int pid) {
 
 	r_list_foreach (proc_list, iter, proc) {
 		if (proc->state == PROC_STATE_STARTED) {
-			int ret = proc_dbg_continue (proc);
+			int ret = proc_dbg_continue (proc, true);
 
 			proc->state = PROC_STATE_READY;
 			if (proc->pid == pid) {
 				ret_cont = ret;
 			}
 		} else if (proc->pid == pid) {
-			ret_cont = proc_dbg_continue (proc);
+			ret_cont = proc_dbg_continue (proc, true);
 		}
 	}
 	return ret_cont;
@@ -789,7 +853,7 @@ int w32_dbg_detach(RDebug *dbg, int pid) {
 	if (!proc) {
 		return -1;
 	}
-	proc_dbg_continue (proc);
+	proc_dbg_continue (proc, true);
 	ret = w32_DebugActiveProcessStop (pid)? 0 : -1;
 	proc_dbg_delete (dbg_w32, proc);
 	dbg->pid = -1;
@@ -1167,9 +1231,11 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 		showfpu = true; // hack for debugging
 		type = -type;
 	}
-	h_th = OpenThread (THREAD_ALL_ACCESS, FALSE, tid);
+	h_th = OpenThread (THREAD_GET_CONTEXT, FALSE, tid);
 	if (!h_th) {
-		r_sys_perror ("w32_reg_read/OpenThread");
+		char buf[128];
+		sprintf(buf, "w32_reg_read/OpenThread %d", tid);
+		r_sys_perror (buf);
 		goto err_w32_reg_read;
 	}
 	memset (&ctx, 0, sizeof (CONTEXT));
@@ -1204,7 +1270,7 @@ int w32_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
 #else
 	CONTEXT ctx __attribute__((aligned (16)));
 #endif
-	h_th = OpenThread (THREAD_ALL_ACCESS, FALSE, dbg->tid);
+	h_th = OpenThread (THREAD_SET_CONTEXT | THREAD_GET_CONTEXT, FALSE, dbg->tid);
 	if (!h_th) {
 		r_sys_perror ("w32_reg_write/OpenThread");
 		goto err_w32_reg_write;
@@ -1418,46 +1484,3 @@ RList *w32_desc_list (int pid) {
 	CloseHandle (processHandle);
 	return ret;
 }
-#if 0
-ut64 w32_get_proc_baddr (int pid) {
-	LPTSTR filename = NULL;
-	RList *mods_list = NULL;
-	char *map_name = NULL;
-	RListIter *iter;
-	RDebugMap *map;
-	ut64 baddr = 0;
-	HANDLE h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-
-	if (!h_proc) {
-		r_sys_perror ("w32_get_proc_baddr/OpenProcess");
-		goto err_w32_get_proc_baddr;
-	}
-	filename = (LPTSTR)malloc (MAX_PATH * sizeof (TCHAR));
-	if (!filename) {
-		perror ("w32_get_proc_baddr/alloc filename");
-		goto err_w32_get_proc_baddr;
-	}
-	if (!w32_GetModuleFileNameEx (h_proc, NULL, filename, MAX_PATH)) {
-		eprintf ("GetLastError %d\n", GetLastError ());
-		r_sys_perror ("w32_get_proc_baddr/GetModuleFileNameEx");
-		goto err_w32_get_proc_baddr;
-	}
-	map_name = r_sys_conv_utf16_to_utf8 (filename);
-	mods_list = w32_dbg_modules (pid);
-	r_list_foreach (mods_list, iter, map) {
-		eprintf ("map %s %s\n", map->file, map_name);
-		if (map->file && !stricmp (map->file, map_name)) {
-			baddr = map->addr;
-			break;
-		}
-	}
-err_w32_get_proc_baddr:
-	free (map_name);
-	free (filename);
-	r_list_free (mods_list);
-	if (h_proc) {
-		CloseHandle (h_proc);
-	}
-	return baddr;
-}
-#endif
