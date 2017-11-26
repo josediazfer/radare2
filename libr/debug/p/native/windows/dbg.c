@@ -131,18 +131,16 @@ static void proc_dbg_delete(RDebugW32 *dbg_w32, RDebugW32Proc *proc) {
 }
 
 static void r_lib_info_free(RDebugW32LibInfo *lib_info) {
-	free (lib_info->path);
-	free (lib_info->name);
-	free (lib_info);
+	if (lib_info) {
+		free (lib_info->path);
+		free (lib_info->name);
+		free (lib_info);
+	}
 }
 
 static void r_lib_proc_free(RDebugW32Proc *proc) {
 	r_list_free (proc->lib_list);
 	proc->lib_list = NULL;
-	if (proc->lib_info && !proc->lib_info->loaded) {
-		r_lib_info_free (proc->lib_info);
-	}
-	proc->lib_info = NULL;
 }
 
 static void r_proc_free(RDebugW32Proc *proc) {
@@ -414,9 +412,6 @@ static void set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT *de, bool
 		perror ("RDebugW32LibInfo alloc");
 		goto err_set_lib_info;
 	}
-	if (proc->lib_info && !proc->lib_info->loaded) {
-		r_lib_info_free (proc->lib_info);
-	}
 	lib_info->loaded = loaded;
 	proc->lib_info = lib_info;
 	if (loaded) {
@@ -483,6 +478,7 @@ static void set_thread_info(RDebugW32Proc *proc, DEBUG_EVENT *de) {
 	} else {
 		th_info->entry_addr = (ut64)(size_t)de->u.CreateThread.lpStartAddress;
 	}
+	eprintf ("h_th: 0x%x\n", h_th);
 	th_info->exit_code = (int)de->u.ExitThread.dwExitCode;
 }
 
@@ -636,6 +632,8 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			if (tracelib (dbg, proc, "unload")) {
 				ret = R_DEBUG_REASON_TRAP;
 			}
+			r_lib_info_free (proc->lib_info);
+			proc->lib_info = NULL;
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
 			print_dbg_output (proc, &de);
