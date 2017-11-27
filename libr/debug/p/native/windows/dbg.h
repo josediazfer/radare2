@@ -18,22 +18,34 @@ enum RDebugW32ProcState {
 	PROC_STATE_READY	/* process ready for debugging */
 };
 
+enum RDebugW32ThreadState {
+	THREAD_STATE_CREATED,
+	THREAD_STATE_FINISHED
+};
+
+enum RDebugW32LibState {
+	LIB_STATE_LOADED,
+	LIB_STATE_UNLOADED
+};
+
 typedef struct {
 	ut64 base_addr;
 	char *path;
 	char *name;
-	bool loaded;
-} RDebugW32LibInfo;
+	int state;
+} RDebugW32Lib;
 
 typedef struct {
 	ut64 entry_addr;
 	int exit_code;
-} RDebugW32ThreadInfo;
+	int tid;
+	int state;
+	HANDLE h_th;
+} RDebugW32Thread;
 
 typedef struct {
 	RList *lib_list;
-	RDebugW32ThreadInfo th_info;
-	RDebugW32LibInfo *lib_info;
+	RList *th_list;
 	ut64 base_addr;
 	int pid;
 	int tid;
