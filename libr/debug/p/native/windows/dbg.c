@@ -466,7 +466,7 @@ static RDebugW32Thread *th_dbg_new(RDebugW32Proc *proc, int tid, int state) {
 	return th;
 }
 
-static RDebugW32Lib *lib_dbg_new(RDebugW32Proc *proc, int base_addr, int state) {
+static RDebugW32Lib *lib_dbg_new(RDebugW32Proc *proc, ut64 base_addr, int state) {
 	RDebugW32Lib *lib;
 
 	lib = R_NEW0 (RDebugW32Lib);
