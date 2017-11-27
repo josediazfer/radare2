@@ -126,7 +126,7 @@ RList *w32_thread_list(int pid);
 int w32_thread_first(int pid);
 int w32_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
 int w32_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
-bool w32_terminate_process(RDebug *dbg, int pid);
+bool w32_dbg_proc_kill(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
 int w32_dbg_continue(RDebug *dbg, int pid);
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc);

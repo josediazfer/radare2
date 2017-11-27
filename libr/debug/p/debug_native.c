@@ -1253,7 +1253,7 @@ static bool r_debug_native_kill (RDebug *dbg, int pid, int tid, int sig) {
 	if (sig==0)
 		ret = true;
 	else
-		ret = w32_terminate_process (dbg, pid);
+		ret = w32_dbg_proc_kill (dbg, pid);
 #else
 #if 0
 	if (thread) {

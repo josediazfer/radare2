@@ -20,7 +20,6 @@
 #endif
 
 static int proc_dbg_continue(RDebugW32Proc *proc, bool handled);
-static void proc_dbg_free(RDebugW32Proc *proc);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
@@ -102,8 +101,7 @@ err_w32_enable_dbg_priv:
 	return success;
 }
 
-static RDebugW32Proc *proc_dbg_find(RDebugW32 *dbg_w32, int pid, RListIter **iter)
-{
+static RDebugW32Proc *proc_dbg_find(RDebugW32 *dbg_w32, int pid, RListIter **iter) {
 	RList *proc_list = dbg_w32->proc_list;
 	RListIter *iter_;
 	RDebugW32Proc *proc;
@@ -119,8 +117,7 @@ static RDebugW32Proc *proc_dbg_find(RDebugW32 *dbg_w32, int pid, RListIter **ite
 	return NULL;
 }
 
-static RDebugW32Thread *th_dbg_find(RDebugW32Proc *proc, int tid, RListIter **iter)
-{
+static RDebugW32Thread *th_dbg_find(RDebugW32Proc *proc, int tid, RListIter **iter) {
 	RList *th_list = proc->th_list;
 	RListIter *iter_;
 	RDebugW32Thread *th;
@@ -136,8 +133,7 @@ static RDebugW32Thread *th_dbg_find(RDebugW32Proc *proc, int tid, RListIter **it
 	return NULL;
 }
 
-static RDebugW32Lib *lib_dbg_find(RDebugW32Proc *proc, ut64 base_addr, RListIter **iter)
-{
+static RDebugW32Lib *lib_dbg_find(RDebugW32Proc *proc, ut64 base_addr, RListIter **iter) {
 	RList *lib_list = proc->lib_list;
 	RListIter *iter_;
 	RDebugW32Lib *lib;
@@ -215,6 +211,23 @@ static void proc_dbg_free(RDebugW32Proc *proc) {
 		proc_dbg_info_free (proc, false);
 		free (proc);
 	}
+}
+
+static RDebugW32Proc *proc_dbg_cur(RDebug *dbg) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+
+	return proc_dbg_find (dbg_w32, dbg->pid, NULL);
+}
+
+static RDebugW32Thread *th_dbg_cur(RDebug *dbg) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
+	RDebugW32Thread *th = NULL;
+
+	if (proc) {
+		th = th_dbg_find (proc, dbg->tid, NULL);
+	}
+	return th;
 }
 
 void w32_dbg_free(RDebug *dbg) {
@@ -1174,17 +1187,19 @@ err_w32_new_proc:
 	return pid;
 }
 
-bool w32_terminate_process (RDebug *dbg, int pid) {
-	HANDLE h_proc = OpenProcess (PROCESS_TERMINATE | SYNCHRONIZE , FALSE, pid);
+bool w32_dbg_proc_kill (RDebug *dbg, int pid) {
 	bool ret = false;
+	HANDLE h_proc;
+
+	h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
 	if (!h_proc) {
 		r_sys_perror ("w32_terminate_process/OpenProcess");
 		goto err_w32_terminate_process;
 	}
 	/* stop debugging if we are still attached */
-	w32_DebugActiveProcessStop (pid); //DebugActiveProcessStop (pid);
+	w32_dbg_detach(dbg, pid);
 	if (TerminateProcess (h_proc, 1) == 0) {
-		r_sys_perror ("e32_terminate_process/TerminateProcess");
+		r_sys_perror ("w32_terminate_process/TerminateProcess");
 		goto err_w32_terminate_process;
 
 	}
@@ -1200,9 +1215,6 @@ bool w32_terminate_process (RDebug *dbg, int pid) {
 	}
 	ret = true;
 err_w32_terminate_process:
-	if (h_proc) {
-		CloseHandle (h_proc);
-	}
 	return ret;
 }
 
@@ -1374,19 +1386,13 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 	int showfpu = false;
 	int ret_size = 0;
 	HANDLE h_th;
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RDebugW32Proc *proc;
 	RDebugW32Thread *th;
 
 	if (type < -1) {
 		showfpu = true; // hack for debugging
 		type = -type;
 	}
-	proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
-	if (!proc) {
-		goto err_w32_reg_read;
-	}
-	th = th_dbg_find (proc, dbg->tid, NULL);
+	th = th_dbg_cur (dbg);
 	if (!th) {
 		goto err_w32_reg_read;
 	}
@@ -1420,15 +1426,8 @@ int w32_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
 #else
 	CONTEXT ctx __attribute__((aligned (16)));
 #endif
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RDebugW32Proc *proc;
-	RDebugW32Thread *th;
+	RDebugW32Thread *th = th_dbg_cur (dbg);
 
-	proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
-	if (!proc) {
-		goto err_w32_reg_write;
-	}
-	th = th_dbg_find (proc, dbg->tid, NULL);
 	if (!th) {
 		goto err_w32_reg_write;
 	}
@@ -1457,12 +1456,13 @@ static void w32_info_user(RDebug *dbg, RDebugInfo *rdi) {
 	DWORD usr_len = 512;
 	DWORD usr_dom_len = 512;
 	SID_NAME_USE snu = {0};
-	HANDLE h_proc = OpenProcess (PROCESS_QUERY_INFORMATION, FALSE, dbg->pid);
+	RDebugW32Proc *proc = proc_dbg_cur (dbg);
+	HANDLE h_proc;
 
-	if (!h_proc) {
-		r_sys_perror ("w32_info_user/OpenProcess");
+	if (!proc) {
 		goto err_w32_info_user;
 	}
+	h_proc = proc->h_proc;
 	if (!OpenProcessToken (h_proc, TOKEN_QUERY, &h_tok)) {
 		r_sys_perror ("w32_info_user/OpenProcessToken");
 		goto err_w32_info_user;
@@ -1502,9 +1502,6 @@ static void w32_info_user(RDebug *dbg, RDebugInfo *rdi) {
 		rdi->usr = r_sys_conv_utf16_to_utf8 (usr);
 	}
 err_w32_info_user:
-    if (h_proc) {
-	CloseHandle (h_proc);
-    }
     if (h_tok) {
 	CloseHandle (h_tok);
     }
@@ -1515,17 +1512,18 @@ err_w32_info_user:
 
 void w32_info_exe(RDebug *dbg, RDebugInfo *rdi) {
 	LPTSTR path = NULL;
+	RDebugW32Proc *proc;
 	HANDLE h_proc;
 	DWORD len;
 
 	if (!w32_QueryFullProcessImageName) {
 		return;
 	}
-	h_proc = OpenProcess (PROCESS_QUERY_INFORMATION, FALSE, dbg->pid);
-	if (!h_proc) {
-		r_sys_perror ("w32_info_exe/OpenProcess");
+	proc = proc_dbg_cur (dbg);
+	if (!proc) {
 		goto err_w32_info_exe;
 	}
+	h_proc = proc->h_proc;
 	path = (LPTSTR)malloc (MAX_PATH + 1);
 	if (!path) {
 		perror ("w32_info_exe/malloc path");
@@ -1539,9 +1537,6 @@ void w32_info_exe(RDebug *dbg, RDebugInfo *rdi) {
 		r_sys_perror ("w32_info_exe/QueryFullProcessImageName");
 	}
 err_w32_info_exe:
-	if (h_proc) {
-		CloseHandle (h_proc);
-	}
 	free (path);
 }
 
