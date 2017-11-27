@@ -1189,32 +1189,37 @@ err_w32_new_proc:
 
 bool w32_dbg_proc_kill (RDebug *dbg, int pid) {
 	bool ret = false;
-	HANDLE h_proc;
+	HANDLE h_proc = NULL;
 
+	/* stop debugging if we are still attached */
+	if (w32_dbg_detach(dbg, pid) == -1) {
+		goto err_w32_dbg_proc_kill;
+	}
 	h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
 	if (!h_proc) {
-		r_sys_perror ("w32_terminate_process/OpenProcess");
-		goto err_w32_terminate_process;
+		r_sys_perror ("w32_dbg_proc_kill/OpenProcess");
+		goto err_w32_dbg_proc_kill;
 	}
-	/* stop debugging if we are still attached */
-	w32_dbg_detach(dbg, pid);
 	if (TerminateProcess (h_proc, 1) == 0) {
-		r_sys_perror ("w32_terminate_process/TerminateProcess");
-		goto err_w32_terminate_process;
+		r_sys_perror ("w32_dbg_proc_kill/TerminateProcess");
+		goto err_w32_dbg_proc_kill;
 
 	}
 	/* wait up to one second to give the process some time to exit */
 	DWORD ret_wait = WaitForSingleObject (h_proc, 1000);
 	if (ret_wait == WAIT_FAILED) {
-		r_sys_perror ("w32_terminate_process/WaitForSingleObject");
-		goto err_w32_terminate_process;
+		r_sys_perror ("w32_dbg_proc_kill/WaitForSingleObject");
+		goto err_w32_dbg_proc_kill;
 	}
 	if (ret_wait == WAIT_TIMEOUT) {
-		eprintf ("(%d) Waiting for process to terminate timed out.\n", pid);
-		goto err_w32_terminate_process;
+		eprintf ("(%d) waiting for process to terminate timed out.\n", pid);
+		goto err_w32_dbg_proc_kill;
 	}
 	ret = true;
-err_w32_terminate_process:
+err_w32_dbg_proc_kill:
+	if (h_proc) {
+		CloseHandle (h_proc);
+	}
 	return ret;
 }
 
