@@ -97,8 +97,10 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 	}
 	if (!strncmp (file, "w32dbg://", 9)) {
 		const char *cmd = file + 9;
-
-		opened = w32_dbg_new_proc (dbg, cmd, &proc) != -1;
+		char *_cmd = io->args ? r_str_newf ("%s %s", cmd, io->args) :
+					strdup (cmd);
+		opened = w32_dbg_new_proc (dbg, _cmd, io->args, &proc) != -1;
+		free (_cmd);
 	} else if (!strncmp (file, "attach://", 9)) {
 		int pid = atoi (file + 9);
 

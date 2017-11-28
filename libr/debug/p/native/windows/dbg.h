@@ -130,7 +130,7 @@ bool w32_dbg_proc_kill(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
 int w32_dbg_continue(RDebug *dbg, int pid);
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc);
-int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32Proc **ret_proc);
+int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **ret_proc);
 bool w32_enable_dbg_priv();
 ut64 w32_get_proc_baddr(int pid);
 RDebugW32Proc *find_dbg_proc(RDebug *dbg, int pid);

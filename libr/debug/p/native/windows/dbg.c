@@ -1102,59 +1102,83 @@ err_w32_dbg_attach:
 	return ret; 
 }
 
-int w32_dbg_new_proc(RDebug *dbg, const char *cmd, RDebugW32Proc **ret_proc) {
+int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **ret_proc) {
 	PROCESS_INFORMATION pi;
 	STARTUPINFO si = {0};
 	int pid = -1;
 	LPTSTR appname_ = NULL, cmdline_ = NULL;
 	char *cmdline = NULL;
-	char **argv;
-	int cmd_len = 0;
-	int i = 0;
+	int i, len;
+	char *appname = NULL;
 	RDebugW32Proc *proc = NULL;
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 
 	if (!*cmd) {
 		return -1;
 	}
-	argv = r_str_argv (cmd, NULL);
-	si.cb = sizeof (si);
-	while (argv[i]) {
-		char *current = argv[i];
-		int quote_count = 0;
-		while ((current = strchr (current, '"'))) {
-			quote_count ++;
-		}
-		cmd_len += strlen (argv[i]);
-		cmd_len += quote_count; // The quotes will add one backslash each
-		cmd_len += 2; // Add two enclosing quotes;
-		i++;
-	}
-	cmd_len += i-1; // Add argc-1 spaces
-	cmdline = malloc ((cmd_len + 1) * sizeof (char));
-	int cmd_i = 0; // Next character to write in cmdline
-	i = 0;
-	while (argv[i]) {
-		if (i != 0) {
-			cmdline[cmd_i++] = ' ';
-		}
-		cmdline[cmd_i++] = '"';
-
-		int arg_i = 0; // Index of current character in orginal argument
-		while (argv[i][arg_i]) {
-			char c = argv[i][arg_i];
-			if (c == '"') {
-				cmdline[cmd_i++] = '\\';
+	len = strlen (cmd);
+	for (i = 0; i < len; i++) {
+		if (cmd[i] == '.') {
+			if (!strncasecmp (cmd + i + 1, "exe ", 4) || !strncasecmp (cmd + i + 1, "dll ", 4)) {
+				appname = (char *)malloc (i + 5);
+				if (appname) {
+					memcpy (appname, cmd, i + 4);
+					appname[i + 4] = '\0';
+				}
+				break;
 			}
-			cmdline[cmd_i++] = c;
-			arg_i++;
 		}
-
-		cmdline[cmd_i++] = '"';
-		i++;
 	}
-	cmdline[cmd_i] = '\0';
-	appname_ = r_sys_conv_utf8_to_utf16 (argv[0]);
+	if (!appname) {
+		appname = strdup (cmd);
+		cmd = NULL;
+	} else if (len > 5) {
+		cmd = cmd + i + 5;
+	} else {
+		cmd = NULL;
+	}
+	
+	/* is relative path? If so find executable from PATH environment variable */
+	if (_access (appname, 0) == -1 && (strlen(appname) <= 2 || *(appname + 1) != ':'
+		|| (tolower (*appname) < 'a' || tolower (*appname) > 'z'))) {
+		char *path = r_sys_getenv ("PATH");
+		if (path) {
+			char *rpath = path;
+
+			len = strlen (path);
+			for (i = 0; i < len; i++) {
+				if (path[i] == ';') {
+					char *fpath;
+
+					path[i] = '\0';
+					fpath = r_str_newf ("%s\\%s", rpath, appname);
+					if (_access (fpath, 0) == 0) {
+						free (appname);
+						appname = fpath;
+						break;
+					}
+					rpath = &path[i + 1];
+					free (fpath);
+				}	
+			}
+			free (path);
+		}
+	}
+
+	if (args) {
+		if (cmd) {
+			cmdline = r_str_newf ("\"%s\" %s %s", appname, cmd, args);
+		} else {
+			cmdline = r_str_newf ("\"%s\" %s", appname, args);
+		}
+	} else {	
+		if (cmd) {
+			cmdline = r_str_newf ("\"%s\" %s", appname, cmd);
+		} else {
+			cmdline = r_str_newf ("\"%s\"", appname);
+		}
+	}
+	appname_ = r_sys_conv_utf8_to_utf16 (appname);
 	cmdline_ = r_sys_conv_utf8_to_utf16 (cmdline);
 	if (!CreateProcess (appname_, cmdline_, NULL, NULL, FALSE,
 				CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
@@ -1181,9 +1205,9 @@ err_w32_new_proc:
 		}
 	}
 	free (appname_);
+	free (appname);
 	free (cmdline_);
 	free (cmdline);
-	r_str_argv_free (argv);
 	return pid;
 }
 
