@@ -310,7 +310,7 @@ err_w32_dbg_maps:
 	return map_list;
 }
 
-bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {
+static void maps_print (RDebug *dbg, ut64 addr) {
 	RList *map_list = w32_dbg_maps (dbg->pid);
 	RListIter *iter;
 	RDebugMap *map;
@@ -330,8 +330,7 @@ bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {
 				type, buf,
 				map->user?'u':'s',
 				r_str_rwx_i (map->perm),
-				get_map_type (&map_w32->mbi));
-		switch (map_w32->mbi.Type) {
+				get_map_type (&map_w32->mbi));switch (map_w32->mbi.Type) {
 		case MEM_IMAGE:
 			dbg->cb_printf (" %s %s\n", map->name, map_w32->sect_name? map_w32->sect_name : "");
 			break;
@@ -343,5 +342,51 @@ bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {
 		}
 	}
 	r_list_free (map_list);
-	return true;
+}
+
+static void flags_maps_print(RDebug *dbg, ut64 addr) {
+	RList *map_list = w32_dbg_maps (dbg->pid);
+	RListIter *iter;
+	RDebugMap *map;
+	int n_map = 0;
+	char *name_prev = NULL;
+
+	r_list_foreach (map_list, iter, map) {
+		RDebugW32Map *map_w32 = (RDebugW32Map *)map->native_ptr;
+		char *name = r_str_newf ("%s_%s%s", map->name,
+					map_w32->sect_name ? map_w32->sect_name : "",
+					r_str_rwx_i (map->perm));
+		r_name_filter (name, 0);
+		if (name_prev && !strcmp (name, name_prev)) {
+			free (name);
+			name = name_prev;
+			dbg->cb_printf ("f map.%s#%d 0x%08"PFMT64x" 0x%08"PFMT64x"\n",
+					name, n_map, map->addr_end - map->addr, map->addr);
+			n_map++;
+		} else {
+			dbg->cb_printf ("f map.%s 0x%08"PFMT64x" 0x%08"PFMT64x"\n",
+					name, map->addr_end - map->addr, map->addr);
+			free (name_prev);
+			name_prev = name;
+			n_map = 0;
+		}
+	}
+	free (name_prev);
+}
+
+bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {
+	bool ret = true;
+
+	switch (type) {
+	case 'j':
+	case 'q':
+		ret = false;
+		break;
+	case '*':
+		flags_maps_print (dbg, addr);
+		break;
+	default:
+		maps_print (dbg, addr);
+	}
+	return ret;
 }

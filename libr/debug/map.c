@@ -3,13 +3,18 @@
 #include <r_debug.h>
 #include <r_list.h>
 
+static inline bool native_maps_print (RDebug *dbg, ut64 addr, int rad) {
+	return dbg->h && dbg->h->maps_print && dbg->h->maps_print (dbg, addr, rad);
+}
+
 R_API void r_debug_map_list(RDebug *dbg, ut64 addr, int rad) {
 	const char *fmtstr;
 	char buf[128];
 	bool notfirst = false;
 	RListIter *iter;
 	RDebugMap *map;
-	if (!dbg) {
+
+	if (!dbg || native_maps_print (dbg, addr, rad)) {
 		return;
 	}
 	switch (rad) {
@@ -78,9 +83,6 @@ R_API void r_debug_map_list(RDebug *dbg, ut64 addr, int rad) {
 		}
 		break;
 	default:
-		if (dbg->h && dbg->h->maps_print && dbg->h->maps_print (dbg, addr, rad)) {
-			return;
-		}
 		fmtstr = dbg->bits & R_SYS_BITS_64
 			? "0x%016"PFMT64x" # 0x%016"PFMT64x" %c %s %6s %c %s %s %s%s%s\n"
 			: "0x%08"PFMT64x" # 0x%08"PFMT64x" %c %s %6s %c %s %s %s%s%s\n";
