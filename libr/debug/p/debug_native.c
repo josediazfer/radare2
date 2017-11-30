@@ -32,6 +32,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 
 #if __WINDOWS__
 #include <windows.h>
+#include "native/windows/common.h"
 #include "native/windows/dbg.h"
 #include "native/windows/map.h"
 #include "native/windows/io_dbg.h"
@@ -1585,6 +1586,13 @@ static int r_debug_desc_native_open (const char *path) {
 	return 0;
 }
 
+static char *r_debug_native_fs_get (RDebug *dbg) {
+#if __WINDOWS__
+	return w32_dbg_fs_get (dbg->pid);
+#else
+	return NULL;
+#endif
+}
 #if 0
 static int r_debug_setup_ownership (int fd, RDebug *dbg) {
 	RDebugInfo *info = r_debug_info (dbg, NULL);
@@ -1677,6 +1685,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.threads = &r_debug_native_threads,
 	.wait = &r_debug_native_wait,
 	.kill = &r_debug_native_kill,
+	.fs_get = &r_debug_native_fs_get, // flagspace name  used
 	.frames = &r_debug_native_frames, // rename to backtrace ?
 	.reg_profile = r_debug_native_reg_profile,
 	.reg_read = r_debug_native_reg_read,

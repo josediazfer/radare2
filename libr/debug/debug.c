@@ -1477,6 +1477,35 @@ R_API RList *r_debug_frames(RDebug *dbg, ut64 at) {
 	return NULL;
 }
 
+R_API bool r_debug_fs_push(RDebug *dbg) {
+	bool ret = false;
+
+	if (!dbg->corebind.core) {
+		return ret;
+	}
+	if (dbg && dbg->h && dbg->h->fs_get) {
+		RCore *core = (RCore *)dbg->corebind.core;
+		char *fs_name = dbg->h->fs_get (dbg);
+		if (fs_name) {
+			r_flag_space_push (core->flags, fs_name);
+			free (fs_name);
+			core->flags->space_strict = true;
+			ret = true;
+		}
+	}
+	return ret;
+}
+
+R_API bool r_debug_fs_pop(RDebug *dbg) {
+	if (!dbg->corebind.core) {
+		return false;
+	}
+	RCore *core = (RCore *)dbg->corebind.core;
+	r_flag_space_pop (core->flags);
+	core->flags->space_strict = false;
+	return true;
+}
+
 /* TODO: Implement fork and clone */
 R_API int r_debug_child_fork(RDebug *dbg) {
 	//if (dbg && dbg->h && dbg->h->frames)

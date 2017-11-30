@@ -1,3 +1,4 @@
+#include "common.h"
 #include "map.h"
 
 extern DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD);
@@ -108,11 +109,14 @@ RList *w32_dbg_modules(int pid) {
 	RDebugMap *map;
 	RList *list = r_list_newf ((RListFree)r_debug_map_free);
 	DWORD flags = TH32CS_SNAPMODULE;
+	HANDLE h_mod_snap;
 #if __MINGW64__ || _WIN64
 	flags |= TH32CS_SNAPMODULE32;
 #endif
-	HANDLE h_mod_snap = CreateToolhelp32Snapshot (flags, pid);
-
+	if (pid == -1) {
+		return list;
+	}
+	h_mod_snap = CreateToolhelp32Snapshot (flags, pid);
 	if (!h_mod_snap) {
 		r_sys_perror ("w32_dbg_modules/CreateToolhelp32Snapshot");
 		goto err_w32_dbg_modules;
@@ -278,6 +282,9 @@ RList *w32_dbg_maps(int pid) {
 	RDebugW32Mod mod_inf = {0};
 	RList *map_list = r_list_newf((RListFree)r_debug_map_free), *mod_list = NULL;
 
+	if (pid == -1) {
+		return map_list;
+	}
 	GetSystemInfo (&si);
 	h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 	if (!h_proc) {
@@ -350,7 +357,13 @@ static void flags_maps_print(RDebug *dbg, ut64 addr) {
 	RDebugMap *map;
 	int n_map = 0;
 	char *name_prev = NULL;
+	char *fs_name = NULL;
 
+	if (r_list_length (map_list) <= 0) {
+		return;
+	}
+	fs_name = w32_dbg_fs_get (dbg->pid);
+	dbg->cb_printf ("fs+%s\n", fs_name);
 	r_list_foreach (map_list, iter, map) {
 		RDebugW32Map *map_w32 = (RDebugW32Map *)map->native_ptr;
 		char *name = r_str_newf ("%s_%s%s", map->name,
@@ -371,7 +384,9 @@ static void flags_maps_print(RDebug *dbg, ut64 addr) {
 			n_map = 0;
 		}
 	}
+	dbg->cb_printf ("fs-\n");
 	free (name_prev);
+	free (fs_name);
 }
 
 bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {

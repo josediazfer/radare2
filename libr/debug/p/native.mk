@@ -13,6 +13,7 @@ ifeq (${OSTYPE},windows)
 NATIVE_OBJS=native/windows/dbg.o
 NATIVE_OBJS+=native/windows/io_dbg.o
 NATIVE_OBJS+=native/windows/map.o
+NATIVE_OBJS+=native/windows/common.o
 endif
 
 ifeq ($(OSTYPE),$(filter $(OSTYPE),gnulinux android))

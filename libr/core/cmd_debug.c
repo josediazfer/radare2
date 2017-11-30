@@ -2825,6 +2825,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 			}
 			i = 0;
 			list = r_debug_frames (core->dbg, addr);
+			r_debug_fs_push (core->dbg);
 			r_list_foreach (list, iter, frame) {
 				char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
 				RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
@@ -2893,6 +2894,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						flagdesc,
 						flagdesc2);
 			}
+			r_debug_fs_pop (core->dbg);
 			r_list_free (list);
 			break;
 		case '?':
