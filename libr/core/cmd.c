@@ -3055,7 +3055,7 @@ R_API int r_core_cmd(RCore *core, const char *cstr, int log) {
 		ret = r_core_cmd_subst (core, rcmd);
 		if (ret == -1) {
 			eprintf ("|ERROR| Invalid command '%s' (0x%02x)\n", rcmd, *rcmd);
-			break;
+			/* TODO: continue */ //break;
 		}
 		if (!ptr) {
 			break;

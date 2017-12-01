@@ -534,6 +534,7 @@ R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, bool watch
 
 /* pid */
 R_API int r_debug_thread_list(RDebug *dbg, int pid);
+R_API RList *r_debug_threads_get(RDebug *dbg, int pid);
 
 R_API void r_debug_tracenodes_reset(RDebug *dbg);
 

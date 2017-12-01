@@ -1243,6 +1243,7 @@ show_help:
 			r_cons_printf ("0x%08"PFMT64x" %s\n", map->addr, map->file);
 			break;
 		case ':':
+			r_debug_fs_push (core->dbg);
 			if (addr >= map->addr && addr < map->addr_end) {
 #if __WINDOWS__ && !__CYGWIN__
 				/* Escape backslashes in the file path on Windows */
@@ -1269,6 +1270,7 @@ show_help:
 				free (fn);
 #endif
 			}
+			r_debug_fs_pop (core->dbg);
 			break;
 		case '.':
 			if (addr >= map->addr && addr < map->addr_end) {
@@ -1296,6 +1298,7 @@ show_help:
 			break;
 		case '*':
 			{
+				r_debug_fs_push (core->dbg);
 #if __WINDOWS__ && !__CYGWIN__
 				/* Escape backslashes in the file path on Windows */
 				char *escaped_path = r_str_escape (map->file);
@@ -1321,6 +1324,7 @@ show_help:
 				//r_cons_printf ("fs-\n");
 				free (fn);
 #endif
+				r_debug_fs_pop (core->dbg);
 			}
 			break;
 		default:
@@ -2655,6 +2659,118 @@ static void static_debug_stop(void *u) {
 	r_debug_stop (dbg);
 }
 
+static void cmd_dbt(RCore *core, const char *input) {
+	RListIter *th_iter;
+	RDebugPid *th;
+	RList *th_list = NULL;
+	ut64 addr = UT64_MAX;
+	int tid_orig = core->dbg->tid;
+
+	if (input[2] == ' ' && input[3]) {
+		if (input[3] == '*') {
+			th_list = r_debug_threads_get (core->dbg, core->dbg->pid);
+		} else {
+			addr = r_num_math (core->num, input + 2);
+		}
+	}
+	if (!th_list) {
+		th_list = r_list_newf ((RListFree)free);
+		th = R_NEW0 (RDebugPid);
+		th->pid = tid_orig;
+		r_list_append (th_list, th);
+	}
+	r_list_foreach (th_list, th_iter, th) {
+		RList *list;
+		RListIter *iter;
+		RDebugFrame *frame;
+		int i = 0;
+
+		if (r_list_length (th_list) > 1) {
+			r_debug_select (core->dbg, core->dbg->pid, th->pid);
+			if (th->pid == tid_orig) {
+				r_cons_printf ("** thread %d\n", th->pid);
+			} else {
+				r_cons_printf ("-- thread %d\n", th->pid);
+			}
+			r_cons_printf ("===============\n");
+		}
+		list = r_debug_frames (core->dbg, addr);
+		r_debug_fs_push (core->dbg);
+		r_list_foreach (list, iter, frame) {
+			char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
+			RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
+			flagdesc[0] = flagdesc2[0] = 0;
+			if (f) {
+				if (f->offset != addr) {
+					int delta = (int)(frame->addr - f->offset);
+					if (delta > 0) {
+						snprintf (flagdesc, sizeof (flagdesc),
+								"%s+%d", f->name, delta);
+					} else if (delta < 0) {
+						snprintf (flagdesc, sizeof (flagdesc),
+								"%s%d", f->name, delta);
+					} else {
+						snprintf (flagdesc, sizeof (flagdesc),
+								"%s", f->name);
+					}
+				} else {
+					snprintf (flagdesc, sizeof (flagdesc),
+							"%s", f->name);
+				}
+			}
+			f = r_flag_get_at (core->flags, frame->addr, true);
+			if (f && !strchr (f->name, '.')) {
+				f = r_flag_get_at (core->flags, frame->addr - 1, true);
+			}
+			if (f) {
+				if (f->offset != addr) {
+					int delta = (int)(frame->addr - 1 - f->offset);
+					if (delta > 0) {
+						snprintf (flagdesc2, sizeof (flagdesc2),
+							"%s+%d", f->name, delta + 1);
+					} else if (delta<0) {
+						snprintf (flagdesc2, sizeof (flagdesc2),
+							"%s%d", f->name, delta + 1);
+					} else {
+						snprintf (flagdesc2, sizeof (flagdesc2),
+							"%s+1", f->name);
+					}
+				} else {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+							"%s", f->name);
+				}
+			}
+			if (!strcmp (flagdesc, flagdesc2)) {
+				flagdesc2[0] = 0;
+			}
+			if (core->dbg->bits & R_SYS_BITS_64) {
+				snprintf (pcstr, sizeof (pcstr), "0x%-16" PFMT64x, frame->addr);
+				snprintf (spstr, sizeof (spstr), "0x%-16" PFMT64x, frame->sp);
+			} else if (core->dbg->bits & R_SYS_BITS_32) {
+				snprintf (pcstr, sizeof (pcstr), "0x%-8" PFMT64x, frame->addr);
+				snprintf (spstr, sizeof (spstr), "0x%-8" PFMT64x, frame->sp);
+			} else {
+				snprintf (pcstr, sizeof (pcstr), "0x%" PFMT64x, frame->addr);
+				snprintf (spstr, sizeof (spstr), "0x%" PFMT64x, frame->sp);
+			}	
+			RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, frame->addr, 0);
+			r_cons_printf ("%d  %s sp: %s  %-5d"
+					"[%s]  %s %s\n", i++,
+					pcstr, spstr,
+					(int)frame->size,
+					fcn ? fcn->name : "??",
+					flagdesc,
+					flagdesc2);
+		}
+		r_debug_fs_pop (core->dbg);
+		r_list_free (list);
+	}
+	if (r_list_length (th_list) > 1) {
+		r_debug_select (core->dbg, core->dbg->pid, tid_orig);
+	}
+	r_list_free (th_list);
+}
+
 static void r_core_cmd_bp(RCore *core, const char *input) {
 	RBreakpointItem *bpi;
 	int i, hwbp = r_config_get_i (core->config, "dbg.hwbp");
@@ -2818,84 +2934,9 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 			}
 			r_list_free (list);
 			break;
-		case 0: // "dbt" -- backtrace
-			addr = UT64_MAX;
-			if (input[2] == ' ' && input[3]) {
-				addr = r_num_math (core->num, input + 2);
-			}
-			i = 0;
-			list = r_debug_frames (core->dbg, addr);
-			r_debug_fs_push (core->dbg);
-			r_list_foreach (list, iter, frame) {
-				char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
-				RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
-				flagdesc[0] = flagdesc2[0] = 0;
-				if (f) {
-					if (f->offset != addr) {
-						int delta = (int)(frame->addr - f->offset);
-						if (delta > 0) {
-							snprintf (flagdesc, sizeof (flagdesc),
-									"%s+%d", f->name, delta);
-						} else if (delta < 0) {
-							snprintf (flagdesc, sizeof (flagdesc),
-									"%s%d", f->name, delta);
-						} else {
-							snprintf (flagdesc, sizeof (flagdesc),
-									"%s", f->name);
-						}
-					} else {
-						snprintf (flagdesc, sizeof (flagdesc),
-								"%s", f->name);
-					}
-				}
-				f = r_flag_get_at (core->flags, frame->addr, true);
-				if (f && !strchr (f->name, '.')) {
-					f = r_flag_get_at (core->flags, frame->addr - 1, true);
-				}
-				if (f) {
-					if (f->offset != addr) {
-						int delta = (int)(frame->addr - 1 - f->offset);
-						if (delta > 0) {
-							snprintf (flagdesc2, sizeof (flagdesc2),
-									"%s+%d", f->name, delta + 1);
-						} else if (delta<0) {
-							snprintf (flagdesc2, sizeof (flagdesc2),
-									"%s%d", f->name, delta + 1);
-						} else {
-							snprintf (flagdesc2, sizeof (flagdesc2),
-									"%s+1", f->name);
-						}
-					} else {
-						snprintf (flagdesc2, sizeof (flagdesc2),
-								"%s", f->name);
-					}
-				}
-				if (!strcmp (flagdesc, flagdesc2)) {
-					flagdesc2[0] = 0;
-				}
-
-				if (core->dbg->bits & R_SYS_BITS_64) {
-					snprintf (pcstr, sizeof (pcstr), "0x%-16" PFMT64x, frame->addr);
-					snprintf (spstr, sizeof (spstr), "0x%-16" PFMT64x, frame->sp);
-				} else if (core->dbg->bits & R_SYS_BITS_32) {
-					snprintf (pcstr, sizeof (pcstr), "0x%-8" PFMT64x, frame->addr);
-					snprintf (spstr, sizeof (spstr), "0x%-8" PFMT64x, frame->sp);
-				} else {
-					snprintf (pcstr, sizeof (pcstr), "0x%" PFMT64x, frame->addr);
-					snprintf (spstr, sizeof (spstr), "0x%" PFMT64x, frame->sp);
-				}
-
-				RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, frame->addr, 0);
-				r_cons_printf ("%d  %s sp: %s  %-5d"
-						"[%s]  %s %s\n", i++,
-						pcstr, spstr,
-						(int)frame->size,
-						fcn ? fcn->name : "??",
-						flagdesc,
-						flagdesc2);
-			}
-			r_debug_fs_pop (core->dbg);
-			r_list_free (list);
+		case ' ': // "dbt" -- backtrace
+		case 0: 
+			cmd_dbt (core, input);
 			break;
 		case '?':
 		default:

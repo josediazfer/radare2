@@ -99,6 +99,13 @@ R_API int r_debug_thread_list(RDebug *dbg, int pid) {
 	return false;
 }
 
+R_API RList *r_debug_threads_get(RDebug *dbg, int pid) {
+	if (dbg && dbg->h && dbg->h->threads) {
+		return dbg->h->threads (dbg, pid);
+	}
+	return NULL;
+}
+
 /* processes */
 R_API int r_debug_pid_parent(RDebugPid *pid) {
 	// fork in child
