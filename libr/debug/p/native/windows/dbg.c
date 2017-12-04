@@ -20,6 +20,8 @@
 #endif
 
 static int proc_dbg_continue(RDebugW32Proc *proc, bool handled);
+static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib);
+static void load_lib_symbols(RDebug *dbg, RDebugW32Lib *lib);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
@@ -166,14 +168,6 @@ static void th_dbg_delete(RDebugW32Proc *proc, RDebugW32Thread *th) {
 	}
 }
 
-static void lib_dbg_delete(RDebugW32Proc *proc, RDebugW32Lib *lib) {
-	RListIter *iter;
-
-	if (lib_dbg_find (proc, lib->base_addr, &iter)) {
-		r_list_delete (proc->lib_list, iter);
-	}
-}
-
 static void th_dbg_free(RDebugW32Thread *th) {
 	if (th->h_th) {
 		CloseHandle (th->h_th);
@@ -188,7 +182,7 @@ static void lib_dbg_free(RDebugW32Lib *lib) {
 	free (lib);
 }
 
-static void proc_dbg_info_free(RDebugW32Proc *proc, bool reset) {
+static void proc_dbg_free(RDebugW32Proc *proc) {
 	if (!proc) {
 		return;
 	}
@@ -200,17 +194,7 @@ static void proc_dbg_info_free(RDebugW32Proc *proc, bool reset) {
 		CloseHandle (proc->h_proc);
 		proc->h_proc = NULL;
 	}
-	if (reset) {
-		proc->lib_list = r_list_newf ((RListFree)lib_dbg_free);
-		proc->th_list = r_list_newf ((RListFree)th_dbg_free);
-	}
-}
-
-static void proc_dbg_free(RDebugW32Proc *proc) {
-	if (proc) {
-		proc_dbg_info_free (proc, false);
-		free (proc);
-	}
+	free (proc);
 }
 
 static RDebugW32Proc *proc_dbg_cur(RDebug *dbg) {
@@ -472,30 +456,33 @@ static RDebugW32Thread *th_dbg_new(RDebugW32Proc *proc, int tid, int state) {
 		if (!th) {
 			return NULL;
 		}
+		th->tid = tid;
+		r_list_append (proc->th_list, th);
 	}
-	th->tid = tid;
 	th->state = state;
-	r_list_append (proc->th_list, th);
 	return th;
 }
 
 static RDebugW32Lib *lib_dbg_new(RDebugW32Proc *proc, ut64 base_addr, int state) {
 	RDebugW32Lib *lib;
 
-	lib = R_NEW0 (RDebugW32Lib);
+	lib = lib_dbg_find (proc, base_addr, NULL);
 	if (!lib) {
-		return NULL;
+		lib = R_NEW0 (RDebugW32Lib);
+		if (!lib) {
+			return NULL;
+		}
+		lib->base_addr = base_addr;
+		r_list_append (proc->lib_list, lib);
 	}
-	lib->base_addr = base_addr;
 	lib->state = state;
-	r_list_append (proc->lib_list, lib);
 	return lib;
 }
 
-static char *get_lib_from_mod(int pid, ut64 lib_addr) {
+static char *get_lib_from_mod(RDebugW32Proc *proc, ut64 lib_addr) {
 	RListIter *iter;
 	RDebugMap *map;
-	RList *mods_list = w32_dbg_modules (pid);
+	RList *mods_list = w32_dbg_modules (proc->pid);
 	char *path = NULL;
 
 	r_list_foreach (mods_list, iter, map) {
@@ -506,6 +493,42 @@ static char *get_lib_from_mod(int pid, ut64 lib_addr) {
 	}
 	r_list_free (mods_list);
 	return path;
+}
+
+static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, HANDLE h_file) {
+	char *path;
+
+	if (h_file) {
+		path = get_file_name_from_handle (h_file);
+	} else {
+		path = get_lib_from_mod (proc, lib->base_addr); 
+	}
+	if (path && (!lib->path || strcmp (lib->path, path))) {
+		char *p = strchr (path, '\\');
+
+		free (lib->path);
+		free (lib->name);
+		lib->path = path;
+		if (p) {
+			lib->name = strdup (p + 1);
+		} else {
+			lib->name = strdup (path);
+		}
+		load_lib_pdb (dbg, lib);
+		load_lib_symbols (dbg, lib);
+	} else {
+		free (path);
+	}
+}
+
+static void proc_lib_names_resolv(RDebug *dbg, RDebugW32Proc *proc) {
+	RList *lib_list = proc->lib_list;
+	RListIter *iter;
+	RDebugW32Lib *lib;
+
+	r_list_foreach (lib_list, iter, lib) {
+		proc_lib_init (dbg, proc, lib, NULL);
+	}
 }
 
 static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib) {
@@ -532,11 +555,22 @@ static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib) {
 	}
 }
 
+static void load_lib_symbols(RDebug *dbg, RDebugW32Lib *lib) {
+	RCore* core = dbg->corebind.core;
+	char *path = r_str_escape (lib->path);
+	char *name = r_str_escape (lib->name);
+
+	dbg->corebind.cmdf (core, "f mod.%s = 0x%08"PFMT64x"\n", name, lib->base_addr);
+	/* too slowly, call native functions? */
+	dbg->corebind.cmdf (core, ".!rabin2 -rsB 0x%08"PFMT64x" \"%s\"\n", lib->base_addr, path);
+	free (path);
+	free (name);
+}
+
 static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT *de, int state) {
 	RDebugW32Lib *lib = NULL;
 
 	if (state == LIB_STATE_LOADED) {
-		char *path = NULL;
 		ut64 base_addr = (ut64)(size_t)de->u.LoadDll.lpBaseOfDll;
 
 		lib =  lib_dbg_new (proc, base_addr, LIB_STATE_LOADED);
@@ -544,34 +578,7 @@ static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT 
 			perror ("set_lib_info/lib_dbg_new alloc");
 			goto err_set_lib_info;
 		}
-		if (de->u.LoadDll.hFile) {
-			path = get_file_name_from_handle (de->u.LoadDll.hFile);
-		} else {
-			path = get_lib_from_mod (proc->pid, lib->base_addr); 
-		}
-		if (!path && de->u.LoadDll.lpImageName) {
-			LPVOID *image_name = de->u.LoadDll.lpImageName;
-			if (de->u.LoadDll.fUnicode) {
-				path = r_sys_conv_utf16_to_utf8 ((WCHAR *)image_name);
-			} else {
-				path = strdup ((const char *)image_name);
-			}
-		}
-		if (path) {
-			char *p;
-		     	char *sep = NULL;
-	
-			for (p = path; *p; p++) {
-				if (*p == '\\') {
-					sep = p;
-				}
-			}	
-			if (sep) {
-				lib->name = strdup (sep + 1);
-			}
-			load_lib_pdb(dbg, lib);
-			lib->path = path;
-		}
+		proc_lib_init (dbg, proc, lib, de->u.LoadDll.hFile);
 	} else {
 		ut64 base_addr = (ut64)(size_t)de->u.UnloadDll.lpBaseOfDll;
 
@@ -793,7 +800,6 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				if (tracelib (dbg, proc, lib, "unload")) {
 					ret = R_DEBUG_REASON_TRAP;
 				}
-				lib_dbg_delete (proc, lib);
 			}
 			}
 			break;
@@ -815,6 +821,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 #endif
 			case EXCEPTION_BREAKPOINT:
 				if (proc->state == PROC_STATE_STARTING) {
+					proc_lib_names_resolv (dbg, proc);
 					proc->state = PROC_STATE_STARTED;
 				}
 				ret = R_DEBUG_REASON_BREAKPOINT;
@@ -1041,8 +1048,9 @@ static void proc_dbg_enable_excep (RDebug *dbg, int pid, boolean enable) {
 				proc->state = PROC_STATE_ATTACHED;
 			}
 		} else if (w32_DebugActiveProcessStop (proc->pid)) {
-			proc_dbg_info_free (proc, true);
 			proc->state = PROC_STATE_DETACHED;
+			r_list_free (proc->th_list);
+			proc->th_list = r_list_newf ((RListFree) th_dbg_free);
 		}
 	}
 	if (enable) {

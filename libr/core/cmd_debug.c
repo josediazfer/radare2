@@ -1243,7 +1243,6 @@ show_help:
 			r_cons_printf ("0x%08"PFMT64x" %s\n", map->addr, map->file);
 			break;
 		case ':':
-			r_debug_fs_push (core->dbg);
 			if (addr >= map->addr && addr < map->addr_end) {
 #if __WINDOWS__ && !__CYGWIN__
 				/* Escape backslashes in the file path on Windows */
@@ -1253,7 +1252,7 @@ show_help:
 					r_name_filter (escaped_name, 0);
 					r_cons_printf ("f mod.%s = 0x%08"PFMT64x"\n",
 							escaped_name, map->addr);
-					r_cons_printf (".!rabin2 -rsB 0x%08"PFMT64x" \'%s\'\n",
+					r_cons_printf (".!rabin2 -rsB 0x%08"PFMT64x" %s\n",
 							map->addr, escaped_path);
 				}
 				free (escaped_path);
@@ -1270,7 +1269,6 @@ show_help:
 				free (fn);
 #endif
 			}
-			r_debug_fs_pop (core->dbg);
 			break;
 		case '.':
 			if (addr >= map->addr && addr < map->addr_end) {
@@ -1298,7 +1296,6 @@ show_help:
 			break;
 		case '*':
 			{
-				r_debug_fs_push (core->dbg);
 #if __WINDOWS__ && !__CYGWIN__
 				/* Escape backslashes in the file path on Windows */
 				char *escaped_path = r_str_escape (map->file);
@@ -1324,7 +1321,6 @@ show_help:
 				//r_cons_printf ("fs-\n");
 				free (fn);
 #endif
-				r_debug_fs_pop (core->dbg);
 			}
 			break;
 		default:
@@ -2692,10 +2688,9 @@ static void cmd_dbt(RCore *core, const char *input) {
 			} else {
 				r_cons_printf ("-- thread %d\n", th->pid);
 			}
-			r_cons_printf ("===============\n");
+			r_cons_printf ("===================\n");
 		}
 		list = r_debug_frames (core->dbg, addr);
-		r_debug_fs_push (core->dbg);
 		r_list_foreach (list, iter, frame) {
 			char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
 			RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
@@ -2762,7 +2757,6 @@ static void cmd_dbt(RCore *core, const char *input) {
 					flagdesc,
 					flagdesc2);
 		}
-		r_debug_fs_pop (core->dbg);
 		r_list_free (list);
 	}
 	if (r_list_length (th_list) > 1) {

@@ -357,13 +357,10 @@ static void flags_maps_print(RDebug *dbg, ut64 addr) {
 	RDebugMap *map;
 	int n_map = 0;
 	char *name_prev = NULL;
-	char *fs_name = NULL;
 
 	if (r_list_length (map_list) <= 0) {
 		return;
 	}
-	fs_name = w32_dbg_fs_get (dbg->pid);
-	dbg->cb_printf ("fs+%s\n", fs_name);
 	r_list_foreach (map_list, iter, map) {
 		RDebugW32Map *map_w32 = (RDebugW32Map *)map->native_ptr;
 		char *name = r_str_newf ("%s_%s%s", map->name,
@@ -384,9 +381,7 @@ static void flags_maps_print(RDebug *dbg, ut64 addr) {
 			n_map = 0;
 		}
 	}
-	dbg->cb_printf ("fs-\n");
 	free (name_prev);
-	free (fs_name);
 }
 
 bool w32_dbg_maps_print (RDebug *dbg, ut64 addr, int type) {
