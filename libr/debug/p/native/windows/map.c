@@ -1,4 +1,3 @@
-#include "common.h"
 #include "map.h"
 
 extern DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD);

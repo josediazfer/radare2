@@ -32,7 +32,6 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 
 #if __WINDOWS__
 #include <windows.h>
-#include "native/windows/common.h"
 #include "native/windows/dbg.h"
 #include "native/windows/map.h"
 #include "native/windows/io_dbg.h"

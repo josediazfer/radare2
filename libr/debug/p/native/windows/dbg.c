@@ -4,6 +4,7 @@
 #include <psapi.h>
 #include <tchar.h>
 #include <r_core.h>
+#include <r_bin.h>
 #include "dbg.h"
 #include "map.h"
 #include "io_dbg.h"
@@ -21,7 +22,7 @@
 
 static int proc_dbg_continue(RDebugW32Proc *proc, bool handled);
 static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib);
-static void load_lib_symbols(RDebug *dbg, RDebugW32Lib *lib);
+static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
@@ -503,7 +504,7 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 	} else {
 		path = get_lib_from_mod (proc, lib->base_addr); 
 	}
-	if (path && (!lib->path || strcmp (lib->path, path))) {
+	if (path && (!lib->path || strcasecmp (lib->path, path))) {
 		char *p = strchr (path, '\\');
 
 		free (lib->path);
@@ -514,8 +515,11 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 		} else {
 			lib->name = strdup (path);
 		}
+		if (proc->state == PROC_STATE_STARTING) {
+			eprintf ("(%d) loading symbols for %s...\n", proc->pid, lib->path);
+		}
 		load_lib_pdb (dbg, lib);
-		load_lib_symbols (dbg, lib);
+		load_lib_symbols (dbg, proc, lib);
 	} else {
 		free (path);
 	}
@@ -555,16 +559,29 @@ static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib) {
 	}
 }
 
-static void load_lib_symbols(RDebug *dbg, RDebugW32Lib *lib) {
-	RCore* core = dbg->corebind.core;
-	char *path = r_str_escape (lib->path);
-	char *name = r_str_escape (lib->name);
+static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib) {
+	RCore *core = dbg->corebind.core;
+	RBin *bin = r_bin_new ();
 
-	dbg->corebind.cmdf (core, "f mod.%s = 0x%08"PFMT64x"\n", name, lib->base_addr);
-	/* too slowly, call native functions? */
-	dbg->corebind.cmdf (core, ".!rabin2 -rsB 0x%08"PFMT64x" \"%s\"\n", lib->base_addr, path);
-	free (path);
-	free (name);
+	r_bin_load (bin, lib->path, lib->base_addr, 0, 0, 0, 0);
+	if (bin->cur && bin->cur->xtr_data) {
+		RListIter *iter;
+		RList *symbol_list = r_bin_get_symbols (bin);
+		RBinSymbol *symbol;
+
+		r_list_foreach (symbol_list, iter, symbol) {
+			char *name = symbol->name;
+			ut64 addr = r_bin_get_vaddr (bin, symbol->paddr, symbol->vaddr);
+
+			if (!strncmp (name, "imp.", 4)) {
+				r_flag_space_set (core->flags, "imports");
+			} else {
+				r_flag_space_set (core->flags, "symbols");
+			}
+			r_flag_set (core->flags, symbol->name, addr, symbol->size);
+		}
+	}
+	r_bin_file_delete_all (bin);
 }
 
 static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT *de, int state) {

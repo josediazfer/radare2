@@ -42,8 +42,7 @@ if host_os != 'windows'
   'p/native/procfs.c',
   'p/native/windows/dbg.c',
   'p/native/windows/io_dbg.c',
-  'p/native/windows/map.c',
-  'p/native/windows/common.c'
+  'p/native/windows/map.c'
  ]
 endif
 
