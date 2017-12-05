@@ -516,7 +516,7 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 			lib->name = strdup (path);
 		}
 		if (proc->state == PROC_STATE_STARTING) {
-			eprintf ("(%d) loading symbols for %s...\n", proc->pid, lib->path);
+			eprintf ("(%d) loading symbols for %s\n", proc->pid, lib->path);
 		}
 		load_lib_pdb (dbg, lib);
 		load_lib_symbols (dbg, proc, lib);
