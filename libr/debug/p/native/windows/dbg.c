@@ -568,17 +568,23 @@ static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib
 		RListIter *iter;
 		RList *symbol_list = r_bin_get_symbols (bin);
 		RBinSymbol *symbol;
-
+		char flag_comment[128];
+	
+		snprintf (flag_comment, sizeof (flag_comment) - 1, "debug%d", proc->pid);
 		r_list_foreach (symbol_list, iter, symbol) {
 			char *name = symbol->name;
 			ut64 addr = r_bin_get_vaddr (bin, symbol->paddr, symbol->vaddr);
+			RFlagItem *flag_item;
 
 			if (!strncmp (name, "imp.", 4)) {
 				r_flag_space_set (core->flags, "imports");
 			} else {
 				r_flag_space_set (core->flags, "symbols");
 			}
-			r_flag_set (core->flags, symbol->name, addr, symbol->size);
+			flag_item = r_flag_set (core->flags, symbol->name, addr, symbol->size);
+			if (flag_item) {
+				r_flag_item_set_comment (flag_item, flag_comment);
+			}
 		}
 	}
 	r_bin_file_delete_all (bin);
