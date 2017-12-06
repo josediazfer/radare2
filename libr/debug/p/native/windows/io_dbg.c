@@ -111,7 +111,7 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		if (dbg_io) {
 			set_io_proc (dbg_io, proc);
 			ret = r_io_desc_new (io, &r_io_plugin_w32dbg,
-					file, rw | R_IO_EXEC, mode, dbg_io);
+					file, R_IO_READ | R_IO_WRITE | R_IO_EXEC, mode, dbg_io);
 			ret->name = r_sys_pid_to_path (dbg_io->pid);
 		} else {
 			perror ("__open/RIOW32Dbg alloc");

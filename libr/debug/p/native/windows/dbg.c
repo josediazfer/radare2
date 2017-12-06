@@ -358,7 +358,7 @@ static char *get_file_name_from_handle(HANDLE handle_file) {
 	DWORD file_size_low = GetFileSize (handle_file, &file_size_high);
 
 	if (file_size_low == 0 && file_size_high == 0) {
-		return NULL;
+		goto err_get_file_name_from_handle;
 	}
 	handle_file_map = CreateFileMapping (handle_file, NULL, PAGE_READONLY, 0, 1, NULL);
 	if (!handle_file_map) {
@@ -420,12 +420,13 @@ err_get_file_name_from_handle:
 }
 
 static RDebugW32Proc *proc_dbg_new(RDebugW32 *dbg_w32, int pid, int state) {
-	RDebugW32Proc *proc;
+	RDebugW32Proc *proc = NULL;
 	bool success = false;
 
 	proc = R_NEW0 (RDebugW32Proc);
 	if (!proc) {
-		return NULL;
+		perror ("proc_dbg_new/alloc RDebugW32Proc");
+		goto err_proc_dbg_new;
 	}
 	proc->lib_list = r_list_newf ((RListFree)lib_dbg_free);
 	if (!proc->lib_list) {
@@ -440,7 +441,7 @@ static RDebugW32Proc *proc_dbg_new(RDebugW32 *dbg_w32, int pid, int state) {
 	r_list_append (dbg_w32->proc_list, proc);
 	success = true;
 err_proc_dbg_new:
-	if (!success) {
+	if (!success && proc) {
 		free (proc->lib_list);
 		free (proc->th_list);
 		R_FREE (proc);
@@ -471,6 +472,7 @@ static RDebugW32Lib *lib_dbg_new(RDebugW32Proc *proc, ut64 base_addr, int state)
 	if (!lib) {
 		lib = R_NEW0 (RDebugW32Lib);
 		if (!lib) {
+			perror ("lib_dbg_new/alloc RDebugW32Lib");
 			return NULL;
 		}
 		lib->base_addr = base_addr;
@@ -516,7 +518,7 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 			lib->name = strdup (path);
 		}
 		if (proc->state == PROC_STATE_STARTING) {
-			eprintf ("(%d) loading symbols for %s\n", proc->pid, lib->path);
+			eprintf ("(%d) loading symbols for %s at %08"PFMT64x"\n", proc->pid, lib->path, lib->base_addr);
 		}
 		load_lib_pdb (dbg, lib);
 		load_lib_symbols (dbg, proc, lib);
@@ -598,10 +600,10 @@ static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT 
 
 		lib =  lib_dbg_new (proc, base_addr, LIB_STATE_LOADED);
 		if (!lib) {
-			perror ("set_lib_info/lib_dbg_new alloc");
-			goto err_set_lib_info;
+			perror ("set_lib_info/lib_dbg_new");
+		} else {
+			proc_lib_init (dbg, proc, lib, de->u.LoadDll.hFile);
 		}
-		proc_lib_init (dbg, proc, lib, de->u.LoadDll.hFile);
 	} else {
 		ut64 base_addr = (ut64)(size_t)de->u.UnloadDll.lpBaseOfDll;
 
@@ -612,7 +614,6 @@ static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT 
 			lib->state = state;
 		}
 	}
-err_set_lib_info:
 	return lib;
 }
 
@@ -625,7 +626,7 @@ static RDebugW32Thread *set_th_info(RDebugW32Proc *proc, DEBUG_EVENT *de, int st
 
 		th = th_dbg_new (proc, proc->tid, state);
 		if (!th) {
-			perror ("set_th_info/th alloc");
+			perror ("set_th_info/th_dbg_new");
 			goto err_set_th_info;
 		}
 		h_th = de->u.CreateThread.hThread;
@@ -792,7 +793,12 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			if (th) {
 				eprintf ("(%d) finished thread %d exit code %d\n", pid, th->tid, th->exit_code);
 			}
-			next_event = 0;
+			if (proc->state == PROC_STATE_STARTING) {
+				proc_dbg_continue (proc, true);
+				next_event = 1;
+			} else {
+				next_event = 0;
+			}
 			ret = R_DEBUG_REASON_EXIT_TID;
 			}
 			break;
@@ -817,12 +823,15 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 		case UNLOAD_DLL_DEBUG_EVENT:
 			{
 			RDebugW32Lib *lib = set_lib_info (dbg, proc, &de, LIB_STATE_UNLOADED);
-			next_event = 0;
-			ret = R_DEBUG_REASON_EXIT_LIB;
-			if (lib) {
+			if (proc->state == PROC_STATE_STARTING) {
+				proc_dbg_continue (proc, true);
+				next_event = 1;
+			} else if (lib) {
+				ret = R_DEBUG_REASON_EXIT_LIB;
 				if (tracelib (dbg, proc, lib, "unload")) {
 					ret = R_DEBUG_REASON_TRAP;
 				}
+				next_event = 0;
 			}
 			}
 			break;
@@ -880,19 +889,6 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 		}
 	} while (next_event);
 	return ret;
-}
-
-inline int is_pe_hdr(unsigned char *pe_hdr) {
-	IMAGE_DOS_HEADER *dos_header = (IMAGE_DOS_HEADER *)pe_hdr;
-	IMAGE_NT_HEADERS *nt_headers;
-
-	if (dos_header->e_magic==IMAGE_DOS_SIGNATURE) {
-		nt_headers = (IMAGE_NT_HEADERS *)((char *)dos_header
-				+ dos_header->e_lfanew);
-		if (nt_headers->Signature==IMAGE_NT_SIGNATURE)
-			return 1;
-	}
-	return 0;
 }
 
 RList *w32_thread_list(int pid) {
