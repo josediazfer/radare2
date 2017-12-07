@@ -2,6 +2,7 @@
 #define WINDOWS_DBG_H
 #include <windows.h>
 #include <r_debug.h>
+#include <r_flag.h>
 
 #ifndef NTSTATUS
 #define NTSTATUS DWORD
@@ -52,10 +53,12 @@ typedef struct {
 	bool cont;
 	int state;
 	HANDLE h_proc;
+	RFlag *flags;
 } RDebugW32Proc;
 
 typedef struct {
 	RList *proc_list;
+	RFlag *core_flags;
 	bool init;
 } RDebugW32;
 
@@ -128,7 +131,7 @@ int w32_reg_read(RDebug *dbg, int type, ut8 *buf, int size);
 int w32_reg_write(RDebug *dbg, int type, const ut8* buf, int size);
 bool w32_dbg_proc_kill(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
-int w32_dbg_continue(RDebug *dbg, int pid);
+int w32_dbg_continue(RDebug *dbg, int pid, int sig);
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc);
 int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **ret_proc);
 bool w32_enable_dbg_priv();

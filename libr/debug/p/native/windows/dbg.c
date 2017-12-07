@@ -19,8 +19,20 @@
 #ifndef EXCEPTION_HEAP_CORRUPTION
 #define EXCEPTION_HEAP_CORRUPTION 0xc0000374
 #endif
+#ifndef EXCEPTION_RPC_SERVER_UNAVAILABLE
+#define EXCEPTION_RPC_SERVER_UNAVAILABLE 0x6ba
+#endif
+#ifndef EXCEPTION_MS_VC
+#define EXCEPTION_MS_VC 0x406D1388
+#endif
+#ifndef STATUS_WX86_BREAKPOINT
+#define STATUS_WX86_BREAKPOINT 0x4000001f
+#endif
+#ifndef STATUS_WX86_SINGLE_STEP
+#define STATUS_WX86_SINGLE_STEP 0x4000001e
+#endif
 
-static int proc_dbg_continue(RDebugW32Proc *proc, bool handled);
+static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled);
 static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib);
 static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib);
 
@@ -29,8 +41,6 @@ DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 static DWORD (WINAPI *w32_GetModuleFileNameEx)(HANDLE, HMODULE, LPTSTR, DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugActiveProcessStop)(DWORD) = NULL;
 static BOOL (WINAPI *w32_DebugBreakProcess)(HANDLE) = NULL;
-static DWORD (WINAPI *w32_GetThreadId)(HANDLE) = NULL; // Vista
-static DWORD (WINAPI *w32_GetProcessId)(HANDLE) = NULL; // XP
 static BOOL (WINAPI *w32_QueryFullProcessImageName)(HANDLE, DWORD, LPTSTR, PDWORD) = NULL;
 static NTSTATUS (WINAPI *w32_NtQuerySystemInformation)(ULONG, PVOID, ULONG, PULONG) = NULL;
 static NTSTATUS (WINAPI *w32_NtQueryInformationThread)(HANDLE, ULONG, PVOID, ULONG, PULONG) = NULL;
@@ -191,6 +201,8 @@ static void proc_dbg_free(RDebugW32Proc *proc) {
 	proc->lib_list = NULL;
 	r_list_free (proc->th_list);
 	proc->th_list = NULL;
+	//r_flag_free (proc->flags);
+	//proc->flags = NULL;
 	if (proc->h_proc) {
 		CloseHandle (proc->h_proc);
 		proc->h_proc = NULL;
@@ -238,11 +250,6 @@ int w32_dbg_init(RDebug *dbg) {
 	w32_DebugBreakProcess = (BOOL (WINAPI *)(HANDLE))
 		GetProcAddress (h_mod, "DebugBreakProcess");
 	// only windows vista :(
-	w32_GetThreadId = (DWORD (WINAPI *)(HANDLE))
-		GetProcAddress (h_mod, "GetThreadId");
-	// from xp1
-	w32_GetProcessId = (DWORD (WINAPI *)(HANDLE))
-		GetProcAddress (h_mod, "GetProcessId");
 	w32_QueryFullProcessImageName = (BOOL (WINAPI *)(HANDLE, DWORD, LPTSTR, PDWORD))
 		GetProcAddress (h_mod, W32_TCALL ("QueryFullProcessImageName"));
 	// api to retrieve YMM from w7 sp1
@@ -276,24 +283,25 @@ int w32_dbg_init(RDebug *dbg) {
 		GetProcAddress (h_mod, "NtQueryObject");
 	w32_NtQueryInformationThread = (NTSTATUS  (WINAPI *)(HANDLE, ULONG, PVOID, ULONG, PULONG))
 		GetProcAddress (h_mod, "NtQueryInformationThread");
-	if (!w32_DebugActiveProcessStop || !w32_DebugBreakProcess || !w32_GetThreadId) {
+	if (!w32_DebugActiveProcessStop || !w32_DebugBreakProcess) {
 		// OOPS!
 		eprintf ("debug_init_calls:\n"
 			"DebugActiveProcessStop: 0x%p\n"
-			"DebugBreakProcess: 0x%p\n"
-			"GetThreadId: 0x%p\n",
-			w32_DebugActiveProcessStop, w32_DebugBreakProcess, w32_GetThreadId);
+			"DebugBreakProcess: 0x%p\n",
+			w32_DebugActiveProcessStop, w32_DebugBreakProcess);
 		return false;
 	}
 
 	dbg_w32 = R_NEW0 (RDebugW32);
 	dbg_w32->proc_list = r_list_newf ((RListFree)proc_dbg_free);
+	//dbg_w32->core_flags = ((RCore *)dbg->corebind.core)->flags;
 	dbg->native_ptr = dbg_w32;
 	return true;
 }
 
 static char *get_w32_excep_name(unsigned long code) {
 	char *desc;
+
 	switch (code) {
 	/* fatal exceptions */
 	case EXCEPTION_ACCESS_VIOLATION:
@@ -314,6 +322,12 @@ static char *get_w32_excep_name(unsigned long code) {
 	case EXCEPTION_HEAP_CORRUPTION:
 		desc = "heap corruption";
 		break;
+	case EXCEPTION_RPC_SERVER_UNAVAILABLE:
+		desc = "rpc server unavailable";
+		break;
+	case EXCEPTION_MS_VC:
+		desc = "microsoft visual c";
+		break;
 	default:
 		desc = "unknown";
 	}
@@ -321,8 +335,11 @@ static char *get_w32_excep_name(unsigned long code) {
 	return desc;
 }
 
-static int dbg_exception_event(DEBUG_EVENT *de) {
+static bool dbg_exception_event(DEBUG_EVENT *de, RDebugW32Proc *proc) {
 	unsigned long code = de->u.Exception.ExceptionRecord.ExceptionCode;
+	bool next_event = false;
+	char *excep_name = get_w32_excep_name (code);
+
 	switch (code) {
 	/* fatal exceptions */
 	case EXCEPTION_ACCESS_VIOLATION:
@@ -331,22 +348,20 @@ static int dbg_exception_event(DEBUG_EVENT *de) {
 	case EXCEPTION_INT_DIVIDE_BY_ZERO:
 	case EXCEPTION_STACK_OVERFLOW:
 	case EXCEPTION_HEAP_CORRUPTION:
-		eprintf ("(%d) Fatal exception (%s) in thread %d\n",
-			(int)de->dwProcessId, 
-			get_w32_excep_name (code),
-			(int)de->dwThreadId);
+		eprintf ("(%d) fatal exception (%s) in thread %d\n",
+			proc->pid, excep_name, proc->tid);
+			
 		break;
-	/* MS_VC_EXCEPTION */
-	case 0x406D1388:
-		eprintf ("(%d) MS_VC_EXCEPTION (%x) in thread %d\n",
-			(int)de->dwProcessId, (int)code, (int)de->dwThreadId);
-		return 1;
 	default:
-		eprintf ("(%d) Unknown exception %x in thread %d\n",
-			(int)de->dwProcessId, (int)code, (int)de->dwThreadId);
-		break;
+		if (excep_name && strcmp (excep_name, "unknown")) {
+			eprintf ("(%d) exception (%s) in thread %d\n",
+				proc->pid, excep_name, proc->tid);
+		} else {
+			eprintf ("(%d) unknown exception %x in thread %d\n",
+				proc->pid, (int)code, proc->tid);
+		}
 	}
-	return 0;
+	return next_event;
 }
 
 static char *get_file_name_from_handle(HANDLE handle_file) {
@@ -438,6 +453,7 @@ static RDebugW32Proc *proc_dbg_new(RDebugW32 *dbg_w32, int pid, int state) {
 	}
 	proc->pid = pid;
 	proc->state = state;
+	//proc->flags = r_flag_new ();
 	r_list_append (dbg_w32->proc_list, proc);
 	success = true;
 err_proc_dbg_new:
@@ -507,7 +523,7 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 		path = get_lib_from_mod (proc, lib->base_addr); 
 	}
 	if (path && (!lib->path || strcasecmp (lib->path, path))) {
-		char *p = strchr (path, '\\');
+		char *p = strrchr (path, '\\');
 
 		free (lib->path);
 		free (lib->name);
@@ -562,7 +578,6 @@ static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib) {
 }
 
 static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib) {
-	RCore *core = dbg->corebind.core;
 	RBin *bin = r_bin_new ();
 
 	r_bin_load (bin, lib->path, lib->base_addr, 0, 0, 0, 0);
@@ -571,6 +586,7 @@ static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib
 		RList *symbol_list = r_bin_get_symbols (bin);
 		RBinSymbol *symbol;
 		char flag_comment[128];
+		RCore *core = (RCore *)dbg->corebind.core;
 	
 		snprintf (flag_comment, sizeof (flag_comment) - 1, "debug%d", proc->pid);
 		r_list_foreach (symbol_list, iter, symbol) {
@@ -711,7 +727,8 @@ static bool tracelib(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, char *
 
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	DEBUG_EVENT de;
-	int tid, pid, next_event = 0;
+	int tid, pid;
+	bool next_event = false;
 	unsigned int code;
 	int ret = R_DEBUG_REASON_UNKNOWN;
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
@@ -761,13 +778,13 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				CloseHandle (de.u.CreateProcessInfo.hFile);
 			}
 			proc_dbg_continue (proc, true);
-			next_event = 1;
+			next_event = true;
 			ret = R_DEBUG_REASON_NEW_PID;
 			break;
 		case EXIT_PROCESS_DEBUG_EVENT:
 			eprintf ("(%d) process %d exited with exit code %d\n", pid, pid,
 				(int)de.u.ExitProcess.dwExitCode);
-			next_event = 0;
+			next_event = false;
 			proc_dbg_continue (proc, true);
 			proc_dbg_delete (dbg_w32, proc);
 			ret = R_DEBUG_REASON_EXIT_PID;
@@ -780,9 +797,9 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			}
 			if (proc->state == PROC_STATE_STARTING) {
 				proc_dbg_continue (proc, true);
-				next_event = 1;
+				next_event = true;
 			} else {
-				next_event = 0;
+				next_event = false;
 			}
 			ret = R_DEBUG_REASON_NEW_TID;
 			}
@@ -795,9 +812,9 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			}
 			if (proc->state == PROC_STATE_STARTING) {
 				proc_dbg_continue (proc, true);
-				next_event = 1;
+				next_event = true;
 			} else {
-				next_event = 0;
+				next_event = false;
 			}
 			ret = R_DEBUG_REASON_EXIT_TID;
 			}
@@ -810,12 +827,12 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			}
 			if (proc->state == PROC_STATE_STARTING) {
 				proc_dbg_continue (proc, true);
-				next_event = 1;
+				next_event = true;
 			} else if (lib) {
 				if (tracelib (dbg, proc, lib, "load")) {
 					ret = R_DEBUG_REASON_TRAP;
 				}
-				next_event = 0;
+				next_event = false;
 			}
 			}
 			ret = R_DEBUG_REASON_NEW_LIB;
@@ -825,31 +842,31 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			RDebugW32Lib *lib = set_lib_info (dbg, proc, &de, LIB_STATE_UNLOADED);
 			if (proc->state == PROC_STATE_STARTING) {
 				proc_dbg_continue (proc, true);
-				next_event = 1;
+				next_event = true;
 			} else if (lib) {
 				ret = R_DEBUG_REASON_EXIT_LIB;
 				if (tracelib (dbg, proc, lib, "unload")) {
 					ret = R_DEBUG_REASON_TRAP;
 				}
-				next_event = 0;
+				next_event = false;
 			}
 			}
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
 			print_dbg_output (proc, &de);
 			proc_dbg_continue (proc, true);
-			next_event = 1;
+			next_event = true;
 			break;
 		case RIP_EVENT:
 			eprintf ("(%d) RIP event\n", pid);
 			proc_dbg_continue (proc, true);
-			next_event = 1;
+			next_event = true;
 			// XXX unknown ret = R_DEBUG_REASON_TRAP;
 			break;
 		case EXCEPTION_DEBUG_EVENT:
 			switch (de.u.Exception.ExceptionRecord.ExceptionCode) {
 #if __MINGW64__ || _WIN64
-			case 0x4000001f: /* STATUS_WX86_BREAKPOINT */
+			case STATUS_WX86_BREAKPOINT:
 #endif
 			case EXCEPTION_BREAKPOINT:
 				if (proc->state == PROC_STATE_STARTING) {
@@ -857,30 +874,28 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 					proc->state = PROC_STATE_STARTED;
 				}
 				ret = R_DEBUG_REASON_BREAKPOINT;
-				next_event = 0;
+				next_event = false;
 				break;
 #if __MINGW64__ || _WIN64
-			case 0x4000001e: /* STATUS_WX86_SINGLE_STEP */
+			case STATUS_WX86_SINGLE_STEP:
 #endif
 			case EXCEPTION_SINGLE_STEP:
 				ret = R_DEBUG_REASON_STEP;
-				next_event = 0;
+				next_event = false;
 				break;
 			case DBG_CONTROL_C:
 				eprintf ("(%d) control+c event\n", proc->pid); 
-				next_event = 1;
+				next_event = true;
 				proc_dbg_continue (proc, false);
 				break;
 			default:
-				if (!dbg_exception_event (&de)) {
+				if (!dbg_exception_event (&de, proc)) {
 					ret = R_DEBUG_REASON_TRAP;
-					next_event = 0;
+					next_event = false;
+				} else {
+					next_event = true;
+					proc_dbg_continue (proc, false);
 				}
-				else {
-					next_event = 1;
-					proc_dbg_continue (proc, true);
-				}
-
 			}
 			break;
 		default:
@@ -995,11 +1010,11 @@ err_w32_pids:
 	return list;
 }
 
-static int proc_dbg_continue(RDebugW32Proc *proc, bool handled) {
+static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled) {
 	if (proc->cont) {
 		RDebugW32Thread *th;
 
-		if (ContinueDebugEvent (proc->pid, proc->tid, handled ? DBG_CONTINUE : DBG_EXCEPTION_NOT_HANDLED) == 0) {
+		if (ContinueDebugEvent (proc->pid, proc->tid, dbg_handled ? DBG_CONTINUE : DBG_EXCEPTION_NOT_HANDLED) == 0) {
 			eprintf ("failed debug_contp pid %d tid %d\n", proc->pid, proc->tid);
 			r_sys_perror ("proc_dbg_continue/ContinueDebugEvent");
 			return -1;
@@ -1014,7 +1029,7 @@ static int proc_dbg_continue(RDebugW32Proc *proc, bool handled) {
 	return 0;
 }
 
-int w32_dbg_continue(RDebug *dbg, int pid) {
+int w32_dbg_continue(RDebug *dbg, int pid, int sig) {
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	RList *proc_list = dbg_w32->proc_list;
 	RListIter *iter;
@@ -1030,7 +1045,7 @@ int w32_dbg_continue(RDebug *dbg, int pid) {
 				ret_cont = ret;
 			}
 		} else if (proc->pid == pid) {
-			ret_cont = proc_dbg_continue (proc, true);
+			ret_cont = proc_dbg_continue (proc, sig != DBG_EXCEPTION_NOT_HANDLED);
 		}
 	}
 	return ret_cont;
@@ -1047,6 +1062,7 @@ int w32_dbg_detach(RDebug *dbg, int pid) {
 	proc_dbg_continue (proc, true);
 	ret = w32_DebugActiveProcessStop (pid)? 0 : -1;
 	proc_dbg_delete (dbg_w32, proc);
+	//((RCore *)dbg->corebind.core)->flags = dbg_w32->core_flags;
 	dbg->pid = -1;
 	dbg->tid = -1;
 	return ret;
@@ -1106,6 +1122,7 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
 		if (ret_proc) {
 			*ret_proc = proc;
 		}
+		//((RCore *)dbg->corebind.core)->flags = proc->flags;
 		return proc->tid;
 	}
 	if (!DebugActiveProcess (pid)) {
@@ -1121,6 +1138,7 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
 		eprintf ("w32_dbg_attach/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
 		goto err_w32_dbg_attach;
 	}
+	//((RCore *)dbg->corebind.core)->flags = proc->flags;
 	ret = proc->tid;
 err_w32_dbg_attach:
 	if (ret == -1 && proc) {
@@ -1224,6 +1242,7 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **r
 		eprintf ("w32_dbg_new_proc/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
 		goto err_w32_new_proc;
 	}
+	//((RCore *)dbg->corebind.core)->flags = proc->flags;
 	pid = proc->pid;
 err_w32_new_proc:
 	if (pid == -1) {

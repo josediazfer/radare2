@@ -227,7 +227,7 @@ static void r_debug_native_stop(RDebug *dbg) {
 /* TODO: must return true/false */
 static int r_debug_native_continue(RDebug *dbg, int pid, int tid, int sig) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_continue (dbg, pid);
+	return w32_dbg_continue (dbg, pid, sig);
 #elif __APPLE__
 	bool ret;
 	ret = xnu_continue (dbg, pid, tid, sig);
