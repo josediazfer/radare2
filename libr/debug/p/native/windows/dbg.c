@@ -35,6 +35,7 @@
 static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled);
 static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib);
 static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib);
+static void load_proc_symbols(RDebug *dbg, RDebugW32Proc *proc);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
@@ -577,10 +578,10 @@ static void load_lib_pdb(RDebug *dbg, RDebugW32Lib *lib) {
 	}
 }
 
-static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib) {
+static void load_bin_symbols(RDebug *dbg, RDebugW32Proc *proc, char *path, ut64 base_addr) {
 	RBin *bin = r_bin_new ();
 
-	r_bin_load (bin, lib->path, lib->base_addr, 0, 0, 0, 0);
+	r_bin_load (bin, path, base_addr, 0, 0, 0, 0);
 	if (bin->cur && bin->cur->xtr_data) {
 		RListIter *iter;
 		RList *symbol_list = r_bin_get_symbols (bin);
@@ -606,6 +607,14 @@ static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib
 		}
 	}
 	r_bin_file_delete_all (bin);
+}
+
+inline static void load_lib_symbols(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib) {
+	load_bin_symbols (dbg, proc, lib->path, lib->base_addr);
+}
+
+inline static void load_proc_symbols(RDebug *dbg, RDebugW32Proc *proc) {
+	load_bin_symbols (dbg, proc, proc->path, proc->base_addr);
 }
 
 static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT *de, int state) {
@@ -775,6 +784,10 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				}
 			}
 			if (de.u.CreateProcessInfo.hFile) {
+				proc->path = get_file_name_from_handle (de.u.CreateProcessInfo.hFile);
+
+				eprintf ("(%d) loading symbols for %s at %08"PFMT64x"\n", proc->pid, proc->path, proc->base_addr);
+				load_proc_symbols (dbg, proc);
 				CloseHandle (de.u.CreateProcessInfo.hFile);
 			}
 			proc_dbg_continue (proc, true);

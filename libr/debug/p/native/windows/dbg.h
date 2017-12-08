@@ -52,6 +52,7 @@ typedef struct {
 	int tid;
 	bool cont;
 	int state;
+	char *path;
 	HANDLE h_proc;
 	RFlag *flags;
 } RDebugW32Proc;
