@@ -1925,12 +1925,13 @@ static int bin_symbols_internal(RCore *r, int mode, ut64 laddr, int va, ut64 at,
 			binfile = r_core_bin_cur (r);
 			plugin = r_bin_file_cur_plugin (binfile);
 			if (plugin && plugin->name) {
-				if (!strncmp (plugin->name, "pe", 2)) {
+				if (!strncmp (plugin->name, "pe", 2) && lastfs == 's') {
 					char *p, *module = strdup (symbol->name);
 					p = strstr (module, ".dll_");
 					if (p) {
-						const char *symname = p + 5;
+						char *symname = p + 5;
 						*p = 0;
+						r_name_filter (symname, -1);
 						if (r->bin->prefix) {
 							r_cons_printf ("k bin/pe/%s/%d=%s.%s\n",
 								module, symbol->ordinal, r->bin->prefix, symname);
