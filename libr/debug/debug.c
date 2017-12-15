@@ -1164,12 +1164,6 @@ repeat:
 R_API int r_debug_continue(RDebug *dbg) {
 	return r_debug_continue_kill (dbg, 0); //dbg->reason.signum);
 }
-R_API int r_debug_continue_only(RDebug *dbg) {
-	if (dbg->h && dbg->h->cont) {
-		return dbg->h->cont (dbg, dbg->pid, dbg->tid, DBG_EXCEPTION_NOT_HANDLED);
-	} 
-	return -1;
-}
 
 #if __WINDOWS__ && !__CYGWIN__
 R_API int r_debug_continue_pass_exception(RDebug *dbg) {

@@ -198,7 +198,7 @@ static void proc_mem_img(HANDLE h_proc, RList *map_list, RList *mod_list, RDebug
 		free (mod->sect_hdr);
 		memset (mod, 0, sizeof (RDebugW32Mod));
 		r_list_foreach (mod_list, iter, map) {
-			if (addr >= map->addr && addr <= map->addr_end) {
+			if (addr >= map->addr && addr < map->addr_end) {
 				mod->map = map;
 				set_mod_inf (h_proc, map, mod);
 				break;

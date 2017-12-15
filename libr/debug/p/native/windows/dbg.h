@@ -50,7 +50,7 @@ typedef struct {
 	ut64 base_addr;
 	int pid;
 	int tid;
-	bool cont;
+	bool cont, intr;
 	int state;
 	char *name, *path;
 	HANDLE h_proc;

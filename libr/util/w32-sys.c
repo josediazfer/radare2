@@ -91,7 +91,8 @@ R_API bool r_sys_create_child_proc_w32(const char *cmdline, HANDLE out) {
 	// Set up members of the STARTUPINFO structure.
 	// This structure specifies the STDIN and STDOUT handles for redirection.
 	si.cb = sizeof (STARTUPINFO);
-	si.hStdError = out;
+	//si.hStdError = out;
+	si.hStdError = GetStdHandle (STD_ERROR_HANDLE);
 	si.hStdOutput = out;
 	si.hStdInput = NULL;
 	si.dwFlags |= STARTF_USESTDHANDLES;

@@ -2682,7 +2682,9 @@ static void cmd_dbt(RCore *core, const char *input) {
 		int i = 0;
 
 		if (r_list_length (th_list) > 1) {
-			r_debug_select (core->dbg, core->dbg->pid, th->pid);
+			//r_debug_select (core->dbg, core->dbg->pid, th->pid);
+			core->dbg->tid = th->pid;
+			r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, false);
 			if (th->pid == tid_orig) {
 				r_cons_printf ("** thread %d\n", th->pid);
 			} else {
@@ -2760,7 +2762,8 @@ static void cmd_dbt(RCore *core, const char *input) {
 		r_list_free (list);
 	}
 	if (r_list_length (th_list) > 1) {
-		r_debug_select (core->dbg, core->dbg->pid, tid_orig);
+		core->dbg->tid = tid_orig;
+		r_debug_reg_sync (core->dbg, R_REG_TYPE_GPR, false);
 	}
 	r_list_free (th_list);
 }
@@ -3801,8 +3804,7 @@ static int cmd_debug_continue (RCore *core, const char *input) {
 		pid = atoi (input + 2);
 		r_reg_arena_swap (core->dbg->reg, true);
 		r_debug_select (core->dbg, pid, core->dbg->tid);
-		r_debug_continue_only (core->dbg);
-		//r_debug_continue (core->dbg);
+		r_debug_continue (core->dbg);
 		r_debug_select (core->dbg, old_pid, core->dbg->tid);
 		break;
 	case 't':

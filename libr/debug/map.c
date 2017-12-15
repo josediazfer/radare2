@@ -295,7 +295,7 @@ R_API RDebugMap *r_debug_map_get(RDebug *dbg, ut64 addr) {
 	RDebugMap *map, *ret = NULL;
 	RListIter *iter;
 	r_list_foreach (dbg->maps, iter, map) {
-		if (addr >= map->addr && addr <= map->addr_end) {
+		if (addr >= map->addr && addr < map->addr_end) {
 			ret = map;
 			break;
 		}
