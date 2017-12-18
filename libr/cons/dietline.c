@@ -145,7 +145,7 @@ static int r_line_readchar_utf8(ut8 *s, int slen) {
 
 #if __WINDOWS__ && !__CYGWIN__
 static int r_line_readchar_win(int *vch) { // this function handle the input in console mode
-	INPUT_RECORD irInBuf[128];
+	INPUT_RECORD irInBuf[1];
 	BOOL ret, bCtrl = FALSE;
 	DWORD mode, out;
 	ut8 buf[2];
@@ -171,7 +171,7 @@ do_it_again:
 	/* HACK: show cursor when ReadConsoleInput is called a lot in a short time */
 	GetConsoleScreenBufferInfo (h_out, &si);
 	SetConsoleCursorPosition (h_out, si.dwCursorPosition);
-	ret = ReadConsoleInput (h, irInBuf, 128, &out);
+	ret = ReadConsoleInput (h, irInBuf, sizeof (irInBuf) / sizeof (INPUT_RECORD), &out);
 	if (ret < 1) {
 		return 0;
 	}
@@ -799,23 +799,11 @@ R_API const char *r_line_readline_cb_win(RLineReadCallback cb, void *user) {
 						int clip_len = strlen (clipText);
 						I.buffer.length += clip_len;
 						if (I.buffer.length < R_LINE_BUFSIZE) {
-							char *tmp;
+							char *clip_pos = I.buffer.data + I.buffer.index;
 
-							tmp = (char *)malloc (clip_len);
-							if (!tmp) {
-								perror ("clipboard malloc");
-							} else {
-								/*
-								char *clip_pos = I.buffer.data + I.buffer.index;
-
-								memcpy (tmp, clip_pos, clip_len);
-								memmove (clip_pos + clip_len, clip_pos, I.buffer.length - I.buffer.index - clip_len);
-								memcpy (clip_pos, tmp, clip_len);
-								free (tmp);
-								*/
-								I.buffer.index = I.buffer.length;
-								strcat (I.buffer.data, clipText);
-							}
+							memmove (clip_pos + clip_len, clip_pos, I.buffer.length - I.buffer.index - clip_len);
+							strncpy (clip_pos, clipText, clip_len);
+							I.buffer.index += clip_len;
 						} else {
 							I.buffer.length -= clip_len;
 						}
