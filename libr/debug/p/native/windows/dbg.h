@@ -52,6 +52,7 @@ typedef struct {
 	int tid;
 	bool cont, intr;
 	int state;
+	bool wow64;
 	char *name, *path;
 	HANDLE h_proc;
 	RFlag *flags;

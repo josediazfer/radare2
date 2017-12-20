@@ -56,6 +56,7 @@ static BOOL (WINAPI *w32_InitializeContext)(PVOID, DWORD, PCONTEXT*, PDWORD) = N
 static BOOL (WINAPI *w32_GetXStateFeaturesMask)(PCONTEXT Context, PDWORD64) = NULL;
 static PVOID(WINAPI *w32_LocateXStateFeature)(PCONTEXT Context, DWORD, PDWORD) = NULL;
 static BOOL (WINAPI *w32_SetXStateFeaturesMask)(PCONTEXT Context, DWORD64) = NULL;
+static BOOL (WINAPI *w32_IsWow64Process)(HANDLE, PBOOL) = NULL;
 
 #ifndef XSTATE_GSSE
 #define XSTATE_GSSE 2
@@ -265,6 +266,8 @@ int w32_dbg_init(RDebug *dbg) {
 		GetProcAddress (h_mod,"DebugActiveProcessStop");
 	w32_DebugBreakProcess = (BOOL (WINAPI *)(HANDLE))
 		GetProcAddress (h_mod, "DebugBreakProcess");
+	w32_IsWow64Process = (BOOL (WINAPI *)(HANDLE, PBOOL))
+		GetProcAddress (h_mod, "IsWow64Process");
 	// only windows vista :(
 	w32_QueryFullProcessImageName = (BOOL (WINAPI *)(HANDLE, DWORD, LPTSTR, PDWORD))
 		GetProcAddress (h_mod, W32_TCALL ("QueryFullProcessImageName"));
@@ -478,6 +481,15 @@ err_proc_dbg_new:
 		R_FREE (proc);
 	}
 	return proc;
+}
+
+static void proc_dbg_init(RDebugW32Proc *proc) {
+	BOOL wow64;
+
+	if (!proc->h_proc) {
+		return;
+	}
+	proc->wow64 = w32_IsWow64Process && w32_IsWow64Process (proc->h_proc, &wow64) && wow64;
 }
 
 static RDebugW32Thread *th_dbg_new(RDebugW32Proc *proc, int tid, int state) {
@@ -768,6 +780,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			proc->base_addr = (ut64)de.u.CreateProcessInfo.lpBaseOfImage;
 			if (!proc->h_proc) {
 				proc->h_proc = de.u.CreateProcessInfo.hProcess;
+				proc_dbg_init (proc);
 			}
 			if (de.u.CreateProcessInfo.hThread) {
 				RDebugW32Thread *th = th_dbg_new (proc, tid, THREAD_STATE_CREATED);

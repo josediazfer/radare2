@@ -3543,6 +3543,11 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 
 	core->cons->event_data = grd;
 	core->cons->event_resize = (RConsEvent) agraph_refresh;
+	g->color_box = core->cons->pal.graph_box;
+	g->color_box2 = core->cons->pal.graph_box2;
+	g->color_box3 = core->cons->pal.graph_box3;
+	g->color_true = core->cons->pal.graph_true;
+	g->color_false = core->cons->pal.graph_false;
 	r_cons_break_push (NULL, NULL);
 
 	while (!exit_graph && !is_error && !r_cons_is_breaked ()) {
