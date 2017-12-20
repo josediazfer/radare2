@@ -57,6 +57,7 @@ static BOOL (WINAPI *w32_GetXStateFeaturesMask)(PCONTEXT Context, PDWORD64) = NU
 static PVOID(WINAPI *w32_LocateXStateFeature)(PCONTEXT Context, DWORD, PDWORD) = NULL;
 static BOOL (WINAPI *w32_SetXStateFeaturesMask)(PCONTEXT Context, DWORD64) = NULL;
 static BOOL (WINAPI *w32_IsWow64Process)(HANDLE, PBOOL) = NULL;
+static BOOL (WINAPI *w32_Wow64GetThreadContext)(HANDLE, LPVOID) = NULL;
 
 #ifndef XSTATE_GSSE
 #define XSTATE_GSSE 2
@@ -268,6 +269,8 @@ int w32_dbg_init(RDebug *dbg) {
 		GetProcAddress (h_mod, "DebugBreakProcess");
 	w32_IsWow64Process = (BOOL (WINAPI *)(HANDLE, PBOOL))
 		GetProcAddress (h_mod, "IsWow64Process");
+	w32_Wow64GetThreadContext = (BOOL (WINAPI *)(HANDLE, LPVOID))
+		GetProcAddress (h_mod, "Wow64GetThreadContext");
 	// only windows vista :(
 	w32_QueryFullProcessImageName = (BOOL (WINAPI *)(HANDLE, DWORD, LPTSTR, PDWORD))
 		GetProcAddress (h_mod, W32_TCALL ("QueryFullProcessImageName"));
@@ -1486,39 +1489,65 @@ static void show_ctx(HANDLE hThread, CONTEXT * ctx) {
 
 int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 #ifdef _MSC_VER
-	CONTEXT ctx;
+	CONTEXT ctx = { 0 };
 #else
-	CONTEXT ctx __attribute__ ((aligned (16)));
+	CONTEXT ctx __attribute__ ((aligned (16))) = { 0 };
+#endif
+
+#if __MINGW64__ || _WIN64
+#ifdef _MSC_VER
+	WOW64_CONTEXT wow64_ctx = { 0 };
+#else
+	WOW64_CONTEXT wow64_ctx __attribute__ ((aligned (16))) = { 0 };
+#endif
+#else
+	CONTEXT wow64_ctx = { 0 };
 #endif
 	int showfpu = false;
 	int ret_size = 0;
 	HANDLE h_th;
 	RDebugW32Thread *th;
+	RDebugW32Proc *proc = proc_dbg_cur (dbg);
+	int ctx_size;
 
 	if (type < -1) {
 		showfpu = true; // hack for debugging
 		type = -type;
 	}
 	th = th_dbg_cur (dbg);
-	if (!th) {
+	if (!proc || !th) {
 		goto err_w32_reg_read;
 	}
 	h_th = th->h_th;
-	memset (&ctx, 0, sizeof (CONTEXT));
-	ctx.ContextFlags = CONTEXT_ALL ;
-	if (!GetThreadContext (h_th, &ctx)) {
-		r_sys_perror ("w32_reg_read/GetThreadContext");
-		goto err_w32_reg_read;
+	if (proc->wow64 && w32_Wow64GetThreadContext) {
+		wow64_ctx.ContextFlags = CONTEXT_ALL;
+		if (!w32_Wow64GetThreadContext (h_th, &wow64_ctx)) {
+			r_sys_perror ("w32_reg_read/Wow64GetThreadContext");
+			goto err_w32_reg_read;
+		}
+		ctx_size = sizeof (wow64_ctx);
+		eprintf ("Wow64 Eip: 0x%x\n", wow64_ctx.Eip);
+	} else {
+		ctx.ContextFlags = CONTEXT_ALL;
+		if (!GetThreadContext (h_th, &ctx)) {
+			r_sys_perror ("w32_reg_read/GetThreadContext");
+			goto err_w32_reg_read;
+		}
+		ctx_size = sizeof (ctx);
 	}
 	if (type == R_REG_TYPE_GPR) {
-		if (size > sizeof (CONTEXT)) {
-			ret_size = sizeof (CONTEXT);
+		if (size > ctx_size) {
+			ret_size = ctx_size;
 		} else {
 			ret_size = size;
 		}
-		memcpy (buf, &ctx, ret_size);
+		if (ctx_size == sizeof (ctx)) {
+			memcpy (buf, &ctx, ret_size);
+		} else {
+			memcpy (buf, &wow64_ctx, ret_size);
+		}
 	} 
-	if (showfpu) {
+	if (showfpu && !proc->wow64) {
 		show_ctx (h_th, &ctx);
 	}
 err_w32_reg_read:
