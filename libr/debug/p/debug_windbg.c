@@ -18,6 +18,9 @@
 #include <windbg.h>
 #include <kd.h>
 
+#include "native/windows/regs-x32.h"
+#include "native/windows/regs-x64.h"
+
 static WindCtx *wctx = NULL;
 static bool dbreak = false;
 
@@ -132,14 +135,17 @@ static int r_debug_windbg_detach(RDebug *dbg, int pid) {
 }
 
 static char *r_debug_windbg_reg_profile(RDebug *dbg) {
-	if (!dbg) return NULL;
-	if (dbg->arch && strcmp (dbg->arch, "x86")) return NULL;
-	if (dbg->bits == R_SYS_BITS_32) {
-#include "native/reg/windows-x86.h"
-	} else if (dbg->bits == R_SYS_BITS_64) {
-#include "native/reg/windows-x64.h"
+	char *profile;
+	
+	if (!dbg || (dbg->arch && strcmp (dbg->arch, "x86"))) {
+		return NULL;
 	}
-	return NULL;
+	if (dbg->bits == R_SYS_BITS_32) {
+		profile = W32_REG_PROFILE_X32;
+	} else if (dbg->bits == R_SYS_BITS_64) {
+		profile = W32_REG_PROFILE_X64;
+	}
+	return strdup (profile);
 }
 
 static int r_debug_windbg_breakpoint(RBreakpoint *bp, RBreakpointItem *b, bool set) {
@@ -201,7 +207,7 @@ static int r_debug_windbg_select(RDebug *dbg, int pid, int tid) {
 RDebugPlugin r_debug_plugin_windbg = {
 	.name = "windbg",
 	.license = "LGPL3",
-	.arch = "x86",
+	.arch = "x86", \
 	.bits = R_SYS_BITS_32 | R_SYS_BITS_64,
 	.init = &r_debug_windbg_init,
 	.step = &r_debug_windbg_step,

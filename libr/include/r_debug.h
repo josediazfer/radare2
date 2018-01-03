@@ -359,7 +359,7 @@ typedef struct r_debug_plugin_t {
 	int (*attach)(RDebug *dbg, int pid);
 	int (*detach)(RDebug *dbg, int pid);
 	void (*free)(RDebug *dbg);
-	int (*select)(int pid, int tid);
+	int (*select)(RDebug *dbg, int pid, int tid);
 	RList *(*threads)(RDebug *dbg, int pid);
 	RList *(*pids)(RDebug *dbg, int pid);
 	RList *(*tids)(RDebug *dbg, int pid);

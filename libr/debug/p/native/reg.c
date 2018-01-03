@@ -2,19 +2,7 @@
 // splitted for better reading/cleaning up
 
 static char *r_debug_native_reg_profile(RDebug *dbg) {
-#if __WINDOWS__
-/*_______
- |   |   |
- |___|___|
- |   |   |
- |___|___|
-*/
-	if (dbg->bits & R_SYS_BITS_64) {
-#include "reg/windows-x64.h"
-	} else {
-#include "reg/windows-x86.h"
-	}
-#elif (__OpenBSD__ || __NetBSD__)
+#if (__OpenBSD__ || __NetBSD__)
 /*                           __.--..__
        \-/-/-/    _ __  _.--'  _.--'
   _  \'       \   \\  ''      `------.__
