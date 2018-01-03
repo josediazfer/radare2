@@ -110,10 +110,13 @@ static int r_debug_handle_signals (RDebug *dbg) {
 #endif
 
 //this is temporal
-#if __APPLE__ || __linux__
+#if __WINDOWS__ || __APPLE__ || __linux__
 
 static char *r_debug_native_reg_profile (RDebug *dbg) {
-#if __APPLE__
+#if __WINDOWS__
+
+	return w32_reg_profile (dbg);
+#elif __APPLE__
 	return strdup (xnu_reg_profile (dbg));
 #elif __linux__
 	return linux_reg_profile (dbg);
@@ -1619,6 +1622,14 @@ static void r_debug_native_free (RDebug *dbg) {
 #endif
 }
 
+static int r_debug_native_select (RDebug *dbg, int pid, int tid) {
+#if __WINDOWS__ && !__CYGWIN__
+	return w32_dbg_select (dbg, pid, tid);
+#else
+	return true;
+#endif
+}
+
 struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
 	.open = r_debug_desc_native_open,
 	.list = r_debug_desc_native_list,
@@ -1671,6 +1682,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.contsc = &r_debug_native_continue_syscall,
 	.attach = &r_debug_native_attach,
 	.detach = &r_debug_native_detach,
+	.select = &r_debug_native_select,
 	.free = &r_debug_native_free,
 	.pids = &r_debug_native_pids,
 	.tids = &r_debug_native_tids,

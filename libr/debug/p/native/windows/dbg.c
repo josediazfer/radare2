@@ -8,6 +8,8 @@
 #include "dbg.h"
 #include "map.h"
 #include "io_dbg.h"
+#include "regs-x64.h"
+#include "regs-x32.h"
 
 #ifndef NTSTATUS
 #define NTSTATUS DWORD
@@ -58,6 +60,7 @@ static PVOID(WINAPI *w32_LocateXStateFeature)(PCONTEXT Context, DWORD, PDWORD) =
 static BOOL (WINAPI *w32_SetXStateFeaturesMask)(PCONTEXT Context, DWORD64) = NULL;
 static BOOL (WINAPI *w32_IsWow64Process)(HANDLE, PBOOL) = NULL;
 static BOOL (WINAPI *w32_Wow64GetThreadContext)(HANDLE, LPVOID) = NULL;
+static BOOL (WINAPI *w32_Wow64SetThreadContext)(HANDLE, LPVOID) = NULL;
 
 #ifndef XSTATE_GSSE
 #define XSTATE_GSSE 2
@@ -120,10 +123,14 @@ err_w32_enable_dbg_priv:
 }
 
 static RDebugW32Proc *proc_dbg_find(RDebugW32 *dbg_w32, int pid, RListIter **iter) {
-	RList *proc_list = dbg_w32->proc_list;
+	RList *proc_list;
 	RListIter *iter_;
 	RDebugW32Proc *proc;
 
+	if (!dbg_w32) {
+		return NULL;
+	}
+	proc_list = dbg_w32->proc_list;
 	r_list_foreach (proc_list, iter_, proc) {
 		if (proc->pid == pid) {
 			if (iter) {
@@ -271,6 +278,8 @@ int w32_dbg_init(RDebug *dbg) {
 		GetProcAddress (h_mod, "IsWow64Process");
 	w32_Wow64GetThreadContext = (BOOL (WINAPI *)(HANDLE, LPVOID))
 		GetProcAddress (h_mod, "Wow64GetThreadContext");
+	w32_Wow64SetThreadContext = (BOOL (WINAPI *)(HANDLE, LPVOID))
+		GetProcAddress (h_mod, "Wow64SetThreadContext");
 	// only windows vista :(
 	w32_QueryFullProcessImageName = (BOOL (WINAPI *)(HANDLE, DWORD, LPTSTR, PDWORD))
 		GetProcAddress (h_mod, W32_TCALL ("QueryFullProcessImageName"));
@@ -440,7 +449,7 @@ static char *get_file_name_from_handle(HANDLE handle_file) {
 			}
 		}
 		cur_drive+= 2;
-	} 
+	}
 err_get_file_name_from_handle:
 	free (name);
 	if (map) {
@@ -492,7 +501,10 @@ static void proc_dbg_init(RDebugW32Proc *proc) {
 	if (!proc->h_proc) {
 		return;
 	}
-	proc->wow64 = w32_IsWow64Process && w32_IsWow64Process (proc->h_proc, &wow64) && wow64;
+	proc->wow64 = 	w32_Wow64GetThreadContext &&
+			w32_Wow64SetThreadContext &&
+			w32_IsWow64Process &&
+			w32_IsWow64Process (proc->h_proc, &wow64) && wow64;
 }
 
 static RDebugW32Thread *th_dbg_new(RDebugW32Proc *proc, int tid, int state) {
@@ -943,45 +955,45 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 }
 
 RList *w32_thread_list(int pid) {
-        HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
-        THREADENTRY32 te32;
+	HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
+	THREADENTRY32 te32;
 	RList *list = NULL;
 	bool success = false;
 
-        h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
-        if (h_proc_snap == INVALID_HANDLE_VALUE) {
+	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
+	if (h_proc_snap == INVALID_HANDLE_VALUE) {
 		r_sys_perror ("w32_thread_list/CreateToolhelp32Snapshot");
-                goto err_w32_thread_list;
+		goto err_w32_thread_list;
 	}
-        te32.dwSize = sizeof (THREADENTRY32);
+	te32.dwSize = sizeof (THREADENTRY32);
 	if (!Thread32First (h_proc_snap, &te32)) {
 		r_sys_perror ("w32_thread_list/Thread32First");
-                goto err_w32_thread_list;
+		goto err_w32_thread_list;
 	}
 	list = r_list_newf ((RListFree)r_debug_pid_free);
-        do {
-                /* get all threads of process */
-                if (te32.th32OwnerProcessID == pid) {
+	do {
+		/* get all threads of process */
+		if (te32.th32OwnerProcessID == pid) {
 			HANDLE h_th;
 
-                        /* open a new handler */
+		/* open a new handler */
 			h_th = OpenThread (THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
 			if (!h_th) {
 				r_sys_perror ("w32_thread_list/OpenThread");
-                                goto err_w32_thread_list;
+				goto err_w32_thread_list;
 			}
 			CloseHandle (h_th);
 			r_list_append (list, r_debug_pid_new ("???", te32.th32ThreadID, 0, 's', 0));
-                }
-        } while (Thread32Next (h_proc_snap, &te32));
+		}
+	} while (Thread32Next (h_proc_snap, &te32));
 	success = true;
 err_w32_thread_list:
 	if (!success) {
 		r_list_free (list);
 		list = NULL;
 	}
-        if (h_proc_snap != INVALID_HANDLE_VALUE) {
-                CloseHandle (h_proc_snap);
+	if (h_proc_snap != INVALID_HANDLE_VALUE) {
+		CloseHandle (h_proc_snap);
 	}
 	return list;
 }
@@ -1062,7 +1074,7 @@ static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled) {
 	if (th && th->state == THREAD_STATE_FINISHED) {
 		th_dbg_delete (proc, th);
 	}
-	proc->cont  = false;
+	proc->cont = false;
 	return 0;
 }
 
@@ -1385,7 +1397,7 @@ static int get_avx (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
 		goto err_get_avx;
 	}
 	Xmm = (ut128 *)w32_LocateXStateFeature (Context, XSTATE_LEGACY_SSE, &FeatureLength);
-        nRegs = FeatureLength / sizeof (*Xmm);
+	nRegs = FeatureLength / sizeof (*Xmm);
 	for (Index = 0; Index < nRegs; Index++) {
 		ymm[Index].High = 0;
 		xmm[Index].High = 0;
@@ -1500,8 +1512,6 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 #else
 	WOW64_CONTEXT wow64_ctx __attribute__ ((aligned (16))) = { 0 };
 #endif
-#else
-	CONTEXT wow64_ctx = { 0 };
 #endif
 	int showfpu = false;
 	int ret_size = 0;
@@ -1509,6 +1519,7 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 	RDebugW32Thread *th;
 	RDebugW32Proc *proc = proc_dbg_cur (dbg);
 	int ctx_size;
+	PVOID ctx_ = NULL;
 
 	if (type < -1) {
 		showfpu = true; // hack for debugging
@@ -1519,14 +1530,15 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 		goto err_w32_reg_read;
 	}
 	h_th = th->h_th;
-	if (proc->wow64 && w32_Wow64GetThreadContext) {
+
+	if (proc->wow64) {
 		wow64_ctx.ContextFlags = CONTEXT_ALL;
 		if (!w32_Wow64GetThreadContext (h_th, &wow64_ctx)) {
 			r_sys_perror ("w32_reg_read/Wow64GetThreadContext");
 			goto err_w32_reg_read;
 		}
 		ctx_size = sizeof (wow64_ctx);
-		eprintf ("Wow64 Eip: 0x%x\n", wow64_ctx.Eip);
+		ctx_ = &wow64_ctx;
 	} else {
 		ctx.ContextFlags = CONTEXT_ALL;
 		if (!GetThreadContext (h_th, &ctx)) {
@@ -1534,6 +1546,7 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 			goto err_w32_reg_read;
 		}
 		ctx_size = sizeof (ctx);
+		ctx_ = &ctx;
 	}
 	if (type == R_REG_TYPE_GPR) {
 		if (size > ctx_size) {
@@ -1541,14 +1554,10 @@ int w32_reg_read (RDebug *dbg, int type, ut8 *buf, int size) {
 		} else {
 			ret_size = size;
 		}
-		if (ctx_size == sizeof (ctx)) {
-			memcpy (buf, &ctx, ret_size);
-		} else {
-			memcpy (buf, &wow64_ctx, ret_size);
-		}
-	} 
+		memcpy (buf, ctx_, ret_size);
+	}
 	if (showfpu && !proc->wow64) {
-		show_ctx (h_th, &ctx);
+		show_ctx (h_th, (PCONTEXT)&ctx_);
 	}
 err_w32_reg_read:
 	return ret_size;
@@ -1562,23 +1571,47 @@ int w32_reg_write (RDebug *dbg, int type, const ut8* buf, int size) {
 #else
 	CONTEXT ctx __attribute__((aligned (16)));
 #endif
+#if __MINGW64__ || _WIN64
+#ifdef _MSC_VER
+	WOW64_CONTEXT wow64_ctx = { 0 };
+#else
+	WOW64_CONTEXT wow64_ctx __attribute__ ((aligned (16))) = { 0 };
+#endif
+#endif
 	RDebugW32Thread *th = th_dbg_cur (dbg);
+	RDebugW32Proc *proc = proc_dbg_cur (dbg);
+	int ctx_size;
 
-	if (!th) {
+	if (!proc || !th) {
 		goto err_w32_reg_write;
 	}
 	h_th = th->h_th;
-	ctx.ContextFlags = CONTEXT_ALL;
-	if (!GetThreadContext (h_th, &ctx)) {
-		r_sys_perror ("w32_reg_write/GetThreadContext");
-		goto err_w32_reg_write;
+	if (proc->wow64) {
+		wow64_ctx.ContextFlags = CONTEXT_ALL;
+		if (!w32_Wow64GetThreadContext (h_th, &wow64_ctx)) {
+			r_sys_perror ("w32_reg_write/Wow64GetThreadContext");
+			goto err_w32_reg_write;
+		}	
+		ctx_size = sizeof (wow64_ctx);
+	} else {	
+		ctx.ContextFlags = CONTEXT_ALL;
+		if (!GetThreadContext (h_th, &ctx)) {
+			r_sys_perror ("w32_reg_write/GetThreadContext");
+			goto err_w32_reg_write;
+		}	
+		ctx_size = sizeof (ctx);
 	}
 	if (type == R_REG_TYPE_GPR) {
-		if (size > sizeof (CONTEXT)) {
-			size = sizeof (CONTEXT);
+		if (size > ctx_size) {
+			size = ctx_size;
 		}
-		memcpy (&ctx, buf, size);
-		ret = SetThreadContext (h_th, &ctx)? true: false;
+		if (proc->wow64) {
+			memcpy (&wow64_ctx, buf, size);
+			ret = w32_Wow64SetThreadContext (h_th, &wow64_ctx)? true: false;
+		} else {
+			memcpy (&ctx, buf, size);
+			ret = SetThreadContext (h_th, &ctx)? true: false;
+		}
 	}
 err_w32_reg_write:
 	return ret;
@@ -1638,12 +1671,12 @@ static void w32_info_user(RDebug *dbg, RDebugInfo *rdi) {
 		rdi->usr = r_sys_conv_utf16_to_utf8 (usr);
 	}
 err_w32_info_user:
-    if (h_tok) {
-	CloseHandle (h_tok);
-    }
-    free (usr);
-    free (usr_dom);
-    free (tok_usr);
+	if (h_tok) {
+		CloseHandle (h_tok);
+	}
+	free (usr);
+	free (usr_dom);
+	free (tok_usr);
 }
 
 void w32_info_exe(RDebug *dbg, RDebugInfo *rdi) {
@@ -1769,4 +1802,28 @@ RList *w32_desc_list (int pid) {
 	free (handleInfo);
 	CloseHandle (processHandle);
 	return ret;
+}
+
+char *w32_reg_profile(RDebug *dbg) {
+	char *profile;
+
+	if (dbg->bits & R_SYS_BITS_64) {
+		profile = W32_REG_PROFILE_X64;
+	} else {
+		profile = W32_REG_PROFILE_X32;
+	}
+	return strdup (profile);
+}
+
+int w32_dbg_select (RDebug *dbg, int pid, int tid) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
+
+	if (!proc) {
+		return false;
+	}
+	if (proc->wow64) {
+		dbg->bits = R_SYS_BITS_32;
+	}
+	return true;
 }

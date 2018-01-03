@@ -556,7 +556,7 @@ R_API bool r_debug_select(RDebug *dbg, int pid, int tid) {
 		return false;
 	}
 
-	if (dbg->h && dbg->h->select && !dbg->h->select (pid, tid))
+	if (dbg->h && dbg->h->select && !dbg->h->select (dbg, pid, tid))
 		return false;
 
 	r_io_system (dbg->iob.io, sdb_fmt (0, "pid %d", pid));

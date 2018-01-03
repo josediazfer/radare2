@@ -902,7 +902,7 @@ static bool r_debug_gdb_kill(RDebug *dbg, int pid, int tid, int sig) {
 	return true;
 }
 
-static int r_debug_gdb_select(int pid, int tid) {
+static int r_debug_gdb_select(RDebug *dbg, int pid, int tid) {
 	if (!desc) {
 		return false;
 	}
