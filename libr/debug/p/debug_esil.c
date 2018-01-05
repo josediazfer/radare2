@@ -45,7 +45,7 @@ static int __esil_step(RDebug *dbg) {
 }
 
 static int __esil_init(RDebug *dbg) {
-	dbg->tid = dbg->pid = 1;
+	dbg->tid = dbg->pid = -1;
 	// aeim
 	// aei
 	eprintf ("TODO: esil-vm not initialized\n");
