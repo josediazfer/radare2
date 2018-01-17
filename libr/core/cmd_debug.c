@@ -124,6 +124,15 @@ static const char *help_msg_dc[] = {
 	NULL
 };
 
+static const char *help_msg_deh[] = {
+	"Usage:", "deh", " Exceptions handling",
+	"deh ", "", "List ignored exceptions",
+	"deh+ [code]", "", "Ignore exception with the 'code' value or last exception",
+	"deh- code", "", "Remove an ignored exception with the 'code' value from list",
+	"deh*", "", "List ignored exceptions in radare commands",
+	NULL
+};
+
 static const char *help_msg_dcs[] = {
 	"Usage:", "dcs", " Continue until syscall",
 	"dcs", "", "Continue until next syscall",
@@ -3438,6 +3447,78 @@ static void debug_trace_calls(RCore *core, const char *input) {
 	r_cons_break_pop ();
 }
 
+static void r_core_debug_excep_ign_append(RCore *core, const char *input) {
+	ut64 excep_code;
+
+	switch (input[0]) {
+	case '\0':
+		excep_code = core->dbg->excep->last;
+		break;
+	case ' ':
+		excep_code = r_num_math (core->num, input + 1);
+		break;
+
+	default:
+		excep_code = r_num_math (core->num, input);
+	}
+	if (excep_code != 0) {
+		r_debug_excep_ign_append (core->dbg, excep_code);
+	}
+}
+
+static void r_core_debug_excep_ign_delete(RCore *core, const char *input) {
+	ut64 excep_code;
+
+	switch (input[0]) {
+	case '\0':
+		excep_code = core->dbg->excep->last;
+		break;
+	case ' ':
+		excep_code = r_num_math (core->num, input + 1);
+		break;
+
+	default:
+		excep_code = r_num_math (core->num, input);
+	}
+	if (excep_code != 0) {
+		r_debug_excep_ign_delete (core->dbg, excep_code);
+	}
+}
+
+static void r_core_debug_excep_ign_cprint(RCore *core, bool is_cmd) {
+	RListIter *iter;
+	RDebugExcepState *state = core->dbg->excep;
+	RDebugExcep *excep_ign;
+
+	r_list_foreach (state->exceps_ign, iter, excep_ign) {
+		if (is_cmd) {
+			r_cons_printf ("deh+ 0x%016"PFMT64x"\n", excep_ign->code);
+		} else {
+			r_cons_printf ("0x%016"PFMT64x"\n", excep_ign->code);
+		}
+	}
+}
+
+static void r_core_debug_excep_handle(RCore *core, const char *input) {
+	switch (input[0]) {
+	case '\0': // "deh"
+		r_core_debug_excep_ign_cprint(core, false);
+		break;
+	case '+': // "deh+"
+		r_core_debug_excep_ign_append (core, input + 1);
+		break;
+	case '-': // "deh-"
+		r_core_debug_excep_ign_delete (core, input + 1);
+		break;
+	case '*': // "deh*"
+		r_core_debug_excep_ign_cprint(core, true);
+		break;
+	case '?': // "deh?"
+	default:
+		r_core_cmd_help (core, help_msg_deh);
+	}
+}
+
 static void r_core_debug_esil (RCore *core, const char *input) {
 	switch (input[0]) {
 	case '\0': // "de"
@@ -4432,7 +4513,13 @@ static int cmd_debug(void *data, const char *input) {
 		}
 		break;
 	case 'e': // "de"
-		r_core_debug_esil (core, input + 1);
+		switch (input[1]) {
+		case 'h':
+			r_core_debug_excep_handle (core, input + 2);
+			break;
+		default:
+			r_core_debug_esil (core, input + 1);
+		}
 		break;
 	case 'g': // "dg"
 		if (core->dbg->h && core->dbg->h->gcore) {

@@ -304,6 +304,71 @@ static const char *r_debug_str_callback(RNum *userptr, ut64 off, int *ok) {
 	return NULL;
 }
 
+static RDebugExcepState *r_debug_excep_state_new() {
+	RDebugExcepState *excep = R_NEW0 (RDebugExcepState);
+	if (!excep) {
+		perror("alloc RDebugExcepState");
+		return NULL;
+	}
+	excep->exceps_ign = r_list_newf ((RListFree)free);
+	return excep;
+}
+
+static void r_debug_excep_state_free(RDebugExcepState *excep) {
+	if (!excep) {
+		return;
+	}
+	r_list_free (excep->exceps_ign);
+	free (excep);
+}
+
+R_API void r_debug_excep_ign_append(RDebug *dbg, ut64 code) {
+	RListIter *iter;
+	RDebugExcepState *state = dbg->excep;
+	RList *list = state->exceps_ign;
+	RDebugExcep *excep_ign, *excep;
+
+	r_list_foreach (list, iter, excep_ign) {
+		if (code == excep_ign->code) {
+			return;
+		}
+	}
+	excep = R_NEW0 (RDebugExcep);
+	if (!excep) {
+		perror ("alloc RDebugExcep");
+	} else {
+		excep->code = code;
+		r_list_append (list, excep);
+	}
+}
+
+R_API void r_debug_excep_ign_delete(RDebug *dbg, ut64 code) {
+	RListIter *iter;
+	RDebugExcepState *state = dbg->excep;
+	RList *list = state->exceps_ign;
+	RDebugExcep *excep_ign;
+
+	r_list_foreach (list, iter, excep_ign) {
+		if (code == excep_ign->code) {
+			r_list_delete (list, iter);
+		}
+	}
+}
+
+R_API bool r_debug_excep_ign(RDebug *dbg, ut64 code) {
+	RListIter *iter;
+	RDebugExcepState *state = dbg->excep;
+	RList *list = state->exceps_ign;
+	RDebugExcep *excep_ign;
+
+	r_list_foreach (list, iter, excep_ign) {
+		if (code == excep_ign->code) {
+			return true;
+		}
+	}
+	return false;
+}
+
 R_API RDebug *r_debug_new(int hard) {
 	RDebug *dbg = R_NEW0 (RDebug);
 	if (!dbg) {
@@ -324,6 +389,7 @@ R_API RDebug *r_debug_new(int hard) {
 	R_FREE (dbg->btalgo);
 	dbg->trace_execs = 0;
 	dbg->anal = NULL;
+	dbg->excep = r_debug_excep_state_new ();
 	dbg->snaps = r_list_newf ((RListFree)r_debug_snap_free);
 	dbg->sessions = r_list_newf ((RListFree)r_debug_session_free);
 	dbg->pid = -1;
@@ -373,6 +439,7 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_bp_free (dbg->bp);
 		//r_reg_free(&dbg->reg);
 		free (dbg->snap_path);
+		r_debug_excep_state_free (dbg->excep);
 		r_list_free (dbg->snaps);
 		r_list_free (dbg->sessions);
 		r_list_free (dbg->maps);

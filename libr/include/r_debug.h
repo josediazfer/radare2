@@ -232,6 +232,15 @@ typedef struct r_debug_trace_t {
 	Sdb *db;
 } RDebugTrace;
 
+typedef struct r_debug_excep_t {
+	ut64 code;
+} RDebugExcep;
+
+typedef struct r_debug_excep_state_t {
+	RList *exceps_ign;
+	ut64 last;
+} RDebugExcepState;
+
 typedef struct r_debug_tracepoint_t {
 	ut64 addr;
 	ut64 tags; // XXX
@@ -289,6 +298,9 @@ typedef struct r_debug_t {
 	const char *creg; // current register value
 	RBreakpoint *bp;
 	char *snap_path;
+
+	/* exceptions debugger state */
+	RDebugExcepState *excep;
 
 	/* io */
 	PrintfCallback cb_printf;
@@ -598,6 +610,11 @@ R_API void r_debug_session_save(RDebug *dbg, const char *file);
 R_API void r_debug_session_restore(RDebug *dbg, const char *file);
 R_API int r_debug_step_back(RDebug *dbg);
 R_API bool r_debug_continue_back(RDebug *dbg);
+
+/* exceptions ignored */
+R_API void r_debug_excep_ign_append(RDebug *dbg, ut64 code);
+R_API void r_debug_excep_ign_delete(RDebug *dbg, ut64 code);
+R_API bool r_debug_excep_ign(RDebug *dbg, ut64 code);
 
 /* plugin pointers */
 extern RDebugPlugin r_debug_plugin_native;

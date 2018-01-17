@@ -562,7 +562,7 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 	if (h_file) {
 		path = get_file_name_from_handle (h_file);
 	} else {
-		path = get_lib_from_mod (proc, lib->base_addr); 
+		path = get_lib_from_mod (proc, lib->base_addr);
 	}
 	if (path && (!lib->path || strcasecmp (lib->path, path))) {
 		char *p = strrchr (path, '\\');
@@ -675,10 +675,10 @@ static RDebugW32Thread *set_th_info(RDebugW32Proc *proc, DEBUG_EVENT *de, int st
 		}
 		h_th = de->u.CreateThread.hThread;
 		if (!h_th) {
-			h_th = OpenThread (THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, th->tid); 
+			h_th = OpenThread (THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, th->tid);
 		}
 		if (w32_NtQueryInformationThread (h_th, 0x9 /*ThreadQuerySetWin32StartAddress*/, &th_entry_addr,
-					sizeof (PVOID), NULL) == 0) { 
+					sizeof (PVOID), NULL) == 0) {
 			th->entry_addr = (ut64)(size_t)th_entry_addr;
 		} else {
 			th->entry_addr = (ut64)(size_t)de->u.CreateThread.lpStartAddress;
@@ -932,18 +932,22 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				next_event = false;
 				break;
 			case DBG_CONTROL_C:
-				eprintf ("(%d) control+c event\n", proc->pid); 
+				eprintf ("(%d) control+c event\n", proc->pid);
 				next_event = true;
 				proc_dbg_continue (proc, false);
 				break;
 			default:
-				if (!dbg_exception_event (&de, proc)) {
+			{
+				dbg->excep->last = (ut64)de.u.Exception.ExceptionRecord.ExceptionCode;
+				if (!dbg_exception_event (&de, proc) &&
+				!r_debug_excep_ign (dbg, dbg->excep->last)) {
 					ret = R_DEBUG_REASON_TRAP;
 					next_event = false;
 				} else {
 					next_event = true;
 					proc_dbg_continue (proc, false);
 				}
+			}
 			}
 			break;
 		default:
@@ -1192,7 +1196,7 @@ err_w32_dbg_attach:
 	if (ret == -1 && proc) {
 		proc_dbg_delete (dbg_w32, proc);
 	}
-	return ret; 
+	return ret;
 }
 
 int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **ret_proc) {
@@ -1230,7 +1234,6 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **r
 	} else {
 		cmd = NULL;
 	}
-	
 	/* is relative path? If so find executable from PATH environment variable */
 	if (_access (appname, 0) == -1 && (strlen(appname) <= 2 || *(appname + 1) != ':'
 		|| (tolower (*appname) < 'a' || tolower (*appname) > 'z'))) {
@@ -1257,7 +1260,6 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **r
 			free (path);
 		}
 	}
-
 	if (args) {
 		if (cmd) {
 			cmdline = r_str_newf ("\"%s\" %s %s", appname, cmd, args);
@@ -1817,7 +1819,7 @@ char *w32_reg_profile(RDebug *dbg) {
 
 int w32_dbg_select (RDebug *dbg, int pid, int tid) {
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
+	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, pid, NULL);
 
 	if (!proc) {
 		return false;
