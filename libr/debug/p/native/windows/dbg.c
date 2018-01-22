@@ -89,6 +89,11 @@ static BOOL (WINAPI *w32_Wow64SetThreadContext)(HANDLE, LPVOID) = NULL;
 #define CONTEXT_ALL 1048607
 #endif
 
+
+static ut64 filetime2ut64(PFILETIME pft) {
+	return (ut64)(Int64ShllMod32(Int64ShllMod32(pft->dwHighDateTime, 16),16) | pft->dwLowDateTime);
+}
+
 bool w32_enable_dbg_priv() {
 	/////////////////////////////////////////////////////////
 	//   Note: Enabling SeDebugPrivilege adapted from sample
@@ -958,11 +963,32 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	return ret;
 }
 
+static int cmpth (const void *_a, const void *_b) {
+	const RDebugPid *a = _a, *b = _b;
+	if (a->status == 'r') {
+		return -1;
+	}
+	if (b->status == 'r') {
+		return 1;
+	}
+	if (a->utime || a->ktime) {
+		return -1;
+	}
+	if (b->utime || b->ktime) {
+		return 1;
+	}
+	return 0;
+}
+
 RList *w32_thread_list(int pid) {
 	HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
 	THREADENTRY32 te32;
 	RList *list = NULL;
+	HANDLE h_th = NULL;
 	bool success = false;
+	PSYSTEM_PROCESS_INFORMATION sys_proc = NULL;
+	PSYSTEM_THREAD_INFORMATION th_proc = NULL;
+	DWORD th_proc_n = 0;
 
 	h_proc_snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, pid);
 	if (h_proc_snap == INVALID_HANDLE_VALUE) {
@@ -975,21 +1001,84 @@ RList *w32_thread_list(int pid) {
 		goto err_w32_thread_list;
 	}
 	list = r_list_newf ((RListFree)r_debug_pid_free);
-	do {
-		/* get all threads of process */
-		if (te32.th32OwnerProcessID == pid) {
-			HANDLE h_th;
+	if (w32_NtQuerySystemInformation) {
+		ULONG ret_len = 0;
 
-		/* open a new handler */
-			h_th = OpenThread (THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
-			if (!h_th) {
-				r_sys_perror ("w32_thread_list/OpenThread");
+		#define STATUS_INFO_LENGTH_MISMATCH 0xc0000004
+		if (w32_NtQuerySystemInformation (SystemProcessInformation, NULL,
+					0, &ret_len) == STATUS_INFO_LENGTH_MISMATCH) {
+			sys_proc = (PSYSTEM_PROCESS_INFORMATION)calloc(1, ret_len);
+			if (!sys_proc) {
+				perror ("w32_thread_list/alloc SYSTEM_PROCESS_INFORMATION");
 				goto err_w32_thread_list;
 			}
-			CloseHandle (h_th);
-			r_list_append (list, r_debug_pid_new ("???", te32.th32ThreadID, 0, 's', 0));
+			w32_NtQuerySystemInformation (SystemProcessInformation, sys_proc,
+				ret_len, NULL);
+		} else {
+			r_sys_perror ("w32_thread_list/NtQuerySystemInformation");
 		}
+	}
+	do {
+		RDebugPid *th;
+		HANDLE h_th;
+		FILETIME ctime, etime, ktime, utime;
+		PSYSTEM_THREAD_INFORMATION th_proc_it;
+		char th_state;
+		int i;
+
+		/* get all threads of process */
+		if (te32.th32OwnerProcessID != pid) {
+			continue;
+		}
+		if (!th_proc && sys_proc) {
+			PSYSTEM_PROCESS_INFORMATION sys_proc_it = sys_proc;
+			while (sys_proc_it->NextEntryOffset && (DWORD)(DWORD_PTR)sys_proc_it->UniqueProcessId != pid) {
+				sys_proc_it = (PSYSTEM_PROCESS_INFORMATION)(((UCHAR *)sys_proc_it) + sys_proc_it->NextEntryOffset);
+			}
+			if((DWORD)(DWORD_PTR)sys_proc_it->UniqueProcessId == pid) {
+				th_proc = (PSYSTEM_THREAD_INFORMATION)(((UCHAR *)sys_proc_it) + sizeof (SYSTEM_PROCESS_INFORMATION));
+				th_proc_n = sys_proc_it->NumberOfThreads;
+			} else {
+				th_proc_n = 0;
+			}
+		}
+		/* open a new handler */
+		h_th = OpenThread (THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
+		if (!h_th) {
+			r_sys_perror ("w32_thread_list/OpenThread");
+			goto err_w32_thread_list;
+		}
+		th_state = '?';
+		th_proc_it = th_proc;
+		for (i = 0; i < th_proc_n; i++, th_proc_it++) {
+			if ((DWORD)(DWORD_PTR)th_proc_it->ClientId.UniqueThread == te32.th32ThreadID) {
+				switch (th_proc_it->ThreadState) {
+					case Running:
+						th_state = 'r';
+						break;
+					case Waiting:
+						th_state = 's';
+						break;
+					case Terminated:
+						th_state = 't';
+						break;
+				}
+			}
+		}
+		th = r_debug_pid_new ("???", te32.th32ThreadID, 0, th_state, 0);
+		if (!th) {
+			perror ("w32_thread_list/r_debug_pid_new");
+			goto err_w32_thread_list;
+		}
+		if (GetThreadTimes (h_th, &ctime, &etime, &ktime, &utime)) {
+			th->ktime = filetime2ut64 (&ktime);
+			th->utime = filetime2ut64 (&utime);
+		}
+		CloseHandle (h_th);
+		h_th = NULL;
+		r_list_append (list, th);
 	} while (Thread32Next (h_proc_snap, &te32));
+	r_list_sort (list, cmpth);
 	success = true;
 err_w32_thread_list:
 	if (!success) {
@@ -999,6 +1088,10 @@ err_w32_thread_list:
 	if (h_proc_snap != INVALID_HANDLE_VALUE) {
 		CloseHandle (h_proc_snap);
 	}
+	if (h_th) {
+		CloseHandle (h_th);
+	}
+	free (sys_proc);
 	return list;
 }
 

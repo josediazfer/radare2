@@ -415,6 +415,8 @@ typedef struct r_debug_pid_t {
 	int uid;
 	int gid;
 	ut64 pc;
+	ut64 utime;
+	ut64 ktime;
 } RDebugPid;
 
 /*

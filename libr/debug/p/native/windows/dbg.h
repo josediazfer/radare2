@@ -120,6 +120,100 @@ typedef struct _OBJECT_TYPE_INFORMATION
 	ULONG NonPagedPoolUsage;
 } OBJECT_TYPE_INFORMATION, *POBJECT_TYPE_INFORMATION;
 
+#define SystemProcessInformation	0x05
+
+typedef enum _KTHREAD_STATE
+{
+    Initialized,
+    Ready,
+    Running,
+    Standby,
+    Terminated,
+    Waiting,
+    Transition,
+    DeferredReady,
+    GateWait
+} KTHREAD_STATE;
+
+enum KWAIT_REASON {
+	Executive,
+	FreePage,
+	PageIn,
+	PoolAllocation,
+	DelayExecution,
+	Suspended,
+	UserRequest,
+	WrExecutive,
+	WrFreePage,
+	WrPageIn,
+	WrPoolAllocation,
+	WrDelayExecution,
+	WrSuspended,
+	WrUserRequest,
+	WrEventPair,
+	WrQueue,
+	WrLpcReceive,
+	WrLpcReply,
+	WrVirtualMemory,
+	WrPageOut,
+	WrRendezvous,
+	Spare2,
+	Spare3,
+	Spare4,
+	Spare5,
+	Spare6,
+	WrKernel,
+	MaximumWaitReason
+};
+
+typedef struct _CLIENT_ID {
+	HANDLE UniqueProcess;
+	HANDLE UniqueThread;
+} CLIENT_ID;
+
+typedef LONG	KPRIORITY;
+
+
+/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms724509(v=vs.85).aspx */
+typedef struct _SYSTEM_THREAD_INFORMATION {
+	LARGE_INTEGER Reserved1[3];
+	ULONG Reserved2;
+	PVOID StartAddress;
+	CLIENT_ID ClientId;
+	KPRIORITY Priority;
+	LONG BasePriority;
+	ULONG Reserved3;
+	ULONG ThreadState;
+	ULONG WaitReason;
+} SYSTEM_THREAD_INFORMATION, *PSYSTEM_THREAD_INFORMATION;
+
+typedef struct __attribute__ ((aligned (16))) _SYSTEM_PROCESS_INFORMATION {
+	 ULONG NextEntryOffset;
+	 ULONG NumberOfThreads;
+	 BYTE Reserved1[48];
+	 UNICODE_STRING ImageName;
+	 KPRIORITY BasePriority;
+	 HANDLE UniqueProcessId;
+	 PVOID Reserved2;
+	 ULONG HandleCount;
+	 ULONG SessionId;
+	 PVOID Reserved3;
+	 SIZE_T PeakVirtualSize;
+	 SIZE_T VirtualSize;
+	 ULONG Reserved4;
+	 SIZE_T PeakWorkingSetSize;
+	 SIZE_T WorkingSetSize;
+	 PVOID Reserved5;
+	 SIZE_T QuotaPagedPoolUsage;
+	 PVOID Reserved6;
+	 SIZE_T QuotaNonPagedPoolUsage;
+	 SIZE_T PagefileUsage;
+	 SIZE_T PeakPagefileUsage;
+	 SIZE_T PrivatePageCount;
+	LARGE_INTEGER Reserved7[6];
+} SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
+
+
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **proc);
 int w32_dbg_detach(RDebug *dbg, int pid);
 RDebugInfo* w32_info(RDebug *dbg, const char *arg);

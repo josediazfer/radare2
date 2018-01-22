@@ -82,16 +82,20 @@ R_API int r_debug_thread_list(RDebug *dbg, int pid) {
 			r_list_foreach (list, iter, p) {
 				dbg->cb_printf ("{\"pid\":%d,"
 						"\"status\":\"%s\","
+						"\"utime\":\"%"PFMT64x"\","
+						"\"ktime\":\"%"PFMT64x"\","
 						"\"path\":\"%s\"}%s",
-						p->pid, p->status, p->path,
+						p->pid, p->status,
+						p->utime, p->ktime,
+						p->path,
 						iter->n?",":"");
 			}
 			dbg->cb_printf ("]\n");
 		} else {
 			r_list_foreach (list, iter, p) {
-				dbg->cb_printf (" %c %d %c %s\n",
+				dbg->cb_printf (" %c %d %c %"PFMT64x" %"PFMT64x" %s\n",
 						dbg->tid == p->pid ? '*' : '-',
-						p->pid, p->status, p->path);
+						p->pid, p->status, p->utime, p->ktime, p->path);
 			}
 		}
 		r_list_free (list);
