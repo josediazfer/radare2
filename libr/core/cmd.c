@@ -1218,7 +1218,7 @@ static int cmd_thread(void *data, const char *input) {
 			} else {
 				RCoreTask *task = r_core_task_add (core, r_core_task_new (
 							core, input + 1, (RCoreTaskCallback)task_finished, core));
-				RThread *th = r_th_new (taskbgrun, task, 0);
+				RThread *th = r_th_new (taskbgrun, task, 0, 0);
 				task->msg->th = th;
 			}
 			//r_core_cmd0 (core, task->msg->text);

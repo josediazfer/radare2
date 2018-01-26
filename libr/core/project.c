@@ -353,7 +353,7 @@ R_API RThread *r_core_project_load_bg(RCore *core, const char *prjName, const ch
 	ps->core = core;
 	ps->prjName = strdup (prjName);
 	ps->rcPath = strdup (rcPath);
-	RThread *th = r_th_new (projectLoadBackground, ps, false);
+	RThread *th = r_th_new (projectLoadBackground, ps, 0, 0);
 	r_th_start (th, true);
 	return th;
 }

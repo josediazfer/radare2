@@ -98,6 +98,7 @@ R_API int r_debug_thread_list(RDebug *dbg, int pid) {
 						p->pid, p->status, p->utime, p->ktime, p->path);
 			}
 		}
+		dbg->cb_flush();
 		r_list_free (list);
 	}
 	return false;

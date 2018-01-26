@@ -1813,6 +1813,7 @@ R_API bool r_core_init(RCore *core) {
 //	core->dbg->anal->reg = core->anal->reg; // XXX: dupped instance.. can cause lost pointerz
 	core->io->cb_printf = r_cons_printf;
 	core->dbg->cb_printf = r_cons_printf;
+	core->dbg->cb_flush = r_cons_flush;
 	core->dbg->bp->cb_printf = r_cons_printf;
 	r_debug_io_bind (core->dbg, core->io);
 

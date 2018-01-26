@@ -2462,6 +2462,8 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB ("dbg.bpsize", 1, &cb_dbgbpsize, "Size of software breakpoints");
 #endif
 	SETPREF ("dbg.bpsysign", "false", "Ignore system breakpoints");
+	SETPREF ("dbg.profiling", "false", "Show profiling info while a process debugged is running");
+	SETPREF ("dbg.profiling.refresh", "2000", "Refresh profiling info each X milliseconds");
 	SETICB ("dbg.btdepth", 128, &cb_dbgbtdepth, "Depth of backtrace");
 	SETCB ("dbg.trace", "false", &cb_trace, "Trace program execution (see asm.trace)");
 	SETICB ("dbg.trace.tag", 0, &cb_tracetag, "Trace tag");

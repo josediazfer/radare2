@@ -61,7 +61,7 @@ static void lang_pipe_run_win(RLang *lang, HANDLE h_proc, HANDLE h_pipe, bool *e
 	BOOL bSuccess = FALSE;
 	int i, res = 0;
 	DWORD dwRead, dwWritten;
-	r_cons_break_push (NULL, NULL);
+
 	res = ConnectNamedPipe (h_pipe, NULL);
 	if (!res) {
 		if (!*exit_pipe_run) {
@@ -69,6 +69,7 @@ static void lang_pipe_run_win(RLang *lang, HANDLE h_proc, HANDLE h_pipe, bool *e
 		}
 		return;
 	}
+	r_cons_break_push (NULL, NULL);
 	do {
 		if (r_cons_is_breaked ()) {
 			break;
@@ -86,21 +87,15 @@ static void lang_pipe_run_win(RLang *lang, HANDLE h_proc, HANDLE h_pipe, bool *e
 					memset (buf, 0, PIPE_BUF_SIZE);
 					dwWritten = 0;
 					int writelen=res_len - i;
-					int rc = WriteFile (h_pipe, res + i, writelen>PIPE_BUF_SIZE?PIPE_BUF_SIZE:writelen, &dwWritten, 0);
+					int rc = WriteFile (h_pipe, res + i, writelen > PIPE_BUF_SIZE?PIPE_BUF_SIZE:writelen, &dwWritten, 0);
 					if (*exit_pipe_run) {
 						free (res);
 						break;
 					}
 					if (!rc) {
-						eprintf ("WriteFile: failed 0x%x\n", (int)GetLastError());
-					}
-					if (dwWritten > 0) {
+						r_sys_perror ("lang_pipe_run_win/WriteFile");
+					} else if (dwWritten > 0) {
 						i += dwWritten - 1;
-					} else {
-						/* send null termination // chop */
-						eprintf ("w32-lang-pipe: 0x%x\n", (ut32)GetLastError ());
-						//WriteFile (h_pipe, "", 1, &dwWritten, NULL);
-						//break;
 					}
 				}
 				free (res);

@@ -204,6 +204,7 @@ extern "C" {
 #endif
 
 typedef void (*PrintfCallback)(const char *str, ...);
+typedef void (*FlushCallback)();
 
 // TODO NOT USED. DEPREACATE
 #if R_RTDEBUG

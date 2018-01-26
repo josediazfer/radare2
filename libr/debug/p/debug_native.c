@@ -1630,6 +1630,10 @@ static int r_debug_native_select (RDebug *dbg, int pid, int tid) {
 #endif
 }
 
+static bool r_debug_native_profiling (RDebug *dbg) {
+	return false;
+}
+
 struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
 	.open = r_debug_desc_native_open,
 	.list = r_debug_desc_native_list,
@@ -1700,6 +1704,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.maps_print = r_debug_native_maps_print,
 	.modules_get = r_debug_native_modules_get,
 	.map_protect = r_debug_native_map_protect,
+	.profiling = r_debug_native_profiling,
 	.breakpoint = r_debug_native_bp,
 	.drx = r_debug_native_drx,
 	.gcore = r_debug_gcore,

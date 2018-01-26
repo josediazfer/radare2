@@ -31,6 +31,34 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 	free (rdi);
 }
 
+static int r_debug_profiler_thread(RThread *th) {
+	RDebug *dbg = th->user;
+
+	if (!dbg->h || !dbg->h->profiling || !dbg->h->profiling(dbg)) {
+		dbg->cb_printf ("### threads ###\n");
+		r_debug_thread_list (dbg, dbg->pid);
+	}
+	return !th->breaked;
+}
+
+static void r_debug_start_profiler(RDebug *dbg) {
+	int refresh;
+
+	if (!dbg->corebind.core || !dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling")) {
+		return;
+	}
+	refresh = dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling.refresh");
+	dbg->th_profiler = r_th_new (r_debug_profiler_thread, dbg, 0, refresh);
+	r_th_start (dbg->th_profiler, true);
+}
+
+static void r_debug_stop_profiler(RDebug *dbg) {
+	if (dbg->th_profiler) {
+		r_th_free (dbg->th_profiler);
+		dbg->th_profiler = NULL;
+	}
+}
+
 /*
  * Recoiling after a breakpoint has two stages:
  * 1. remove the breakpoint and fix the program counter.
@@ -405,6 +433,7 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->num = r_num_new (r_debug_num_callback, r_debug_str_callback, dbg);
 	dbg->h = NULL;
 	dbg->threads = NULL;
+	dbg->th_profiler = NULL;
 	dbg->hitinfo = 1;
 	/* TODO: needs a redesign? */
 	dbg->maps = r_debug_map_list_new ();
@@ -1110,7 +1139,9 @@ repeat:
 		ret = dbg->h->cont (dbg, dbg->pid, dbg->tid, sig);
 		//XXX(jjd): why? //dbg->reason.signum = 0;
 
+		r_debug_start_profiler (dbg);
 		reason = r_debug_wait (dbg, &bp);
+		r_debug_stop_profiler (dbg);
 		if (dbg->corebind.core) {
 			RCore *core = (RCore *)dbg->corebind.core;
 			RNum *num = core->num;

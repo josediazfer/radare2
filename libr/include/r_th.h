@@ -42,6 +42,10 @@ typedef struct r_th_t {
 	int breaked;   // thread aims to be interruped
 	int delay;     // delay the startup of the thread N seconds
 	int ready;     // thread is properly setup
+	int interval;
+#if __WINDOWS__ && !defined(__CYGWIN__)
+	HANDLE wait_event;
+#endif
 } RThread;
 
 typedef struct r_th_pool_t {
@@ -50,7 +54,7 @@ typedef struct r_th_pool_t {
 } RThreadPool;
 
 #ifdef R_API
-R_API RThread *r_th_new(R_TH_FUNCTION(fun), void *user, int delay);
+R_API RThread *r_th_new(R_TH_FUNCTION(fun), void *user, int delay, int interval);
 R_API bool r_th_start(RThread *th, int enable);
 R_API int r_th_wait(RThread *th);
 R_API int r_th_wait_async(RThread *th);

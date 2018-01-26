@@ -304,6 +304,7 @@ typedef struct r_debug_t {
 
 	/* io */
 	PrintfCallback cb_printf;
+	FlushCallback cb_flush;
 	RIOBind iob;
 
 	struct r_debug_plugin_t *h;
@@ -320,6 +321,7 @@ typedef struct r_debug_t {
 	int _mode;
 	RNum *num;
 	REgg *egg;
+	RThread *th_profiler;
 	void *native_ptr; /* address to internal struct used by native code */
 } RDebug;
 
@@ -395,6 +397,7 @@ typedef struct r_debug_plugin_t {
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
 	bool (*maps_print)(RDebug *dbg, ut64 addr, int rad);
+	bool (*profiling)(RDebug *dbg);
 	RList *(*modules_get)(RDebug *dbg);
 	RDebugMap* (*map_alloc)(RDebug *dbg, ut64 addr, int size);
 	int (*map_dealloc)(RDebug *dbg, ut64 addr, int size);

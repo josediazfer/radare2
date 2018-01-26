@@ -878,7 +878,7 @@ R_API int r_core_rtr_http(RCore *core, int launch, const char *path) {
 			ht->core = core;
 			ht->launch = launch;
 			ht->path = strdup (tpath);
-			httpthread = r_th_new (r_core_rtr_http_thread, ht, false);
+			httpthread = r_th_new (r_core_rtr_http_thread, ht, 0, 0);
 			r_th_start (httpthread, true);
 			eprintf ("Background http server started.\n");
 		}
@@ -1680,7 +1680,7 @@ R_API void r_core_rtr_cmd(RCore *core, const char *input) {
 			eprintf ("This is experimental and probably buggy. Use at your own risk\n");
 		} else {
 			RapThread rt = { core, input + 1 };
-			rapthread = r_th_new (r_core_rtr_rap_thread, &rt, false);
+			rapthread = r_th_new (r_core_rtr_rap_thread, &rt, 0, 0);
 			r_th_start (rapthread, true);
 			eprintf ("Background rap server started.\n");
 		}

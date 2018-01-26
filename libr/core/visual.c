@@ -78,7 +78,7 @@ static void visual_repeat(RCore *core) {
 		r_cons_any_key (NULL);
 #endif
 	} else {
-		RThread *th = r_th_new (visual_repeat_thread_anykey, core, 0);
+		RThread *th = r_th_new (visual_repeat_thread_anykey, core, 0, 0);
 		if (!th) {
 			return;
 		}

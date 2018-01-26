@@ -2,6 +2,40 @@
 
 #include <r_th.h>
 
+static bool r_th_wait_int(RThread *th)
+{
+	if (th->interval <= 0) {
+		return true;
+	}
+#if __WINDOWS__ && !defined(__CYGWIN__)
+	return WaitForSingleObject (th->wait_event, th->interval) == WAIT_TIMEOUT;
+#elif __UNIX__
+	struct timespec time_ = {0, th->interval * 1000000};
+
+	return nanosleep (&time_, &time_) != -1 || errno != EINTR;
+#endif
+	return true;
+}
+
+static void r_th_wait_init(RThread *th) {
+	if (th->interval <= 0) {
+		return;
+	}
+#if __WINDOWS__ && !defined(__CYGWIN__)
+	th->wait_event = CreateEvent (NULL, FALSE, FALSE, NULL);
+#endif
+}
+
+static void r_th_int(RThread *th) {
+	th->breaked = true;
+#if __WINDOWS__ && !defined(__CYGWIN__)
+	if (th->wait_event) {
+		PulseEvent (th->wait_event);
+	}
+#elif HAVE_PTHREAD
+	pthread_kill (th->tid, SIGINT);
+#endif
+}
 #if __WINDOWS__ && !defined(__CYGWIN__)
 static DWORD WINAPI _r_th_launcher(void *_th) {
 #else
@@ -21,6 +55,7 @@ static void *_r_th_launcher(void *_th) {
 		r_th_lock_wait (th->lock);
 	}
 #endif
+	r_th_wait_init (th);
 	do {
 		// CID 1378280:  API usage errors  (LOCK)
 		// "r_th_lock_leave" unlocks "th->lock->lock" while it is unlocked.
@@ -29,7 +64,7 @@ static void *_r_th_launcher(void *_th) {
 		ret = th->fun (th);
 		th->running = false;
 		r_th_lock_enter (th->lock);
-	} while (ret);
+	} while (ret && r_th_wait_int (th));
 #if HAVE_PTHREAD
 	pthread_exit (&ret);
 #endif
@@ -43,7 +78,7 @@ R_API int r_th_push_task(struct r_th_t *th, void *user) {
 	return ret;
 }
 
-R_API RThread *r_th_new(R_TH_FUNCTION(fun), void *user, int delay) {
+R_API RThread *r_th_new(R_TH_FUNCTION(fun), void *user, int delay, int interval) {
 	RThread *th = R_NEW0 (RThread);
 	if (th) {
 		th->lock = r_th_lock_new (false);
@@ -53,6 +88,7 @@ R_API RThread *r_th_new(R_TH_FUNCTION(fun), void *user, int delay) {
 		th->delay = delay;
 		th->breaked = false;
 		th->ready = false;
+		th->interval = interval;
 #if HAVE_PTHREAD
 		pthread_create (&th->tid, NULL, _r_th_launcher, th);
 #elif __WINDOWS__ && !defined(__CYGWIN__)
@@ -62,13 +98,9 @@ R_API RThread *r_th_new(R_TH_FUNCTION(fun), void *user, int delay) {
 	return th;
 }
 
-R_API void r_th_break(RThread *th) {
-	th->breaked = true;
-}
 
 R_API int r_th_kill(RThread *th, int force) {
-	th->breaked = true;
-	r_th_break(th);
+	r_th_int(th);
 	r_th_wait(th);
 #if HAVE_PTHREAD
 #ifdef __ANDROID__
