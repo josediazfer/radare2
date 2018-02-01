@@ -615,7 +615,7 @@ static RList *r_debug_native_pids (RDebug *dbg, int pid) {
 
 static RList *r_debug_native_threads (RDebug *dbg, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_thread_list (pid);
+	return w32_thread_list (dbg, pid);
 #else
 	RList *list = r_list_new ();
 	if (!list) {
@@ -1631,7 +1631,11 @@ static int r_debug_native_select (RDebug *dbg, int pid, int tid) {
 }
 
 static bool r_debug_native_profiling (RDebug *dbg) {
+#if __WINDOWS__ && !__CYGWIN__
+	return w32_dbg_profiling (dbg);
+#else
 	return false;
+#endif
 }
 
 struct r_debug_desc_plugin_t r_debug_desc_plugin_native = {
