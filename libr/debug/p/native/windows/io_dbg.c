@@ -24,13 +24,14 @@ static int debug_os_read_at(RIOW32Dbg *dbg_io, void *buf, int len, ut64 addr) {
 	/* If the read failed with ERROR_PARTIAL_COPY then we will to try read to end of map */
 	if (!ReadProcessMemory (dbg_io->h_proc, (PVOID)(SIZE_T)addr, buf, len, (SIZE_T *)&ret_len)) {
 		if (GetLastError() == ERROR_PARTIAL_COPY && ret_len <= 0) {
-			RList *maps_list;
+			RList *maps_list = NULL;
 			RDebugMap *map;
 			RListIter *iter;
 			int map_len = len;
 
 			ret_len = -1;
 			/* TODO: RInterval */
+			/*
 			maps_list = w32_dbg_maps (dbg_io->pid);
 			r_list_foreach (maps_list, iter, map) {
 				if (addr >= map->addr && addr < map->addr_end) {
@@ -38,12 +39,15 @@ static int debug_os_read_at(RIOW32Dbg *dbg_io, void *buf, int len, ut64 addr) {
 					break;
 				}
 			}
+			*/
+			map_len = (int)w32_dbg_map_addr_len (dbg_io->pid, addr);
 			if (map_len != len && map_len > 0 &&
 					ReadProcessMemory (dbg_io->h_proc, (PVOID)(SIZE_T)addr,
 						buf, map_len, (SIZE_T *)&map_len)) {
+				eprintf ("len len:%d\n", len);
 				ret_len = map_len;
 			}
-			r_list_free (maps_list);
+			//r_list_free (maps_list);
 		}
 	}
 	return ret_len;

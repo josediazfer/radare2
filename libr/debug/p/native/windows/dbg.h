@@ -81,6 +81,7 @@ typedef struct {
 	FILETIME ctime;
 	DWORD tstamp;
 	RList *th_list;
+	float cpu_usage;
 } RDebugW32ProcProfile;
 
 typedef struct {

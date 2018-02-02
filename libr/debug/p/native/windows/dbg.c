@@ -43,6 +43,7 @@ static void load_mod_pdb(RDebug *dbg, char *path);
 static void load_mod_info(RDebug *dbg, RDebugW32Proc *proc, char *name, char *path, ut64 base_addr);
 static void proc_profile_free(RDebugW32ProcProfile *proc);
 static int th_profile_list_sort(const void *_a, const void *_b);
+static RDebugW32ProcProfile* update_ths_profile_info(RDebugW32 *dbg_w32, RDebugW32ProcProfile *proc);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
 
@@ -1063,16 +1064,16 @@ static int th_profile_list_sort(const void *_a, const void *_b) {
 	RDebugW32ThreadProfile *th1 = (RDebugW32ThreadProfile *)_a;
        	RDebugW32ThreadProfile *th2 = (RDebugW32ThreadProfile *)_b;
 
-	if (th1->cpu_usage > th2->cpu_usage) {
+	if (th1->cpu_usage < th2->cpu_usage) {
 		return 1;
 	}
-	if (th1->cpu_usage < th2->cpu_usage) {
+	if (th1->cpu_usage > th2->cpu_usage) {
 		return -1;
 	}
 	return 0;
 }
 
-static int cmpth (const void *_a, const void *_b) {
+static int th_list_sort (const void *_a, const void *_b) {
 	const RDebugPid *a = _a, *b = _b;
 	if (a->status == 'r') {
 		return -1;
@@ -1144,7 +1145,6 @@ static ut64 update_th_profile_info(RDebugW32 *dbg_w32, RDebugW32ThreadProfile *t
 				th->ctime = ctime;
 				th->cycles_delta = (ut64)cycles;
 			}
-			th->cpu_usage = ((double)th->cycles_delta / (double)dbg_w32->profile.total_cycles) * 100;
 			th->cycles_value = (ut64)cycles;
 			cycles = th->cycles_delta;
 		}
@@ -1156,11 +1156,10 @@ err_update_th_profile_info:
 	return cycles;
 }
 
-static RDebugW32ProcProfile* update_procs_profile_info(RDebug *dbg) {
+static RDebugW32ProcProfile* update_procs_profile_info(RDebugW32 *dbg_w32, int pid) {
 	HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
 	PROCESSENTRY32 proc32;
 	HANDLE h_proc = NULL;
-	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	RList *proc_list = dbg_w32->profile.proc_list;
 	RDebugW32ProcProfile *proc, *ret_proc = NULL;
 	RListIter *iter, *iter2;
@@ -1206,12 +1205,29 @@ static RDebugW32ProcProfile* update_procs_profile_info(RDebug *dbg) {
 		}
 		proc->tstamp = tstamp;
 		total_cycles += update_proc_profile_info (proc);
+		if (proc->pid == pid) {
+			update_ths_profile_info (dbg_w32, proc);
+		}
 	} while (Process32Next (h_proc_snap, &proc32));
 	/* remove dead process */
 	r_list_foreach_safe (proc_list, iter, iter2, proc) {
 		if (proc->tstamp != tstamp) {
 			r_list_delete (proc_list, iter);
-		} else if (proc->pid == dbg->pid) {
+		} else if (proc->pid == pid) {
+			RList *th_list = proc->th_list;
+			RDebugW32ThreadProfile *th;
+
+			/* calculate cpu usage for process and threads */
+			proc->cpu_usage = ((double)proc->cycles_delta / (double)dbg_w32->profile.total_cycles) * 100;
+			if (proc->cpu_usage >= 100.0f) {
+				proc->cpu_usage = 0.0f;
+			}
+			r_list_foreach (th_list, iter, th) {
+				th->cpu_usage = ((double)th->cycles_delta / (double)dbg_w32->profile.total_cycles) * 100;
+				if (th->cpu_usage >= 100.0f) {
+					th->cpu_usage = 0.0f;
+				}
+			}
 			ret_proc = proc;
 		}
 	}
@@ -1268,7 +1284,6 @@ static RDebugW32ProcProfile* update_ths_profile_info(RDebugW32 *dbg_w32, RDebugW
 		proc->th_list = r_list_newf ((RListFree)free);
 	}
 	th_list = proc->th_list;
-	
 	for (i = 0, th_proc_it = th_proc; i < th_proc_n; i++, th_proc_it++) {
 		int tid = (int)(DWORD_PTR)th_proc_it->ClientId.UniqueThread;
 		bool th_exists = false;
@@ -1317,15 +1332,16 @@ bool w32_dbg_profiling(RDebug *dbg) {
 		return false;
 	}
 	update_cpu_profile_info(dbg);
-	proc = update_procs_profile_info (dbg);
-	if (proc) {
+	proc = update_procs_profile_info (dbg_w32, dbg->pid);
+	if (proc && proc->cpu_usage > 0.0f) {
 		RListIter *iter;
 		RDebugW32ThreadProfile *th;
-		RList *th_list = proc->th_list;
+		RList *th_list;
 
-		update_ths_profile_info (dbg_w32, proc);
+		th_list = proc->th_list;
+		th_list->sorted = false;
 		r_list_sort (th_list, th_profile_list_sort);
-		dbg->cb_printf ("\npid (%d)\t%.2f%%\n", proc->pid, ((double)proc->cycles_delta / (double)dbg_w32->profile.total_cycles) * 100);
+		dbg->cb_printf ("\npid (%d)\t%.2f%%\n", proc->pid, proc->cpu_usage);
 		r_list_foreach (th_list, iter, th) {
 			if (th->cpu_usage >= 0.01f) {
 				dbg->cb_printf (" tid (%d)\t%.2f%%\n", th->tid, th->cpu_usage);
@@ -1434,7 +1450,7 @@ RList *w32_thread_list(RDebug *dbg, int pid) {
 		h_th = NULL;
 		r_list_append (list, th);
 	} while (Thread32Next (h_proc_snap, &te32));
-	r_list_sort (list, cmpth);
+	r_list_sort (list, th_list_sort);
 	success = true;
 err_w32_thread_list:
 	if (!success) {

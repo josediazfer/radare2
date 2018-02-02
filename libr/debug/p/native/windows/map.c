@@ -81,7 +81,9 @@ static RDebugMap *add_map(RList *list, const char *name, ut64 addr, ut64 len, ME
 			map->native_ptr = map_w32;
 			map->native_free = w32_map_free;
 		}
-		r_list_append (list, map);
+		if (list) {
+			r_list_append (list, map);
+		}
 	}
 	return map;
 }
@@ -271,6 +273,32 @@ static void proc_mem_map(HANDLE h_proc, RList *map_list, MEMORY_BASIC_INFORMATIO
 	} else {
 		add_map_reg (map_list, "", mbi);
 	}
+}
+
+ut64 w32_dbg_map_addr_len(int pid, ut64 addr) {
+	HANDLE h_proc = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+	MEMORY_BASIC_INFORMATION mbi;
+	ut64 len;
+	ut64 map_len = 0;
+
+	if (!h_proc) {
+		r_sys_perror ("w32_dbg_map_addr_get/OpenProcess");
+		goto err_w32_dbg_map_addr_get;
+	}
+	if (VirtualQueryEx (h_proc, (PVOID)(SIZE_T)addr, &mbi, sizeof (mbi)) == 0) {
+		goto err_w32_dbg_map_addr_get;
+	}
+	len = addr - (ut64)mbi.BaseAddress;
+	if (len >= (ut64)mbi.RegionSize) {
+		map_len = 0;
+	} else {
+		map_len = (ut64)mbi.RegionSize - len;
+	}
+err_w32_dbg_map_addr_get:
+	if (h_proc) {
+		CloseHandle (h_proc);
+	}
+	return map_len;
 }
 
 RList *w32_dbg_maps(int pid) {
