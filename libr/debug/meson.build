@@ -41,6 +41,7 @@ if host_os != 'windows'
  files += [
   'p/native/procfs.c',
   'p/native/windows/dbg.c',
+  'p/native/windows/profile.c',
   'p/native/windows/io_dbg.c',
   'p/native/windows/map.c'
  ]

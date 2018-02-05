@@ -11,6 +11,7 @@ endif
 
 ifeq (${OSTYPE},windows)
 NATIVE_OBJS=native/windows/dbg.o
+NATIVE_OBJS+=native/windows/profile.o
 NATIVE_OBJS+=native/windows/io_dbg.o
 NATIVE_OBJS+=native/windows/map.o
 endif

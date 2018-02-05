@@ -66,41 +66,11 @@ typedef struct {
 } RDebugW32Proc;
 
 typedef struct {
-	int tid;
-	ut64 cycles_delta;
-	ut64 cycles_value;
-	FILETIME ctime;
-	DWORD tstamp;
-	float cpu_usage;
-} RDebugW32ThreadProfile;
-
-typedef struct {
-	int pid;
-	ut64 cycles_delta;
-	ut64 cycles_value;
-	FILETIME ctime;
-	DWORD tstamp;
-	RList *th_list;
-	float cpu_usage;
-} RDebugW32ProcProfile;
-
-typedef struct {
-	ut64 idle_cycles_delta;
-	ut64 idle_cycles_value;
-	ut64 dpc_cycles_delta;
-	ut64 dpc_cycles_value;
-	ut64 intr_cycles_delta;
-	ut64 intr_cycles_value;
-	RList *proc_list;
-	ut64 total_cycles;
-} RDebugW32Profile;
-
-typedef struct {
 	RList *proc_list;
 	RFlag *core_flags;
 	int n_cpus;
 	bool init;
-	RDebugW32Profile profile;
+	void *profile;
 } RDebugW32;
 
 typedef struct _SYSTEM_HANDLE
@@ -298,6 +268,5 @@ ut64 w32_get_proc_baddr(int pid);
 RDebugW32Proc *find_dbg_proc(RDebug *dbg, int pid);
 char *w32_reg_profile(RDebug *dbg);
 int w32_dbg_select(RDebug *dbg, int pid, int tid);
-bool w32_dbg_profiling(RDebug *dbg);
 
 #endif

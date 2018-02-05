@@ -33,6 +33,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 #if __WINDOWS__
 #include <windows.h>
 #include "native/windows/dbg.h"
+#include "native/windows/profile.h"
 #include "native/windows/map.h"
 #include "native/windows/io_dbg.h"
 #define R_DEBUG_REG_T CONTEXT
@@ -1618,6 +1619,7 @@ static bool r_debug_gcore (RDebug *dbg, RBuffer *dest) {
 
 static void r_debug_native_free (RDebug *dbg) {
 #if __WINDOWS__ && !__CYGWIN__
+	w32_dbg_profiling_free (dbg);
 	w32_dbg_free (dbg);
 #endif
 }
