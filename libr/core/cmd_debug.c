@@ -21,6 +21,7 @@ static const char *help_msg_d[] = {
 	"db", "[?]", "Breakpoints commands",
 	"dbt", "[?]", "Display backtrace based on dbg.btdepth and dbg.btalgo",
 	"dc", "[?]", "Continue execution",
+	"dC", "[?]", "Manager debugger conditions",
 	"dd", "[?]", "File descriptors (!fd in r1)",
 	"de", "[-sc] [rwx] [rm] [e]", "Debug with ESIL (see de?)",
 	"dg", " <file>", "Generate a core-file (WIP)",
@@ -97,6 +98,13 @@ static const char *help_msg_dbt[] = {
 	"dbte", " <addr>", "Enable Breakpoint Trace",
 	"dbtd", " <addr>", "Disable Breakpoint Trace",
 	"dbts", " <addr>", "Swap Breakpoint Trace",
+	NULL
+};
+static const char *help_msg_dC[] = {
+	"Usage: dC", "", " # Manager debugger conditions commands",
+	"dC", " <cond_name> <cond>", "Display or add condition(s)",
+	"dC-", " cond_name", "Delete condition with name 'cond_name'",
+	"dCb", " bp_addr cond_name", "Associate breakpoint with condition 'cond_name'",
 	NULL
 };
 
@@ -3078,8 +3086,8 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 					addr = r_num_math (core->num, inp);
 					bpi = r_bp_get_at (core->dbg->bp, addr);
 					if (bpi) {
-						free (bpi->cond);
-						bpi->cond = strdup (arg);
+						free (bpi->cond_cmd);
+						bpi->cond_cmd = strdup (arg);
 					} else {
 						eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
 					}
@@ -3170,8 +3178,8 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						addr = r_num_math (core->num, inp);
 						bpi = r_bp_get_at (core->dbg->bp, addr);
 						if (bpi) {
-							free (bpi->cond);
-							bpi->cond = strdup (arg);
+							free (bpi->cond_cmd);
+							bpi->cond_cmd = strdup (arg);
 						} else {
 							eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
 						}
@@ -3836,6 +3844,96 @@ static bool cmd_dcu (RCore *core, const char *input) {
 	return true;
 }
 
+static void cmd_debug_cond (RCore *core, const char *input) {
+	char *ptr;
+
+	switch (*input) {
+	case ' ': // "dC"
+		{
+		char *input_ = strdup (input);
+		char *name = input_ + 1;
+		if (*name) {
+			char *cond = strchr (name, ' ');
+			if (cond) {
+				*cond = '\0';
+				cond++;
+				if (strlen (name) > 0 && strlen (cond) > 0) {
+					if (!r_debug_cond_find (core->dbg, name)) {
+						char *err = NULL;
+						char *tmp = NULL;
+
+						if (!strcmp (cond, "-")) {
+							char *tmp;
+							tmp = r_core_editor (core, NULL, "");
+							if (tmp) {
+								cond = tmp;
+							} else {
+								cond = NULL;
+							}
+						}
+						if (cond && !r_debug_cond_add (core->dbg, name, cond, &err)) {
+							eprintf ("can not add condition %s\n", err);
+							free (err);
+						}
+						free (tmp);
+					} else {
+						eprintf ("condition with name '%s' already exists\n", name);
+					}
+				}
+			} else {
+				r_debug_cond_print (core->dbg, name);
+			}
+		}
+		free (input_);
+		}
+		break;
+	case '-': // "dC-"
+		{
+		char *name = input + 1;
+		if (*name == ' ') {
+			name++;
+		}
+		r_debug_cond_del (core->dbg, name);
+		}
+		break;
+	case 'b': // "dCb"
+		if (input[1] == ' ') {
+			char *inp = strdup (input + 2);
+			if (inp) {
+				char *arg = strchr (inp, ' ');
+				if (arg) {
+					*arg++ = 0;
+					if (!r_debug_cond_find (core->dbg, arg)) {
+						eprintf ("can not find condition '%s'\n", arg);
+						break;
+					}
+					ut64 addr = r_num_math (core->num, inp);
+					RBreakpointItem *bpi = r_bp_get_at (core->dbg->bp, addr);
+					if (bpi) {
+						free (bpi->cond);
+						bpi->cond = strdup (arg);
+					} else {
+						eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
+					}
+				} else {
+					eprintf ("1 Missing argument\n");
+				}
+				free (inp);
+			} else {
+				eprintf ("Cannot strdup. Your heap is fucked up\n");
+			}
+		} else {
+			eprintf ("Use: dCb [addr] [condition]\n");
+		}
+		break;
+	case '\0':
+		r_debug_cond_print (core->dbg, NULL);
+		break;
+	default:
+		r_core_cmd_help (core, help_msg_dC);
+	}
+}
+
 static int cmd_debug_continue (RCore *core, const char *input) {
 	int pid, old_pid, signum;
 	char *ptr;
@@ -4457,6 +4555,9 @@ static int cmd_debug(void *data, const char *input) {
 		(void)cmd_debug_continue (core, input);
 		follow = r_config_get_i (core->config, "dbg.follow");
 		r_cons_break_pop ();
+		break;
+	case 'C': // "dC"
+		cmd_debug_cond (core, input + 1);
 		break;
 	case 'm': // "dm"
 		cmd_debug_map (core, input + 1);

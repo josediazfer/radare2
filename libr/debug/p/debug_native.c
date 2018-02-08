@@ -128,25 +128,9 @@ static char *r_debug_native_reg_profile (RDebug *dbg) {
 #include "native/reg.c" // x86 specific
 
 #endif
-#if __WINDOWS__ && !__CYGWIN__
-static int windows_step (RDebug *dbg) {
-	/* set TRAP flag */
-#if _MSC_VER
-	CONTEXT regs;
-#else
-	CONTEXT regs __attribute__ ((aligned (16)));
-#endif
-	r_debug_native_reg_read (dbg, R_REG_TYPE_GPR, (ut8 *)&regs, sizeof (regs));
-	regs.EFlags |= 0x100;
-	r_debug_native_reg_write (dbg, R_REG_TYPE_GPR, (ut8 *)&regs, sizeof (regs));
-	r_debug_native_continue (dbg, dbg->pid, dbg->tid, dbg->reason.signum);
-	r_debug_handle_signals (dbg);
-	return true;
-}
-#endif
 static int r_debug_native_step (RDebug *dbg) {
 #if __WINDOWS__ && !__CYGWIN__
-	return windows_step (dbg);
+	return w32_dbg_step (dbg);
 #elif __APPLE__
 	return xnu_step (dbg);
 #elif __BSD__

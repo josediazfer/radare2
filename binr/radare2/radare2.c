@@ -1112,7 +1112,7 @@ int main(int argc, char **argv, char **envp) {
 					(debug || r.io->va) ? "" : "p", iod->name);
 			/* TODO: only load data if no project is used */
 			lock = r_th_lock_new (false);
-			rabin_th = r_th_new (&rabin_delegate, lock, 0);
+			rabin_th = r_th_new (&rabin_delegate, lock, 0, 0);
 			// rabin_delegate (NULL);
 		} // else eprintf ("Metadata loaded from 'prj.name'\n");
 #endif

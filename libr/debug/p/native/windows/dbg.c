@@ -763,6 +763,45 @@ static bool tracelib(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, char *
 	return !mode || !needle || tmp ;
 }
 
+int w32_dbg_step (RDebug *dbg) {
+	/* set TRAP flag */
+#if _MSC_VER
+	CONTEXT ctx;
+#else
+	CONTEXT ctx __attribute__ ((aligned (16)));
+#endif
+#if __MINGW64__ || _WIN64
+#ifdef _MSC_VER
+	WOW64_CONTEXT wow64_ctx = { 0 };
+#else
+	WOW64_CONTEXT wow64_ctx __attribute__ ((aligned (16))) = { 0 };
+#endif
+#endif
+	ut8 *ctx_;
+	int ctx_sz;
+
+	RDebugW32Proc *proc = proc_dbg_cur (dbg);
+	if (!proc) {
+		return false;
+	}
+	if (proc->wow64) {
+		ctx_ = (ut8 *)&wow64_ctx;
+		ctx_sz = sizeof (wow64_ctx);
+	} else {
+		ctx_ = (ut8 *)&ctx;
+		ctx_sz = sizeof (ctx);
+	}
+	w32_reg_read (dbg, R_REG_TYPE_GPR, ctx_, ctx_sz);
+	if (proc->wow64) {
+		wow64_ctx.EFlags |= 0x100;
+	} else {
+		ctx.EFlags |= 0x100;
+	}
+	w32_reg_write (dbg, R_REG_TYPE_GPR, ctx_, ctx_sz);
+	w32_dbg_continue (dbg, dbg->pid, -1);
+	return true;
+}
+
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	DEBUG_EVENT de;
 	int tid, pid;

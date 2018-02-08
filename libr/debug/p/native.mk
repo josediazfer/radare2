@@ -3,6 +3,9 @@ OBJ_PTRACE=debug_native.o
 STATIC_OBJ+=${OBJ_PTRACE}
 TARGET_PTRACE=debug_native.${EXT_SO}
 
+CFLAGS+=-I$(SHLR)/lua/
+LIB_PATH=$(SHRL)/lua/
+
 ALL_TARGETS+=${TARGET_PTRACE}
 
 ifeq (${OSTYPE},darwin)
@@ -24,6 +27,7 @@ ifeq ($(OSTYPE),$(filter $(OSTYPE),gnulinux))
 COREDUMP_OBJS=native/linux/linux_coredump.o
 endif
 
+LINK+=$(STOP)/lua/liblua.a
 ${TARGET_PTRACE}: ${OBJ_PTRACE}
 	${CC} $(call libname,debug_native) ${CFLAGS} \
 		${LDFLAGS_LINKPATH}.. -L.. -lr_debug \

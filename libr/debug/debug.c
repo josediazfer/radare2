@@ -3,6 +3,9 @@
 #include <r_debug.h>
 #include <r_core.h>
 #include <signal.h>
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
 
 #if __WINDOWS__
 void w32_break_process(void *);
@@ -34,17 +37,15 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 static int r_debug_profiler_thread(RThread *th) {
 	RDebug *dbg = th->user;
 
-	if (!dbg->h || !dbg->h->profiling || !dbg->h->profiling(dbg)) {
-		dbg->cb_printf ("### threads ###\n");
-		r_debug_thread_list (dbg, dbg->pid);
-	}
+	dbg->h->profiling(dbg);
 	return !th->breaked;
 }
 
 static void r_debug_start_profiler(RDebug *dbg) {
 	int refresh;
 
-	if (!dbg->corebind.core || !dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling")) {
+	if (!dbg->h || !dbg->h->profiling || !dbg->corebind.core ||
+		!dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling")) {
 		return;
 	}
 	refresh = dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling.refresh");
@@ -342,6 +343,16 @@ static RDebugExcepState *r_debug_excep_state_new() {
 	return excep;
 }
 
+static void r_debug_cond_free(RDebugCond *cond) {
+	if (cond->data) {
+		lua_State *lua = (lua_State *)cond->data;
+		lua_close (lua);
+	}
+	free (cond->name);
+	free (cond->cond);
+	free (cond);
+}
+
 static void r_debug_excep_state_free(RDebugExcepState *excep) {
 	if (!excep) {
 		return;
@@ -420,6 +431,7 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->excep = r_debug_excep_state_new ();
 	dbg->snaps = r_list_newf ((RListFree)r_debug_snap_free);
 	dbg->sessions = r_list_newf ((RListFree)r_debug_session_free);
+	dbg->conds = r_list_newf ((RListFree)r_debug_cond_free);
 	dbg->pid = -1;
 	dbg->bpsize = 1;
 	dbg->tid = -1;
@@ -474,6 +486,7 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->maps);
 		r_list_free (dbg->maps_user);
 		r_list_free (dbg->threads);
+		r_list_free (dbg->conds);
 		r_num_free (dbg->num);
 		sdb_free (dbg->sgnls);
 		r_tree_free (dbg->tree);
@@ -706,6 +719,207 @@ R_API RDebugReasonType r_debug_stop_reason(RDebug *dbg) {
 	return dbg->reason.type;
 }
 
+static void *lua_alloc(void *ud,
+                             void *ptr,
+                             size_t osize,
+                             size_t nsize) {
+	if (nsize == 0) {
+		free (ptr);
+		return NULL;
+	}
+	return realloc (ptr, nsize);
+}
+
+static void r_debug_lua_vars_fill(RDebug *dbg, lua_State *lua, bool set) {
+	int i;
+
+	/* set registers values */
+	for (i = 0; i < R_REG_TYPE_LAST; i++) {
+		RListIter *iter;
+		RRegItem *item;
+		RList *head = r_reg_get_list (dbg->reg, i);
+		if (!head) {
+			continue;
+		}
+		r_list_foreach (head, iter, item) {
+			if (item->size < 80) {
+				ut64 value = r_reg_get_value (dbg->reg, item);
+				if (set) {
+					lua_pushnumber (lua, (lua_Number)value);
+				} else {
+					lua_pushnil (lua);
+				}
+				lua_setglobal (lua, item->name);
+			}
+		}
+	}
+	/* set pid, tid */
+	if (set) {
+		lua_pushinteger (lua, (lua_Integer)dbg->pid);
+	} else {
+		lua_pushnil (lua);
+	}
+	lua_setglobal (lua, "pid");
+	if (set) {
+		lua_pushinteger (lua, (lua_Integer)dbg->tid);
+	} else {
+		lua_pushnil (lua);
+	}
+	lua_setglobal (lua, "tid");
+}
+
+RDebugCond *r_debug_cond_find(RDebug *dbg, const char *name) {
+	RList *conds = dbg->conds;
+	RListIter *iter;
+	RDebugCond *cond_item;
+
+	r_list_foreach (conds, iter, cond_item) {
+		if (!strcmp (name, cond_item->name)) {
+			return cond_item;
+		}
+	}
+	return NULL;
+}
+
+static int lua_read_mem(lua_State *lua) {
+	lua_Integer addr, len;
+	ut8 *buf;
+	RDebug *dbg;
+
+	lua_getglobal(lua, "_dbg_");
+	dbg = (RDebug *)lua_tointeger (lua, 1);
+	lua_pop (lua, 1);
+	addr = lua_tointeger (lua, 1);
+	lua_pop (lua, 1);
+	len = lua_tointeger (lua, 1);
+	lua_pop (lua, 1);
+	if ((int)len <= 0) {
+		lua_pushnil (lua);
+	} else {
+		int i = 1;
+
+		lua_newtable (lua);
+		for (i = 1; i <= len; i++) {
+			lua_pushnumber (lua, i);
+			lua_pushnumber (lua, i);
+		}
+	}
+	return 0;
+}
+
+static lua_State *r_debug_cond_lua_get(RDebug *dbg, const char *cond, char **ret_err) {
+	lua_State *lua;
+	bool success = false;
+
+	lua = lua_newstate (lua_alloc, NULL);
+	if (!lua) {
+		if (ret_err) {
+			*ret_err = strdup("can not get a lua_State");
+		}
+		goto err_r_debug_cond_lua_get;
+    	}
+	luaL_openlibs (lua);
+	if (luaL_loadstring (lua, cond)) {
+		if (ret_err && lua_isstring (lua, -1)) {
+			*ret_err = strdup (lua_tostring (lua, -1));
+			lua_pop (lua, 1);
+		}
+	} else {
+		success = true;
+	}
+err_r_debug_cond_lua_get:
+	if (!success && lua) {
+		lua_close (lua);
+		lua = NULL;
+	}
+	return lua;
+}
+
+static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
+	bool cond_eval = false;
+	lua_State *lua = (lua_State *)cond_item->data;
+
+	if (!lua) {
+		lua = r_debug_cond_lua_get (dbg, cond_item->cond, NULL);
+		lua_pcall (lua, 0, 0, 0);
+		lua_pushinteger (lua, (lua_Integer)dbg);
+		lua_setglobal (lua, "_dbg_");
+		lua_register (lua, "memr", lua_read_mem);
+		cond_item->data = lua;
+	}
+	if (lua) {
+		r_debug_lua_vars_fill (dbg, lua, true);
+		lua_getglobal (lua, "cond");
+		if (!lua_pcall (lua, 0, 1, 0)) {
+			if (lua_isboolean (lua, 1)) {
+				cond_eval = lua_toboolean (lua, 1);
+				lua_pop (lua, 1);
+			}
+		}
+		lua_settop (lua, 0);
+		r_debug_lua_vars_fill (dbg, lua, false);
+	}
+	return (bool)cond_eval;
+}
+
+bool r_debug_cond_add(RDebug *dbg, const char *name, const char *cond, char **ret_err) {
+	bool success = false;
+	lua_State *lua;
+	char *cond_func = r_str_newf ("function cond()\n%s\nend", cond);
+
+	if (!cond_func) {
+		perror ("r_debug_cond_add/alloc cond_func");
+		goto err_r_debug_cond_add;
+	}
+	lua = r_debug_cond_lua_get (dbg, cond_func, ret_err);
+	if (lua) {
+		RDebugCond *cond_item = R_NEW0 (RDebugCond);
+		if (cond_item) {
+			cond_item->name = strdup (name);
+			cond_item->cond = cond_func;
+			r_list_append (dbg->conds, cond_item);
+			success = true;
+		} else {
+			perror ("alloc RDebugCond");
+		}
+		lua_close (lua);
+	}
+err_r_debug_cond_add:
+	if (!success) {
+		free (cond_func);
+	}
+	return success;
+}
+
+bool r_debug_cond_del(RDebug *dbg, const char *name) {
+	RList *conds = dbg->conds;
+	RListIter *iter;
+	RDebugCond *cond_item;
+
+	r_list_foreach (conds, iter, cond_item) {
+		if (!strcmp (name, cond_item->name)) {
+			r_list_delete (conds, iter);
+			return true;
+		}
+	}
+	return false;
+}
+
+void r_debug_cond_print(RDebug *dbg, const char *name) {
+	RListIter *iter;
+	RDebugCond *cond_item;
+	RList *conds = dbg->conds;
+
+	r_list_foreach (conds, iter, cond_item) {
+		if (!name || !strcmp (cond_item->name, name)) {
+			dbg->cb_printf ("\ncondition '%s':\n%s\n", cond_item->name, cond_item->cond);
+			if (name) {
+				break;
+			}
+		}
+	}
+}
+
 /*
  * wait for an event to happen on the selected pid/tid
  *
@@ -766,15 +980,17 @@ R_API RDebugReasonType r_debug_wait(RDebug *dbg, RBreakpointItem **bp) {
 			if (!r_debug_bp_hit (dbg, pc_ri, pc, &b)) {
 				return R_DEBUG_REASON_ERROR;
 			}
-
 			if (bp) {
 				*bp = b;
 			}
-
 			/* if we hit a tracing breakpoint, we need to continue in
 			 * whatever mode the user desired. */
-			if (dbg->corebind.core && b && b->cond) {
-				reason = R_DEBUG_REASON_COND;
+			if (dbg->corebind.core && b) {
+				if (b->cond_cmd) {
+					reason = R_DEBUG_REASON_COND_CMD;
+				} else if (b->cond) {
+					reason = R_DEBUG_REASON_COND;
+				}
 			}
 			if (b && b->trace) {
 				reason = R_DEBUG_REASON_TRACEPOINT;
@@ -1142,14 +1358,20 @@ repeat:
 		r_debug_start_profiler (dbg);
 		reason = r_debug_wait (dbg, &bp);
 		r_debug_stop_profiler (dbg);
-		if (dbg->corebind.core) {
+		if (dbg->corebind.core && bp) {
 			RCore *core = (RCore *)dbg->corebind.core;
-			RNum *num = core->num;
-			if (reason == R_DEBUG_REASON_COND) {
-				if (bp && bp->cond && dbg->corebind.cmd) {
-					dbg->corebind.cmd (dbg->corebind.core, bp->cond);
+			if (reason == R_DEBUG_REASON_COND_CMD) {
+				if (bp->cond_cmd && dbg->corebind.cmd) {
+					dbg->corebind.cmd (dbg->corebind.core, bp->cond_cmd);
 				}
-				if (num->value) {
+				if (core->num->value) {
+					goto repeat;
+				}
+			} else if (reason == R_DEBUG_REASON_COND) {
+				RDebugCond *cond_item = r_debug_cond_find (dbg, bp->cond);
+				if (!cond_item) {
+					reason = R_DEBUG_REASON_BREAKPOINT;
+				} else if (!r_debug_cond_eval (dbg, cond_item)) {
 					goto repeat;
 				}
 			}

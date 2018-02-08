@@ -89,6 +89,7 @@ typedef enum {
 	R_DEBUG_REASON_SEGFAULT,
 	R_DEBUG_REASON_BREAKPOINT,
 	R_DEBUG_REASON_TRACEPOINT,
+	R_DEBUG_REASON_COND_CMD,
 	R_DEBUG_REASON_COND,
 	R_DEBUG_REASON_READERR,
 	R_DEBUG_REASON_STEP,
@@ -251,6 +252,12 @@ typedef struct r_debug_tracepoint_t {
 	ut64 stamp;
 } RDebugTracepoint;
 
+typedef struct r_debug_cond_t {
+	void *data;
+	char *name;
+	char *cond;
+} RDebugCond;
+
 typedef struct r_debug_t {
 	char *arch;
 	int bits; /// XXX: MUST SET ///
@@ -309,6 +316,7 @@ typedef struct r_debug_t {
 
 	struct r_debug_plugin_t *h;
 	RList *plugins;
+	RList *conds;
 
 	RAnal *anal;
 	RList *maps; // <RDebugMap>
@@ -545,6 +553,12 @@ R_API bool r_debug_arg_set(RDebug *dbg, int fast, int num, ut64 value);
 
 /* breakpoints (most in r_bp, this calls those) */
 R_API RBreakpointItem *r_debug_bp_add(RDebug *dbg, ut64 addr, int hw, bool watch, int rw, char *module, st64 m_delta);
+
+/* conditions code */
+bool r_debug_cond_add(RDebug *dbg, const char *name, const char *cond, char **ret_err);
+RDebugCond* r_debug_cond_find(RDebug *dbg, const char *cond);
+void r_debug_cond_print(RDebug *dbg, const char *name);
+bool r_debug_cond_del(RDebug *dbg, const char *name);
 
 /* pid */
 R_API int r_debug_thread_list(RDebug *dbg, int pid);

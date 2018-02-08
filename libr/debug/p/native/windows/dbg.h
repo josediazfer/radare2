@@ -268,5 +268,6 @@ ut64 w32_get_proc_baddr(int pid);
 RDebugW32Proc *find_dbg_proc(RDebug *dbg, int pid);
 char *w32_reg_profile(RDebug *dbg);
 int w32_dbg_select(RDebug *dbg, int pid, int tid);
+int w32_dbg_step (RDebug *dbg);
 
 #endif
