@@ -21,7 +21,7 @@ static const char *help_msg_d[] = {
 	"db", "[?]", "Breakpoints commands",
 	"dbt", "[?]", "Display backtrace based on dbg.btdepth and dbg.btalgo",
 	"dc", "[?]", "Continue execution",
-	"dC", "[?]", "Manager debugger conditions",
+	"dC", "[?]", "Managment debugger conditions",
 	"dd", "[?]", "File descriptors (!fd in r1)",
 	"de", "[-sc] [rwx] [rm] [e]", "Debug with ESIL (see de?)",
 	"dg", " <file>", "Generate a core-file (WIP)",
@@ -101,7 +101,7 @@ static const char *help_msg_dbt[] = {
 	NULL
 };
 static const char *help_msg_dC[] = {
-	"Usage: dC", "", " # Manager debugger conditions commands",
+	"Usage: dC", "", " # Managment debugger conditions commands",
 	"dC", " <cond_name> <cond>", "Display or add condition(s)",
 	"dC-", " cond_name", "Delete condition with name 'cond_name'",
 	"dCb", " bp_addr cond_name", "Associate breakpoint with condition 'cond_name'",
@@ -3845,8 +3845,6 @@ static bool cmd_dcu (RCore *core, const char *input) {
 }
 
 static void cmd_debug_cond (RCore *core, const char *input) {
-	char *ptr;
-
 	switch (*input) {
 	case ' ': // "dC"
 		{
@@ -3858,27 +3856,26 @@ static void cmd_debug_cond (RCore *core, const char *input) {
 				*cond = '\0';
 				cond++;
 				if (strlen (name) > 0 && strlen (cond) > 0) {
-					if (!r_debug_cond_find (core->dbg, name)) {
-						char *err = NULL;
-						char *tmp = NULL;
+					char *tmp = NULL;
+					char *err = NULL;
+					RDebugCond *cond_item;
 
-						if (!strcmp (cond, "-")) {
-							char *tmp;
-							tmp = r_core_editor (core, NULL, "");
-							if (tmp) {
-								cond = tmp;
-							} else {
-								cond = NULL;
-							}
+					cond_item = r_debug_cond_find (core->dbg, name);
+					if (!strcmp (cond, "-")) {
+						char *tmp;
+						tmp = r_core_editor (core, NULL, cond_item? cond_item->cond : "");
+						if (tmp) {
+							cond = tmp;
+						} else {
+							cond = NULL;
 						}
-						if (cond && !r_debug_cond_add (core->dbg, name, cond, &err)) {
-							eprintf ("can not add condition %s\n", err);
-							free (err);
-						}
-						free (tmp);
-					} else {
-						eprintf ("condition with name '%s' already exists\n", name);
 					}
+					r_debug_cond_add (core->dbg, name, cond, &err);
+					if (err) {
+						eprintf ("%s\n", err);
+						free (err);
+					}
+					free (tmp);
 				}
 			} else {
 				r_debug_cond_print (core->dbg, name);
@@ -3889,7 +3886,7 @@ static void cmd_debug_cond (RCore *core, const char *input) {
 		break;
 	case '-': // "dC-"
 		{
-		char *name = input + 1;
+		const char *name = input + 1;
 		if (*name == ' ') {
 			name++;
 		}
@@ -3901,22 +3898,22 @@ static void cmd_debug_cond (RCore *core, const char *input) {
 			char *inp = strdup (input + 2);
 			if (inp) {
 				char *arg = strchr (inp, ' ');
+				ut64 addr = r_num_math (core->num, inp);
+				RBreakpointItem *bpi = r_bp_get_at (core->dbg->bp, addr);
+				if (!bpi) {
+					eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
+					break;
+				}
 				if (arg) {
 					*arg++ = 0;
 					if (!r_debug_cond_find (core->dbg, arg)) {
 						eprintf ("can not find condition '%s'\n", arg);
 						break;
 					}
-					ut64 addr = r_num_math (core->num, inp);
-					RBreakpointItem *bpi = r_bp_get_at (core->dbg->bp, addr);
-					if (bpi) {
-						free (bpi->cond);
-						bpi->cond = strdup (arg);
-					} else {
-						eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
-					}
+					free (bpi->cond);
+					bpi->cond = strdup (arg);
 				} else {
-					eprintf ("1 Missing argument\n");
+					R_FREE (bpi->cond);
 				}
 				free (inp);
 			} else {

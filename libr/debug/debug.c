@@ -7,6 +7,8 @@
 #include "lualib.h"
 #include "lauxlib.h"
 
+#define MAX_LUA_MEM_READ_LENGTH	(4*1024*1024)
+
 #if __WINDOWS__
 void w32_break_process(void *);
 #endif
@@ -781,30 +783,54 @@ RDebugCond *r_debug_cond_find(RDebug *dbg, const char *name) {
 	return NULL;
 }
 
-static int lua_read_mem(lua_State *lua) {
-	lua_Integer addr, len;
-	ut8 *buf;
+static int lua_mem_read(lua_State *lua) {
+	ut64 addr;
+	int len;
 	RDebug *dbg;
+	int n_args = lua_gettop (lua);
+	ut8 *buff = NULL;
 
-	lua_getglobal(lua, "_dbg_");
-	dbg = (RDebug *)lua_tointeger (lua, 1);
-	lua_pop (lua, 1);
+	if (n_args < 2) {
+		return 0;
+	}
+	if (!lua_isinteger (lua, 1)) {
+            lua_pushstring (lua, "fist argument is not address value");
+            lua_error (lua);
+	}
 	addr = lua_tointeger (lua, 1);
-	lua_pop (lua, 1);
-	len = lua_tointeger (lua, 1);
-	lua_pop (lua, 1);
-	if ((int)len <= 0) {
+	if (!lua_isinteger (lua, 2)) {
+            lua_pushstring (lua, "second argument is not length value");
+            lua_error (lua);
+	}
+	len = lua_tointeger (lua, 2);
+	if (len <= 0 || len > MAX_LUA_MEM_READ_LENGTH) {
+            lua_pushstring (lua, "invalid length value");
+            lua_error (lua);
+	}
+	lua_getglobal(lua, "_dbg_");
+	dbg = (RDebug *)lua_touserdata (lua, -1);
+	if (!dbg) {
+            lua_pushstring (lua, "lua_mem_read internal error dbg is NULL");
+            lua_error (lua);
+	}
+	buff = (ut8 *)calloc (1, len);
+	if (!buff) {
+            lua_pushstring (lua, "can not reserve memory to read");
+            lua_error (lua);
+	}
+	if (!dbg->iob.read_at (dbg->iob.io, addr, buff, len)) {
 		lua_pushnil (lua);
 	} else {
-		int i = 1;
-
+		int i;
 		lua_newtable (lua);
 		for (i = 1; i <= len; i++) {
 			lua_pushnumber (lua, i);
-			lua_pushnumber (lua, i);
+			lua_pushinteger (lua, buff[i - 1]);
+			lua_settable (lua, -3);
 		}
 	}
-	return 0;
+	free (buff);
+	return 1;
 }
 
 static lua_State *r_debug_cond_lua_get(RDebug *dbg, const char *cond, char **ret_err) {
@@ -840,12 +866,14 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 	lua_State *lua = (lua_State *)cond_item->data;
 
 	if (!lua) {
-		lua = r_debug_cond_lua_get (dbg, cond_item->cond, NULL);
+		char *cond_func = r_str_newf ("function cond()\n%s\nend", cond_item->cond);
+		lua = r_debug_cond_lua_get (dbg, cond_func, NULL);
 		lua_pcall (lua, 0, 0, 0);
-		lua_pushinteger (lua, (lua_Integer)dbg);
+		lua_pushlightuserdata (lua, dbg);
 		lua_setglobal (lua, "_dbg_");
-		lua_register (lua, "memr", lua_read_mem);
+		lua_register (lua, "mr", lua_mem_read);
 		cond_item->data = lua;
+		free (cond_func);
 	}
 	if (lua) {
 		r_debug_lua_vars_fill (dbg, lua, true);
@@ -865,28 +893,25 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 bool r_debug_cond_add(RDebug *dbg, const char *name, const char *cond, char **ret_err) {
 	bool success = false;
 	lua_State *lua;
-	char *cond_func = r_str_newf ("function cond()\n%s\nend", cond);
 
-	if (!cond_func) {
-		perror ("r_debug_cond_add/alloc cond_func");
-		goto err_r_debug_cond_add;
-	}
-	lua = r_debug_cond_lua_get (dbg, cond_func, ret_err);
+	lua = r_debug_cond_lua_get (dbg, cond, ret_err);
 	if (lua) {
-		RDebugCond *cond_item = R_NEW0 (RDebugCond);
+		RDebugCond *cond_item;
+	
+		cond_item = r_debug_cond_find (dbg, name);	
+		if (cond_item) {
+			r_debug_cond_del (dbg, name);
+		}
+		cond_item = R_NEW0 (RDebugCond);
 		if (cond_item) {
 			cond_item->name = strdup (name);
-			cond_item->cond = cond_func;
+			cond_item->cond = strdup (cond);
 			r_list_append (dbg->conds, cond_item);
 			success = true;
 		} else {
 			perror ("alloc RDebugCond");
 		}
 		lua_close (lua);
-	}
-err_r_debug_cond_add:
-	if (!success) {
-		free (cond_func);
 	}
 	return success;
 }
