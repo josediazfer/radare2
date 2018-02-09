@@ -3870,10 +3870,12 @@ static void cmd_debug_cond (RCore *core, const char *input) {
 							cond = NULL;
 						}
 					}
-					r_debug_cond_add (core->dbg, name, cond, &err);
-					if (err) {
-						eprintf ("%s\n", err);
-						free (err);
+					if (cond) {
+						r_debug_cond_add (core->dbg, name, cond, &err);
+						if (err) {
+							eprintf ("%s\n", err);
+							free (err);
+						}
 					}
 					free (tmp);
 				}
