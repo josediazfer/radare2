@@ -1,5 +1,6 @@
 #include <r_anal.h>
 
+#include "bt/generic.c"
 #include "bt/generic-x86.c"
 #include "bt/generic-x64.c"
 #include "bt/fuzzy-all.c"
@@ -36,11 +37,7 @@ static RList *r_debug_native_frames(RDebug *dbg, ut64 at) {
 		}
 	}
 	if (!cb) {
-		if (dbg->bits == R_SYS_BITS_64) {
-			cb = backtrace_x86_64;
-		} else {
-			cb = backtrace_x86_32;
-		}
+		cb = backtrace_x86;
 	}
 
 	list = cb (dbg, at);
