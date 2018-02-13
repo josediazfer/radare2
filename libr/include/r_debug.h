@@ -258,6 +258,19 @@ typedef struct r_debug_cond_t {
 	char *cond;
 } RDebugCond;
 
+typedef struct r_debug_profile_thread_t {
+	RList *bt_match;
+	int bt_match_depth;
+	int tid;
+} RDebugProfilerThread;
+
+typedef struct r_debug_profile_t {
+	RList *th_list;
+	RThread *th_profiler;
+	bool breaked;
+	int pid;
+} RDebugProfiler;
+
 typedef struct r_debug_t {
 	char *arch;
 	int bits; /// XXX: MUST SET ///
@@ -295,6 +308,7 @@ typedef struct r_debug_t {
 	int steps; /* counter of steps done */
 	RDebugReason reason; /* stop reason */
 	RDebugRecoilMode recoil_mode; /* what did the user want to do? */
+	RDebugProfiler profiler; /* collect profile info when debugger is started or stopped */
 
 	/* tracing vars */
 	RDebugTrace *trace;
@@ -329,7 +343,6 @@ typedef struct r_debug_t {
 	int _mode;
 	RNum *num;
 	REgg *egg;
-	RThread *th_profiler;
 	void *native_ptr; /* address to internal struct used by native code */
 } RDebug;
 
@@ -398,6 +411,8 @@ typedef struct r_debug_plugin_t {
 	int (*contsc)(RDebug *dbg, int pid, int sc);
 	RList* (*frames)(RDebug *dbg, ut64 at);
 	RBreakpointCallback breakpoint;
+	bool (*thread_suspend)(RDebug *dbg, int tid);
+	bool (*thread_resume)(RDebug *dbg, int tid);
 // XXX: specify, pid, tid, or RDebug ?
 	int (*reg_read)(RDebug *dbg, int type, ut8 *buf, int size);
 	int (*reg_write)(RDebug *dbg, int type, const ut8 *buf, int size); //XXX struct r_regset_t regs);
@@ -405,7 +420,7 @@ typedef struct r_debug_plugin_t {
 	/* memory */
 	RList *(*map_get)(RDebug *dbg);
 	bool (*maps_print)(RDebug *dbg, ut64 addr, int rad);
-	bool (*profiling)(RDebug *dbg);
+	bool (*profiling)(RDebug *dbg, bool enable);
 	RList *(*modules_get)(RDebug *dbg);
 	RDebugMap* (*map_alloc)(RDebug *dbg, ut64 addr, int size);
 	int (*map_dealloc)(RDebug *dbg, ut64 addr, int size);
@@ -562,6 +577,8 @@ bool r_debug_cond_del(RDebug *dbg, const char *name);
 
 /* pid */
 R_API int r_debug_thread_list(RDebug *dbg, int pid);
+R_API bool r_debug_thread_suspend(RDebug *dbg, int tid);
+R_API bool r_debug_thread_resume(RDebug *dbg, int tid);
 R_API RList *r_debug_threads_get(RDebug *dbg, int pid);
 
 R_API void r_debug_tracenodes_reset(RDebug *dbg);

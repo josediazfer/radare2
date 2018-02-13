@@ -10,7 +10,7 @@
 #define MAX_LUA_MEM_READ_LENGTH	(4*1024*1024)
 
 #if __WINDOWS__
-void w32_break_process(void *);
+bool w32_break_proc(void *);
 #endif
 
 R_LIB_VERSION(r_debug);
@@ -36,14 +36,124 @@ R_API void r_debug_info_free (RDebugInfo *rdi) {
 	free (rdi);
 }
 
-static int r_debug_profiler_thread(RThread *th) {
-	RDebug *dbg = th->user;
-
-	dbg->h->profiling(dbg);
-	return !th->breaked;
+static void r_debug_profiler_th_free(RDebugProfilerThread *th) {
+	r_list_free (th->bt_match);
 }
 
-static void r_debug_start_profiler(RDebug *dbg) {
+static void r_debug_profiler_bt(RDebug *dbg, RDebugProfilerThread *th) 
+{
+	RList *frames_list;
+	int old_tid = dbg->tid;
+	int bt_match_depth = 0;
+
+	dbg->tid = th->tid;
+	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+	frames_list = r_debug_frames (dbg, UT64_MAX);
+	if (th->bt_match) {
+		RListIter *iter, *iter2;
+		RDebugFrame *frame;
+eprintf ("FRAMES\n");fflush(stderr);
+		iter2 = th->bt_match->tail;
+		r_list_foreach_prev (frames_list, iter, frame) {
+			RDebugFrame *frame2;
+
+			if (!iter2) {
+				break;
+			}
+			frame2 = iter2->data;
+			if (frame->addr != frame2->addr) {
+				break;
+			}
+			iter2 = iter2->p;
+			bt_match_depth++;
+		}
+		if (!bt_match_depth) {
+			bt_match_depth = r_list_length (frames_list);
+			r_list_free (th->bt_match);
+			th->bt_match = frames_list;
+		} else if (bt_match_depth < th->bt_match_depth) {
+			th->bt_match_depth = bt_match_depth;
+		}
+	} else {
+		th->bt_match = frames_list;
+	}
+	dbg->tid = old_tid;
+	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+}
+
+static void r_debug_profiler_th(RDebug *dbg) {
+	RDebugProfiler *profiler = &dbg->profiler;
+	RList *th_list, *th_pr_list;
+	RListIter *iter, *iter2;
+	RDebugPid *th;
+	RDebugProfilerThread *th_pr;
+	RList *th_list_app = NULL;
+
+	profiler->pid = dbg->pid;
+	if (!profiler->th_list) {
+		profiler->th_list = r_list_newf ((RListFree)r_debug_profiler_th_free);
+	} else if (dbg->pid != profiler->pid){
+		r_list_free (profiler->th_list);
+		profiler->th_list = r_list_newf ((RListFree)r_debug_profiler_th_free);
+	}
+	th_pr_list = profiler->th_list;
+	profiler->pid = dbg->pid;
+	th_list = dbg->h->threads (dbg, dbg->pid);
+	r_list_foreach (th_list, iter, th) {
+		bool exists = false;
+		r_list_foreach (th_pr_list, iter2, th_pr) {
+			if (th_pr->tid == th->pid) {
+				exists = true;
+				break;
+			} 
+		}
+		if (!exists) {
+			th_pr = R_NEW0 (RDebugProfilerThread);
+			if (!th_pr) {
+				perror ("r_debug_profiler_th/alloc RDebugProfilerThread");
+				goto err_r_debug_profiler_thread;
+			}
+			th_pr->tid = th->pid;
+			if (!th_list_app) {
+				th_list_app = r_list_newf ((RListFree)free);
+			}
+			r_list_append (th_list_app, th_pr);
+		}
+		r_debug_profiler_bt (dbg, th_pr);
+	}
+err_r_debug_profiler_thread:
+	/* append new threads */
+	if (th_list_app) {
+		r_list_foreach (th_list_app, iter, th_pr) {
+			r_list_append (th_pr_list, th_pr);
+		}
+		r_list_free (th_list_app);
+	}
+}
+
+static int r_debug_profiler_entry(RThread *th) {
+	RDebug *dbg = th->user;
+	bool enabled = !th->breaked;
+	bool is_profiler_bt = dbg->corebind.core &&
+			dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling.backtrace");
+
+	dbg->h->profiling(dbg, enabled);
+	if (is_profiler_bt) {
+#if __WINDOWS__
+		if (enabled) {
+			r_debug_thread_suspend (dbg, -1);
+			r_debug_profiler_th (dbg);
+			r_debug_thread_resume (dbg, -1);
+		}
+#else
+		eprintf ("TODO dbg.profiling.backatrace unsupported platform");
+#endif
+	}
+	return enabled;
+}
+
+static void r_debug_profiler_start(RDebug *dbg) {
+	RDebugProfiler *profiler = &dbg->profiler;
 	int refresh;
 
 	if (!dbg->h || !dbg->h->profiling || !dbg->corebind.core ||
@@ -51,15 +161,21 @@ static void r_debug_start_profiler(RDebug *dbg) {
 		return;
 	}
 	refresh = dbg->corebind.cfggeti (dbg->corebind.core, "dbg.profiling.refresh");
-	dbg->th_profiler = r_th_new (r_debug_profiler_thread, dbg, 0, refresh);
-	r_th_start (dbg->th_profiler, true);
+	profiler->th_profiler = r_th_new (r_debug_profiler_entry, dbg, 0, refresh);
+	r_th_start (profiler->th_profiler, true);
 }
 
-static void r_debug_stop_profiler(RDebug *dbg) {
-	if (dbg->th_profiler) {
-		r_th_free (dbg->th_profiler);
-		dbg->th_profiler = NULL;
+static void r_debug_profiler_stop(RDebug *dbg) {
+	RDebugProfiler *profiler = &dbg->profiler;
+	if (profiler->th_profiler) {
+		r_th_free (profiler->th_profiler);
+		profiler->th_profiler = NULL;
 	}
+}
+
+static void r_debug_profiler_free(RDebugProfiler *profiler) {
+	r_list_free (profiler->th_list);
+	profiler->th_list = NULL;
 }
 
 /*
@@ -421,7 +537,6 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->trace_forks = 1;
 	dbg->forked_pid = -1;
 	dbg->main_pid = -1;
-	dbg->n_threads = 0;
 	dbg->trace_clone = 0;
 	dbg->egg = r_egg_new ();
 	r_egg_setup (dbg->egg, R_SYS_ARCH, R_SYS_BITS, R_SYS_ENDIAN, R_SYS_OS);
@@ -447,7 +562,6 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->num = r_num_new (r_debug_num_callback, r_debug_str_callback, dbg);
 	dbg->h = NULL;
 	dbg->threads = NULL;
-	dbg->th_profiler = NULL;
 	dbg->hitinfo = 1;
 	/* TODO: needs a redesign? */
 	dbg->maps = r_debug_map_list_new ();
@@ -483,11 +597,11 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		//r_reg_free(&dbg->reg);
 		free (dbg->snap_path);
 		r_debug_excep_state_free (dbg->excep);
+		r_debug_profiler_free (&dbg->profiler);
 		r_list_free (dbg->snaps);
 		r_list_free (dbg->sessions);
 		r_list_free (dbg->maps);
 		r_list_free (dbg->maps_user);
-		r_list_free (dbg->threads);
 		r_list_free (dbg->conds);
 		r_num_free (dbg->num);
 		sdb_free (dbg->sgnls);
@@ -1362,7 +1476,7 @@ R_API int r_debug_continue_kill(RDebug *dbg, int sig) {
 		return false;
 	}
 #if __WINDOWS__
-	r_cons_break_push (w32_break_process, dbg);
+	r_cons_break_push (w32_break_proc, dbg);
 #endif
 repeat:
 	if (r_debug_is_dead (dbg)) {
@@ -1380,9 +1494,9 @@ repeat:
 		ret = dbg->h->cont (dbg, dbg->pid, dbg->tid, sig);
 		//XXX(jjd): why? //dbg->reason.signum = 0;
 
-		r_debug_start_profiler (dbg);
+		r_debug_profiler_start (dbg);
 		reason = r_debug_wait (dbg, &bp);
-		r_debug_stop_profiler (dbg);
+		r_debug_profiler_stop (dbg);
 		if (dbg->corebind.core && bp) {
 			RCore *core = (RCore *)dbg->corebind.core;
 			if (reason == R_DEBUG_REASON_COND_CMD) {

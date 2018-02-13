@@ -269,5 +269,7 @@ RDebugW32Proc *find_dbg_proc(RDebug *dbg, int pid);
 char *w32_reg_profile(RDebug *dbg);
 int w32_dbg_select(RDebug *dbg, int pid, int tid);
 int w32_dbg_step (RDebug *dbg);
+bool w32_dbg_thread_resume(RDebug *dbg, int tid);
+bool w32_dbg_thread_suspend(RDebug *dbg, int tid);
 
 #endif

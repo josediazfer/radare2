@@ -3,17 +3,17 @@
 #include <stdio.h>
 #include <psapi.h>
 #include <tchar.h>
-#include "profile.h"
+#include "profiler.h"
 
 extern NTSTATUS (WINAPI *w32_NtQuerySystemInformation)(ULONG, PVOID, ULONG, PULONG);
 extern BOOL (WINAPI *w32_QueryThreadCycleTime)(HANDLE, PULONG64);
 extern BOOL (WINAPI *w32_QueryProcessCycleTime)(HANDLE, PULONG64);
 
-static RDebugW32ProcProfile* update_ths_profile_info(RDebugW32Profile *profile, RDebugW32ProcProfile *proc);
+static RDebugW32ProcProfiler* update_ths_profile_info(RDebugW32Profiler *profile, RDebugW32ProcProfiler *proc);
 
 static int th_profile_list_sort(const void *_a, const void *_b) {
-	RDebugW32ThreadProfile *th1 = (RDebugW32ThreadProfile *)_a;
-       	RDebugW32ThreadProfile *th2 = (RDebugW32ThreadProfile *)_b;
+	RDebugW32ThreadProfiler *th1 = (RDebugW32ThreadProfiler *)_a;
+       	RDebugW32ThreadProfiler *th2 = (RDebugW32ThreadProfiler *)_b;
 
 	if (th1->cpu_usage < th2->cpu_usage) {
 		return 1;
@@ -24,12 +24,12 @@ static int th_profile_list_sort(const void *_a, const void *_b) {
 	return 0;
 }
 
-static void proc_profile_free(RDebugW32ProcProfile *proc) {
+static void proc_profile_free(RDebugW32ProcProfiler *proc) {
 	r_list_free (proc->th_list);
 	free (proc);
 }
 
-static void update_cpu_profile_info(RDebugW32Profile *profile)
+static void update_cpu_profile_info(RDebugW32Profiler *profile)
 {
 	_PSYSTEM_PROCESSOR_IDLE_CYCLE_TIME_INFORMATION idle_cycles = NULL;
 	_PSYSTEM_PROCESSOR_CYCLE_TIME_INFORMATION intr_cycles = NULL;
@@ -111,7 +111,7 @@ err_update_cpu_profile_info:
 	free (dpc_cycles);
 }
 
-static ut64 update_proc_profile_info(RDebugW32ProcProfile *proc) {
+static ut64 update_proc_profile_info(RDebugW32ProcProfiler *proc) {
 	HANDLE h_proc = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, proc->pid);
 	ULONG64 cycles = 0;
 
@@ -144,7 +144,7 @@ err_update_proc_profile_info:
 	return cycles;
 }
 
-static ut64 update_th_profile_info(RDebugW32Profile *profile, RDebugW32ThreadProfile *th) {
+static ut64 update_th_profile_info(RDebugW32Profiler *profile, RDebugW32ThreadProfiler *th) {
 	HANDLE h_th = OpenThread (THREAD_QUERY_LIMITED_INFORMATION, FALSE, th->tid);
 	ULONG64 cycles = 0;
 
@@ -177,12 +177,12 @@ err_update_th_profile_info:
 	return cycles;
 }
 
-static RDebugW32ProcProfile* update_procs_profile_info(RDebugW32Profile *profile, int pid) {
+static RDebugW32ProcProfiler* update_procs_profile_info(RDebugW32Profiler *profile, int pid) {
 	HANDLE h_proc_snap = INVALID_HANDLE_VALUE;
 	PROCESSENTRY32 proc32;
 	HANDLE h_proc = NULL;
 	RList *proc_list = profile->proc_list;
-	RDebugW32ProcProfile *proc, *ret_proc = NULL;
+	RDebugW32ProcProfiler *proc, *ret_proc = NULL;
 	RListIter *iter, *iter2;
 	DWORD tstamp;
 	ut64 total_cycles = profile->idle_cycles_delta +
@@ -215,10 +215,10 @@ static RDebugW32ProcProfile* update_procs_profile_info(RDebugW32Profile *profile
 			}
 		}
 		if (!proc_exists) {
-			proc = R_NEW0 (RDebugW32ProcProfile);
+			proc = R_NEW0 (RDebugW32ProcProfiler);
 			
 			if (!proc) {
-				perror ("update_procs_profile_info/alloc RDebugW32ProcProfile");
+				perror ("update_procs_profile_info/alloc RDebugW32ProcProfiler");
 				continue;
 			}
 			proc->pid = (int)proc32.th32ProcessID;
@@ -236,7 +236,7 @@ static RDebugW32ProcProfile* update_procs_profile_info(RDebugW32Profile *profile
 			r_list_delete (proc_list, iter);
 		} else if (proc->pid == pid) {
 			RList *th_list = proc->th_list;
-			RDebugW32ThreadProfile *th;
+			RDebugW32ThreadProfiler *th;
 
 			/* calculate cpu usage for process and threads */
 			proc->cpu_usage = ((double)proc->cycles_delta / (double)profile->total_cycles) * 100;
@@ -263,12 +263,12 @@ err_update_procs_profile_info:
 	return ret_proc;
 }
 
-static RDebugW32ProcProfile* update_ths_profile_info(RDebugW32Profile *profile, RDebugW32ProcProfile *proc) {
+static RDebugW32ProcProfiler* update_ths_profile_info(RDebugW32Profiler *profile, RDebugW32ProcProfiler *proc) {
 	RListIter *iter, *iter2;
 	DWORD tstamp;
 	PSYSTEM_PROCESS_INFORMATION sys_proc = NULL, sys_proc_it = NULL;
 	PSYSTEM_THREAD_INFORMATION th_proc = NULL, th_proc_it = NULL;
-	RDebugW32ThreadProfile *th;
+	RDebugW32ThreadProfiler *th;
 	RList *th_list;
 	ULONG ret_len = 0;
 	int i, th_proc_n;
@@ -316,10 +316,10 @@ static RDebugW32ProcProfile* update_ths_profile_info(RDebugW32Profile *profile, 
 			}
 		}
 		if (!th_exists) {
-			th = R_NEW0 (RDebugW32ThreadProfile);
+			th = R_NEW0 (RDebugW32ThreadProfiler);
 			
 			if (!th) {
-				perror ("update_ths_profile_info/alloc RDebugW32ThreadProfile");
+				perror ("update_ths_profile_info/alloc RDebugW32ThreadProfiler");
 				continue;
 			}
 			th->tid = tid;
@@ -341,13 +341,16 @@ err_update_ths_profile_info:
 	return proc;
 }
 
-bool w32_dbg_profiling(RDebug *dbg) {
-	RDebugW32ProcProfile *proc;
-	RDebugW32Profile *profile;
+bool w32_dbg_profiling(RDebug *dbg, bool enable) {
+	RDebugW32ProcProfiler *proc;
+	RDebugW32Profiler *profile;
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	DWORD win_ver, major_ver;
 	bool ret = false;
 
+	if (!enable) {
+		return false;
+	}
 	/* supported only Windows 7, Vista, Server 2008 or greatest */
 	win_ver = GetVersion();
 	major_ver = (DWORD)(LOBYTE (LOWORD (win_ver)));
@@ -356,9 +359,9 @@ bool w32_dbg_profiling(RDebug *dbg) {
 	}
 	/* initialize profile? */
 	if (!dbg_w32->profile) {
-		profile = R_NEW0 (RDebugW32Profile);
+		profile = R_NEW0 (RDebugW32Profiler);
 		if (!profile) {
-			perror ("w32_dbg_profiling/alloc RDebugW32Profile");
+			perror ("w32_dbg_profiling/alloc RDebugW32Profiler");
 			goto err_w32_dbg_profiling;
 		}
 		profile->proc_list =  r_list_newf ((RListFree)proc_profile_free);
@@ -370,7 +373,7 @@ bool w32_dbg_profiling(RDebug *dbg) {
 	proc = update_procs_profile_info (profile, dbg->pid);
 	if (proc && proc->cpu_usage > 0.0f) {
 		RListIter *iter;
-		RDebugW32ThreadProfile *th;
+		RDebugW32ThreadProfiler *th;
 		RList *th_list;
 
 		th_list = proc->th_list;
@@ -391,7 +394,7 @@ err_w32_dbg_profiling:
 
 void w32_dbg_profiling_free(RDebug *dbg) {
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RDebugW32Profile *profile = (RDebugW32Profile *)dbg_w32->profile;
+	RDebugW32Profiler *profile = (RDebugW32Profiler *)dbg_w32->profile;
 
 	if (profile) {
 		r_list_free (profile->proc_list);

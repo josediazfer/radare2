@@ -1479,14 +1479,18 @@ err_w32_dbg_proc_kill:
 	return ret;
 }
 
-void w32_break_process (void *d) {
+bool w32_break_proc (void *d) {
 	RDebug *dbg = (RDebug *)d;
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
 	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
+	bool breaked = false;
 	
 	if (proc && !(proc->intr = w32_DebugBreakProcess (proc->h_proc))) {
 		r_sys_perror ("w32_break_process/w32_DebugBreakProcess");
+	} else {
+		breaked = true;
 	}
+	return breaked;
 }
 
 static int get_avx (HANDLE hThread, ut128 * xmm, ut128 * ymm) {
@@ -1965,4 +1969,60 @@ int w32_dbg_select (RDebug *dbg, int pid, int tid) {
 		dbg->bits = R_SYS_BITS_32;
 	}
 	return true;
+}
+
+bool w32_dbg_thread_suspend(RDebug *dbg, int tid) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
+	RList *th_list;
+	RListIter *iter;
+	RDebugW32Thread *th;
+	bool success = false;
+
+	if (!proc) {
+		return false;
+	}
+	th_list = proc->th_list;
+	r_list_foreach (th_list, iter, th) {
+		if (tid == -1 || th->tid == tid) {
+			if (SuspendThread (th->h_th) == -1) {
+				r_sys_perror ("w32_dbg_thread_suspend/SuspendThread");
+				goto err_w32_dbg_thread_suspend;
+			}
+			if (tid != -1) {
+				break;
+			}
+		}
+	}
+	success = true;
+err_w32_dbg_thread_suspend:
+	return success;
+}
+
+bool w32_dbg_thread_resume(RDebug *dbg, int tid) {
+	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	RDebugW32Proc *proc = proc_dbg_find (dbg_w32, dbg->pid, NULL);
+	RList *th_list;
+	RListIter *iter;
+	RDebugW32Thread *th;
+	bool success = false;
+
+	if (!proc) {
+		return false;
+	}
+	th_list = proc->th_list;
+	r_list_foreach (th_list, iter, th) {
+		if (tid == -1 || th->tid == tid) {
+			if (ResumeThread (th->h_th) == -1) {
+				r_sys_perror ("w32_dbg_thread_resume/ResumeThread");
+				goto err_w32_dbg_thread_resume;
+			}
+			if (tid != -1) {
+				break;
+			}
+		}
+	}
+	success = true;
+err_w32_dbg_thread_resume:
+	return success;
 }

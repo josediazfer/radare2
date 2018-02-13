@@ -1,5 +1,5 @@
-#ifndef WINDOWS_DBG_PROFILE_H
-#define WINDOWS_DBG_PROFILE_H
+#ifndef WINDOWS_DBG_PROFILER_H
+#define WINDOWS_DBG_PROFILER_H
 #include "dbg.h"
 
 typedef struct {
@@ -9,7 +9,7 @@ typedef struct {
 	FILETIME ctime;
 	DWORD tstamp;
 	float cpu_usage;
-} RDebugW32ThreadProfile;
+} RDebugW32ThreadProfiler;
 
 typedef struct {
 	int pid;
@@ -19,7 +19,7 @@ typedef struct {
 	DWORD tstamp;
 	RList *th_list;
 	float cpu_usage;
-} RDebugW32ProcProfile;
+} RDebugW32ProcProfiler;
 
 typedef struct {
 	ut64 idle_cycles_delta;
@@ -31,8 +31,8 @@ typedef struct {
 	RList *proc_list;
 	ut64 total_cycles;
 	int n_cpus;
-} RDebugW32Profile;
+} RDebugW32Profiler;
 
-bool w32_dbg_profiling(RDebug *dbg);
+bool w32_dbg_profiling(RDebug *dbg, bool enable);
 void w32_dbg_profiling_free(RDebug *dbg);
 #endif

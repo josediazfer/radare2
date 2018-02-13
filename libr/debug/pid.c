@@ -29,6 +29,20 @@ R_API RList *r_debug_pids(RDebug *dbg, int pid) {
 	return NULL;
 }
 
+R_API bool r_debug_thread_suspend(RDebug *dbg, int tid) {
+	if (dbg && dbg->h && dbg->h->thread_suspend) {
+		return dbg->h->thread_suspend (dbg, tid);
+	}
+	return false;
+}
+
+R_API bool r_debug_thread_resume(RDebug *dbg, int tid) {
+	if (dbg && dbg->h && dbg->h->thread_resume) {
+		return dbg->h->thread_resume (dbg, tid);
+	}
+	return false;
+}
+
 // TODO: deprecate list/iterate functions from core apis? keep them for easiness?
 R_API int r_debug_pid_list(RDebug *dbg, int pid, char fmt) {
 	RList *list;

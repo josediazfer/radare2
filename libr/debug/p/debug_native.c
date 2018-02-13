@@ -33,7 +33,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 #if __WINDOWS__
 #include <windows.h>
 #include "native/windows/dbg.h"
-#include "native/windows/profile.h"
+#include "native/windows/profiler.h"
 #include "native/windows/map.h"
 #include "native/windows/io_dbg.h"
 #define R_DEBUG_REG_T CONTEXT
@@ -100,7 +100,7 @@ static int r_debug_native_reg_write (RDebug *dbg, int type, const ut8* buf, int 
 /* begin of debugger code */
 #if DEBUGGER
 
-#if !__APPLE__
+#if !__APPLE__ && !__WINDOWS__
 static int r_debug_handle_signals (RDebug *dbg) {
 #if __linux__
 	return linux_handle_signals (dbg);
@@ -1608,6 +1608,22 @@ static void r_debug_native_free (RDebug *dbg) {
 #endif
 }
 
+static bool r_debug_native_thread_suspend (RDebug *dbg, int tid) {
+#if __WINDOWS__ && !__CYGWIN__
+	return w32_dbg_thread_suspend (dbg, tid);
+#else
+	return false;
+#endif
+}
+
+static bool r_debug_native_thread_resume (RDebug *dbg, int tid) {
+#if __WINDOWS__ && !__CYGWIN__
+	return w32_dbg_thread_resume (dbg, tid);
+#else
+	return false;
+#endif
+}
+
 static int r_debug_native_select (RDebug *dbg, int pid, int tid) {
 #if __WINDOWS__ && !__CYGWIN__
 	return w32_dbg_select (dbg, pid, tid);
@@ -1616,9 +1632,9 @@ static int r_debug_native_select (RDebug *dbg, int pid, int tid) {
 #endif
 }
 
-static bool r_debug_native_profiling (RDebug *dbg) {
+static bool r_debug_native_profiling (RDebug *dbg, bool enable) {
 #if __WINDOWS__ && !__CYGWIN__
-	return w32_dbg_profiling (dbg);
+	return w32_dbg_profiling (dbg, enable);
 #else
 	return false;
 #endif
@@ -1681,6 +1697,8 @@ RDebugPlugin r_debug_plugin_native = {
 	.pids = &r_debug_native_pids,
 	.tids = &r_debug_native_tids,
 	.threads = &r_debug_native_threads,
+	.thread_suspend = &r_debug_native_thread_suspend,
+	.thread_resume = &r_debug_native_thread_resume,
 	.wait = &r_debug_native_wait,
 	.kill = &r_debug_native_kill,
 	.frames = &r_debug_native_frames, // rename to backtrace ?

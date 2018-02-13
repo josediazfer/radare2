@@ -33,6 +33,7 @@ static const char *help_msg_d[] = {
 	"do", "[?]", "Open process (reload, alias for 'oo')",
 	"doo", "[args]", "Reopen in debugger mode with args (alias for 'ood')",
 	"dp", "[?]", "List, attach to process or thread id",
+	"dP", "[?]", "Show debugger profiling info",
 	"dr", "[?]", "Cpu registers",
 	"ds", "[?]", "Step, over, source line",
 	"dt", "[?]", "Display instruction traces (dtr=reset)",
@@ -295,6 +296,11 @@ static const char *help_msg_do[] = {
 	NULL
 };
 
+static const char *help_msg_dPt[] = {
+	"Usage:", "dP", " # Debugger profiling commads",
+	"dPt", "", "List threads info"
+};
+
 static const char *help_msg_dp[] = {
 	"Usage:", "dp", " # Process commands",
 	"dp", "", "List current pid and children",
@@ -479,6 +485,7 @@ struct trace_node {
 	int refs;
 };
 
+static void print_frame_entry(RCore *core, RDebugFrame *frame, int idx);
 static void cmd_debug_init(RCore *core) {
 	DEFINE_CMD_DESCRIPTOR (core, d);
 	DEFINE_CMD_DESCRIPTOR (core, db);
@@ -890,6 +897,54 @@ static int step_line(RCore *core, int times) {
 	free (tmp_ptr);
 
 	return true;
+}
+
+static void cmd_dPt(RCore *core, const char *input) {
+	RListIter *th_iter;
+	RDebugProfilerThread *th;
+	RList *th_list = NULL;
+	int tid = -1, idx = 0;
+
+	th_list = core->dbg->profiler.th_list;
+	if (input[0] == ' ' && input[1]) {
+		tid = r_num_math (core->num, input + 1);
+	}
+	r_flag_space_push (core->flags, "*");
+	r_list_foreach (th_list, th_iter, th) {
+		RList *list;
+		RListIter *iter;
+		RDebugFrame *frame;
+		int idx = 1;
+		int bt_match_depth;
+		int bt_len;
+
+		if (tid != -1 && tid != th->tid) {
+			continue;
+		}
+		r_cons_printf ("  tid %d\n"
+				"===================\n",
+				th->tid);
+		list = th->bt_match;
+		bt_match_depth = th->bt_match_depth;
+		bt_len = r_list_length (list);
+		r_list_foreach (list, iter, frame) {
+			if (bt_len <= bt_match_depth) {
+				print_frame_entry (core, frame, idx++);
+			}
+			bt_len--;
+		}
+	}
+	r_flag_space_pop (core->flags);
+}
+
+static void cmd_debug_profiler(RCore *core, const char *input) {
+	switch (input[1]) {
+	case 't': // "dPt"
+		cmd_dPt (core, input + 2);
+		break;
+	default:
+		r_core_cmd_help (core, help_msg_dPt);
+	}
 }
 
 static void cmd_debug_pid(RCore *core, const char *input) {
@@ -2674,6 +2729,67 @@ static void static_debug_stop(void *u) {
 	r_debug_stop (dbg);
 }
 
+static void print_frame_entry(RCore *core, RDebugFrame *frame, int idx) {
+
+	char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
+	RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
+	flagdesc[0] = flagdesc2[0] = 0;
+	if (f) {
+		if (f->offset != UT64_MAX) {
+			int delta = (int)(frame->addr - f->offset);
+			if (delta > 0) {
+				snprintf (flagdesc, sizeof (flagdesc),
+						"%s+%d", f->name, delta);
+			} else if (delta < 0) {
+				snprintf (flagdesc, sizeof (flagdesc),
+						"%s%d", f->name, delta);
+			} else {
+				snprintf (flagdesc, sizeof (flagdesc),
+						"%s", f->name);
+			}
+		} else {
+			snprintf (flagdesc, sizeof (flagdesc),
+					"%s", f->name);
+		}
+		if (!strchr (f->name, '.') && (f = r_flag_get_at (core->flags, frame->addr - 1, true))) {
+			if (f->offset != UT64_MAX) {
+				int delta = (int)(frame->addr - 1 - f->offset);
+				if (delta > 0) {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+						"%s+%d", f->name, delta + 1);
+				} else if (delta < 0) {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+						"%s%d", f->name, delta + 1);
+				} else {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+						"%s+1", f->name);
+				}
+			} else {
+				snprintf (flagdesc2, sizeof (flagdesc2),
+					"%s", f->name);
+			}
+		}
+	}
+	if (core->dbg->bits & R_SYS_BITS_64) {
+		snprintf (pcstr, sizeof (pcstr), "0x%-16" PFMT64x, frame->addr);
+		snprintf (spstr, sizeof (spstr), "0x%-16" PFMT64x, frame->sp);
+	} else if (core->dbg->bits & R_SYS_BITS_32) {
+		snprintf (pcstr, sizeof (pcstr), "0x%-8" PFMT64x, frame->addr);
+		snprintf (spstr, sizeof (spstr), "0x%-8" PFMT64x, frame->sp);
+	} else {
+		snprintf (pcstr, sizeof (pcstr), "0x%" PFMT64x, frame->addr);
+		snprintf (spstr, sizeof (spstr), "0x%" PFMT64x, frame->sp);
+	}
+	RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, frame->addr, 0);
+	r_cons_printf ("%d  %s sp: %s  %-5d"
+			"[%s]  %s %s\n", idx,
+			pcstr, spstr,
+			(int)frame->size,
+			fcn ? fcn->name : "??",
+			flagdesc,
+			flagdesc2);
+}
+
 static void cmd_dbth(RCore *core, const char *input) {
 	RListIter *th_iter;
 	RDebugPid *th;
@@ -2690,7 +2806,7 @@ static void cmd_dbth(RCore *core, const char *input) {
 		RList *list;
 		RListIter *iter;
 		RDebugFrame *frame;
-		int i = 0;
+		int idx = 1;
 
 		if (tid != -1 && tid != th->pid) {
 			continue;
@@ -2707,63 +2823,7 @@ static void cmd_dbth(RCore *core, const char *input) {
 		}
 		list = r_debug_frames (core->dbg, UT64_MAX);
 		r_list_foreach (list, iter, frame) {
-			char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
-			RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
-			flagdesc[0] = flagdesc2[0] = 0;
-			if (f) {
-				if (f->offset != UT64_MAX) {
-					int delta = (int)(frame->addr - f->offset);
-					if (delta > 0) {
-						snprintf (flagdesc, sizeof (flagdesc),
-								"%s+%d", f->name, delta);
-					} else if (delta < 0) {
-						snprintf (flagdesc, sizeof (flagdesc),
-								"%s%d", f->name, delta);
-					} else {
-						snprintf (flagdesc, sizeof (flagdesc),
-								"%s", f->name);
-					}
-				} else {
-					snprintf (flagdesc, sizeof (flagdesc),
-							"%s", f->name);
-				}
-				if (!strchr (f->name, '.') && (f = r_flag_get_at (core->flags, frame->addr - 1, true))) {
-					if (f->offset != UT64_MAX) {
-						int delta = (int)(frame->addr - 1 - f->offset);
-						if (delta > 0) {
-							snprintf (flagdesc2, sizeof (flagdesc2),
-								"%s+%d", f->name, delta + 1);
-						} else if (delta < 0) {
-							snprintf (flagdesc2, sizeof (flagdesc2),
-								"%s%d", f->name, delta + 1);
-						} else {
-							snprintf (flagdesc2, sizeof (flagdesc2),
-								"%s+1", f->name);
-						}
-					} else {
-						snprintf (flagdesc2, sizeof (flagdesc2),
-							"%s", f->name);
-					}
-				}
-			}
-			if (core->dbg->bits & R_SYS_BITS_64) {
-				snprintf (pcstr, sizeof (pcstr), "0x%-16" PFMT64x, frame->addr);
-				snprintf (spstr, sizeof (spstr), "0x%-16" PFMT64x, frame->sp);
-			} else if (core->dbg->bits & R_SYS_BITS_32) {
-				snprintf (pcstr, sizeof (pcstr), "0x%-8" PFMT64x, frame->addr);
-				snprintf (spstr, sizeof (spstr), "0x%-8" PFMT64x, frame->sp);
-			} else {
-				snprintf (pcstr, sizeof (pcstr), "0x%" PFMT64x, frame->addr);
-				snprintf (spstr, sizeof (spstr), "0x%" PFMT64x, frame->sp);
-			}
-			RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, frame->addr, 0);
-			r_cons_printf ("%d  %s sp: %s  %-5d"
-					"[%s]  %s %s\n", i++,
-					pcstr, spstr,
-					(int)frame->size,
-					fcn ? fcn->name : "??",
-					flagdesc,
-					flagdesc2);
+			print_frame_entry (core, frame, idx++);
 		}
 		r_list_free (list);
 	}
@@ -4572,6 +4632,9 @@ static int cmd_debug(void *data, const char *input) {
 		break;
 	case 'p': // "dp"
 		cmd_debug_pid (core, input);
+		break;
+	case 'P': // "dP"
+		cmd_debug_profiler (core, input);
 		break;
 	case 'L': // "dL"
 		if (input[1]=='q') {
