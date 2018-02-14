@@ -262,6 +262,7 @@ typedef struct r_debug_profile_thread_t {
 	RList *bt_match;
 	int bt_match_depth;
 	int tid;
+	ut64 time;
 } RDebugProfilerThread;
 
 typedef struct r_debug_profile_t {
@@ -651,6 +652,9 @@ R_API bool r_debug_continue_back(RDebug *dbg);
 R_API void r_debug_excep_ign_append(RDebug *dbg, ut64 code);
 R_API void r_debug_excep_ign_delete(RDebug *dbg, ut64 code);
 R_API bool r_debug_excep_ign(RDebug *dbg, ut64 code);
+
+/* profiler */
+R_API void r_debug_profiler_free(RDebugProfiler *profiler);
 
 /* plugin pointers */
 extern RDebugPlugin r_debug_plugin_native;

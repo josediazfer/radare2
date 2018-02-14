@@ -10,7 +10,7 @@
 #define MAX_LUA_MEM_READ_LENGTH	(4*1024*1024)
 
 #if __WINDOWS__
-bool w32_break_proc(void *);
+void w32_break_proc(void *);
 #endif
 
 R_LIB_VERSION(r_debug);
@@ -52,7 +52,7 @@ static void r_debug_profiler_bt(RDebug *dbg, RDebugProfilerThread *th)
 	if (th->bt_match) {
 		RListIter *iter, *iter2;
 		RDebugFrame *frame;
-eprintf ("FRAMES\n");fflush(stderr);
+
 		iter2 = th->bt_match->tail;
 		r_list_foreach_prev (frames_list, iter, frame) {
 			RDebugFrame *frame2;
@@ -61,6 +61,7 @@ eprintf ("FRAMES\n");fflush(stderr);
 				break;
 			}
 			frame2 = iter2->data;
+			//eprintf ("%d frame %llx %llx\n", th->tid, frame->addr, frame2->addr); fflush(stderr);
 			if (frame->addr != frame2->addr) {
 				break;
 			}
@@ -68,14 +69,15 @@ eprintf ("FRAMES\n");fflush(stderr);
 			bt_match_depth++;
 		}
 		if (!bt_match_depth) {
-			bt_match_depth = r_list_length (frames_list);
+			th->bt_match_depth = r_list_length (frames_list);
 			r_list_free (th->bt_match);
 			th->bt_match = frames_list;
-		} else if (bt_match_depth < th->bt_match_depth) {
+		} else if (!th->bt_match_depth || bt_match_depth < th->bt_match_depth) {
 			th->bt_match_depth = bt_match_depth;
 		}
 	} else {
 		th->bt_match = frames_list;
+		th->bt_match_depth = 0;
 	}
 	dbg->tid = old_tid;
 	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
@@ -88,6 +90,7 @@ static void r_debug_profiler_th(RDebug *dbg) {
 	RDebugPid *th;
 	RDebugProfilerThread *th_pr;
 	RList *th_list_app = NULL;
+	ut64 time;
 
 	profiler->pid = dbg->pid;
 	if (!profiler->th_list) {
@@ -99,6 +102,7 @@ static void r_debug_profiler_th(RDebug *dbg) {
 	th_pr_list = profiler->th_list;
 	profiler->pid = dbg->pid;
 	th_list = dbg->h->threads (dbg, dbg->pid);
+	time = r_sys_now ();
 	r_list_foreach (th_list, iter, th) {
 		bool exists = false;
 		r_list_foreach (th_pr_list, iter2, th_pr) {
@@ -115,11 +119,18 @@ static void r_debug_profiler_th(RDebug *dbg) {
 			}
 			th_pr->tid = th->pid;
 			if (!th_list_app) {
-				th_list_app = r_list_newf ((RListFree)free);
+				th_list_app = r_list_new ();
 			}
 			r_list_append (th_list_app, th_pr);
 		}
+		th_pr->time = time;
 		r_debug_profiler_bt (dbg, th_pr);
+	}
+	// remove profile info from threads that do not exist
+	r_list_foreach_safe (th_pr_list, iter, iter2, th_pr) {
+		if (th_pr->time != time) {
+			r_list_delete (th_pr_list, iter);
+		}
 	}
 err_r_debug_profiler_thread:
 	/* append new threads */
@@ -140,8 +151,7 @@ static int r_debug_profiler_entry(RThread *th) {
 	dbg->h->profiling(dbg, enabled);
 	if (is_profiler_bt) {
 #if __WINDOWS__
-		if (enabled) {
-			r_debug_thread_suspend (dbg, -1);
+		if (enabled && r_debug_thread_suspend (dbg, -1)) {
 			r_debug_profiler_th (dbg);
 			r_debug_thread_resume (dbg, -1);
 		}
@@ -173,7 +183,7 @@ static void r_debug_profiler_stop(RDebug *dbg) {
 	}
 }
 
-static void r_debug_profiler_free(RDebugProfiler *profiler) {
+R_API void r_debug_profiler_free(RDebugProfiler *profiler) {
 	r_list_free (profiler->th_list);
 	profiler->th_list = NULL;
 }
@@ -1994,9 +2004,6 @@ R_API int r_debug_drx_unset(RDebug *dbg, int idx) {
 }
 
 R_API ut64 r_debug_get_baddr(RDebug *dbg, const char *file) {
-	char *abspath;
-	RListIter *iter;
-	RDebugMap *map;
 	if (!dbg || !dbg->iob.io || !dbg->iob.io->desc) {
 		return 0LL;
 	}

@@ -915,10 +915,9 @@ static void cmd_dPt(RCore *core, const char *input) {
 		RListIter *iter;
 		RDebugFrame *frame;
 		int idx = 1;
-		int bt_match_depth;
-		int bt_len;
+		int bt_match_depth, bt_len;
 
-		if (tid != -1 && tid != th->tid) {
+		if ((tid != -1 && tid != th->tid) || r_list_length (th->bt_match) <= 0) {
 			continue;
 		}
 		r_cons_printf ("  tid %d\n"
@@ -927,12 +926,15 @@ static void cmd_dPt(RCore *core, const char *input) {
 		list = th->bt_match;
 		bt_match_depth = th->bt_match_depth;
 		bt_len = r_list_length (list);
+		//eprintf ("bt_match_depth: %d %d %d\n", bt_match_depth, bt_len, th->tid);
 		r_list_foreach (list, iter, frame) {
-			if (bt_len <= bt_match_depth) {
-				print_frame_entry (core, frame, idx++);
+			if (bt_match_depth && bt_len > bt_match_depth) {
+				bt_len--;
+				continue;
 			}
-			bt_len--;
+			print_frame_entry (core, frame, idx++);
 		}
+		r_cons_printf ("\n");
 	}
 	r_flag_space_pop (core->flags);
 }
@@ -941,6 +943,9 @@ static void cmd_debug_profiler(RCore *core, const char *input) {
 	switch (input[1]) {
 	case 't': // "dPt"
 		cmd_dPt (core, input + 2);
+		break;
+	case '-':
+		r_debug_profiler_free (&core->dbg->profiler);
 		break;
 	default:
 		r_core_cmd_help (core, help_msg_dPt);

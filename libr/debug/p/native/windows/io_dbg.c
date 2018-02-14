@@ -44,7 +44,7 @@ static int debug_os_read_at(RIOW32Dbg *dbg_io, void *buf, int len, ut64 addr) {
 			if (map_len != len && map_len > 0 &&
 					ReadProcessMemory (dbg_io->h_proc, (PVOID)(SIZE_T)addr,
 						buf, map_len, (SIZE_T *)&map_len)) {
-				eprintf ("len len:%d\n", len);
+				//eprintf ("len len:%d\n", len);
 				ret_len = map_len;
 			}
 			//r_list_free (maps_list);
