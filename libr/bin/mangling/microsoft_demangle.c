@@ -122,7 +122,7 @@ int copy_string(STypeCodeStr *type_code_str, char *str_for_copy, unsigned int co
 	if (str_for_copy_len > free_space) {
 		return 0;
 	}
-	if (free_space > str_for_copy_len) {
+	if (free_space < str_for_copy_len) {
 		int newlen = ((type_code_str->type_str_len + str_for_copy_len) << 1) + 1;
 		if (newlen < 1) {
 			R_FREE (type_code_str->type_str);
@@ -993,8 +993,6 @@ static int init_type_code_str_struct(STypeCodeStr *type_coder_str) {
 		res = 0;
 		return 0;
 	}
-	memset (type_coder_str->type_str, 0, TYPE_STR_LEN * sizeof(char));
-
 	type_coder_str->curr_pos = 0; // strlen ("unknown type");
 //	strncpy(type_coder_str->type_str, "unknown_type", type_coder_str->curr_pos);
 
