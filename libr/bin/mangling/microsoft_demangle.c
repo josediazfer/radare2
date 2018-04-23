@@ -984,19 +984,9 @@ static void init_state_struct(SStateInfo *state, char *buff_for_parsing) {
 ///////////////////////////////////////////////////////////////////////////////
 static int init_type_code_str_struct(STypeCodeStr *type_coder_str) {
 #define TYPE_STR_LEN 1024
-	int res = 1; // 1 - initialization finish with success, else - 0
-
 	type_coder_str->type_str_len = TYPE_STR_LEN;
-
 	type_coder_str->type_str = (char *) calloc (TYPE_STR_LEN, sizeof (char));
-	if (!type_coder_str->type_str) {
-		res = 0;
-		return 0;
-	}
-	type_coder_str->curr_pos = 0; // strlen ("unknown type");
-//	strncpy(type_coder_str->type_str, "unknown_type", type_coder_str->curr_pos);
-
-	return res;
+	return type_coder_str->type_str? 1 : 0;
 #undef TYPE_STR_LEN
 }
 
