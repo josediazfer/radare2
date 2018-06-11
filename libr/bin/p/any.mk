@@ -6,7 +6,9 @@ TARGET_ANY=bin_any.${EXT_SO}
 ALL_TARGETS+=${TARGET_ANY}
 
 include $(SHLR)/zip/deps.mk
-
+ifeq (${OSTYPE},windows)
+LDFLAGS+=-lwinhttp
+endif
 ${TARGET_ANY}: ${OBJ_ANY}
 ifeq ($(CC),cccl)
 	${CC} $(call libname,bin_any) $(DL_LIBS) ${CFLAGS} $(OBJ_ANY) $(LINK) $(LDFLAGS) \

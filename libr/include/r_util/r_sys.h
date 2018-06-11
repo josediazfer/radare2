@@ -27,7 +27,8 @@ R_API const char *r_sys_arch_str(int arch);
 R_API int r_sys_arch_id(const char *arch);
 R_API bool r_sys_arch_match(const char *archstr, const char *arch);
 R_API RList *r_sys_dir(const char *path);
-R_API void r_sys_perror_str(const char *fun);
+R_API void r_sys_perror_str(const char *fun, const char *msg);
+R_API void r_sys_perror_strf(const char *fun, const char *fmt, ...);
 #if __WINDOWS__ && !defined(__CYGWIN__)
 #define r_sys_mkdir_failed() (GetLastError () != ERROR_ALREADY_EXISTS)
 #else

@@ -599,6 +599,7 @@ static void finish_pdb_parse(R_PDB *pdb) {
 	// end of free pdb->streams2
 
 	free (pdb->stream_map);
+	free (pdb->filename);
 	r_buf_free (pdb->buf);
 
 // fclose(pdb->fp);
@@ -1140,7 +1141,8 @@ static void print_gvars(R_PDB *pdb, ut64 img_base, int format) {
 			case 1:
 			case '*':
 			case 'r':
-				pdb->cb_printf ("f pdb.%s = 0x%"PFMT64x " # %d %s\n",
+				pdb->cb_printf ("f pdb.%s.%s = 0x%"PFMT64x " # %d %s\n",
+					pdb->filename,
 					name,
 					(ut64) (img_base + omap_remap ((omap)? (omap->stream): 0,
 							gdata->offset + sctn_header->virtual_address)),
@@ -1207,6 +1209,7 @@ R_API bool init_pdb_parser(R_PDB *pdb, const char *filename) {
 	R_FREE (signature);
 
 	pdb->pdb_streams = r_list_new ();
+	pdb->filename = strdup (r_file_basename (filename));
 	pdb->stream_map = 0;
 	pdb->finish_pdb_parse = finish_pdb_parse;
 	pdb->print_types = print_types;

@@ -9,6 +9,8 @@
 #include <stdarg.h>
 #if __UNIX__ || __CYGWIN__
 #include <signal.h>
+#elif __WINDOWS__ && !__CYGWIN__
+#include <wincon.h>
 #endif
 
 #define COUNT_LINES 1
@@ -193,6 +195,12 @@ R_API void r_cons_break_push(RConsBreak cb, void *user) {
 #endif
 			I.breaked = false;
 		}
+#if __WINDOWS__ && !__CYGWIN__
+		HANDLE h_cons_in = GetStdHandle (STD_INPUT_HANDLE);
+
+		GetConsoleMode (h_cons_in, &I.break_mode);
+		SetConsoleMode (h_cons_in, I.break_mode | ENABLE_PROCESSED_INPUT);
+#endif
 		//save the actual state
 		b->event_interrupt = I.event_interrupt;
 		b->data = I.data;
@@ -220,6 +228,12 @@ R_API void r_cons_break_pop() {
 #endif
 			I.breaked = false;
 		}
+
+#if __WINDOWS__ && !__CYGWIN__
+		HANDLE h_cons_in = GetStdHandle (STD_INPUT_HANDLE);
+
+		SetConsoleMode (h_cons_in, I.break_mode);
+#endif
 	}
 }
 

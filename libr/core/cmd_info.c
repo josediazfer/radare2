@@ -55,6 +55,8 @@ static const char *help_msg_id[] = {
 	"idp", " [file.pdb]", "Load pdb file information",
 	"idpi", " [file.pdb]", "Show pdb file information",
 	"idpd", "", "Download pdb file on remote server",
+	"idpf", "[load_addr] [filename]", "Download or load pdb file on remote server of a module or executable file",
+	"idpfc", "filename", "Check if module or executable file have a pdb file downloaded",
 	NULL
 };
 
@@ -301,6 +303,109 @@ static void playMsg(RCore *core, const char *n, int len) {
 	}
 }
 
+static void cmd_info_pdb_cache_file(SPDBOptions *pdbopts, const char *input) {
+	const char *filename;
+	RCore *core = NULL;
+	RCoreFile *file = NULL;
+	char *pdb_file = NULL;
+	int i = 0;
+
+	if (!pdbopts->cache_dir || !*pdbopts->cache_dir) {
+		return;
+	}
+	while(input[i] == ' ') {
+		i++;
+	}
+	filename = input + i;
+	core = r_core_new ();
+	file = r_core_file_open (core, filename, R_IO_READ, 0);
+	if (!file) {
+		eprintf ("Error while opening '%s'", filename);
+		goto err_cmd_info_pdb_cache_file;
+	}
+	core->bin->verbose = 0;
+	core->bin->filter_rules = 0;
+	r_core_bin_load (core, filename, 0);
+	if((pdb_file = r_bin_pdb_cached_get (core, pdbopts))) {
+		r_cons_printf ("%s\n", pdb_file);
+		free (pdb_file);
+	}
+err_cmd_info_pdb_cache_file:
+	r_core_file_close (core, file);
+	r_core_free (core);
+}
+
+static bool cmd_info_pdb_file(int mode, SPDBOptions *pdbopts, const char *input_) {
+	char *input = strdup (input_);
+	char *baddr_str = NULL;
+	char *filename = NULL, *pdb_file = NULL;
+	RCoreFile *file = NULL;
+	bool ret = false;
+	char *basename = NULL;
+	int i = 0;
+	RCore *core = NULL;
+
+	if (!pdbopts->cache_dir || !*pdbopts->cache_dir) {
+		return false;
+	}
+	i = mode != 0? 1 : 0;
+	while(input[i] == ' ') {
+		i++;
+	}
+	baddr_str = strchr (input + i, ' ');
+	if (!baddr_str) {
+		filename = input + i;
+	} else {
+		*baddr_str = '\0';
+		filename = baddr_str + 1;
+		baddr_str = input + i;
+	}
+	if (!baddr_str && !*filename) {
+		eprintf ("Error missing base address and/or filename\n");
+		goto err_cmd_info_pdb_file;
+	} else if (baddr_str && !*filename) {
+		eprintf ("Error missing filename\n");
+		goto err_cmd_info_pdb_file;
+	}
+	core = r_core_new ();
+	file = r_core_file_open (core, filename, R_IO_READ, 0);
+	if (!file) {
+		eprintf ("Error while opening '%s'", filename);
+		goto err_cmd_info_pdb_file;
+	}
+	core->bin->verbose = 0;
+	core->bin->filter_rules = 0;
+	r_core_bin_load (core, filename, 0);
+	if (!baddr_str && filename) {
+		if (r_bin_pdb_download (core, 0, NULL, pdbopts) > 0) {
+			eprintf ("Error while downloading pdb file");
+			goto err_cmd_info_pdb_file;
+		}
+	} else if ((pdb_file = r_bin_pdb_cached_get (core, pdbopts))) {
+		ut64 baddr = r_num_math (core->num, baddr_str);
+
+		r_core_free (core);
+		core = r_core_new ();
+		r_core_file_close (core, file);
+		file = r_core_file_open (core, pdb_file, R_IO_READ, baddr);
+		if (!file) {
+			eprintf ("Error while opening '%s'", pdb_file);
+			goto err_cmd_info_pdb_file;
+		}
+		r_core_bin_load (core, pdb_file, baddr);
+		RCoreBinFilter filter = { 0 };
+		r_core_bin_info (core, R_CORE_BIN_ACC_PDB, mode, true, &filter, NULL);
+	}
+	ret = true;
+err_cmd_info_pdb_file:
+	r_core_file_close (core, file);
+	free (basename);
+	free (input);
+	free (pdb_file);
+	r_core_free (core);
+	return ret;
+}
+
 static int cmd_info(void *data, const char *input) {
 	RCore *core = (RCore *) data;
 	bool newline = r_config_get_i (core->config, "scr.interactive");
@@ -515,6 +620,10 @@ static int cmd_info(void *data, const char *input) {
 				bool file_found;
 				char *filename;
 
+				pdbopts.user_agent = (char*) r_config_get (core->config, "pdb.useragent");
+				pdbopts.symbol_server = (char*) r_config_get (core->config, "pdb.server");
+				pdbopts.extract = r_config_get_i (core->config, "pdb.extract");
+				pdbopts.cache_dir = (char *) r_config_get (core->config, "pdb.cachedir");
 				switch (input[2]) {
 				case ' ':
 					r_core_cmdf (core, ".idpi* %s", input + 3);
@@ -524,14 +633,27 @@ static int cmd_info(void *data, const char *input) {
 					r_core_cmd0 (core, ".idpi*");
 					break;
 				case 'd':
-					pdbopts.user_agent = (char*) r_config_get (core->config, "pdb.useragent");
-					pdbopts.symbol_server = (char*) r_config_get (core->config, "pdb.server");
-					pdbopts.extract = r_config_get_i (core->config, "pdb.extract");
-					int r = r_bin_pdb_download (core, 0, NULL, &pdbopts);
-					if (r > 0) {
+					{
+					char *pdb_file;
+
+					/* if is already pdb file in the cache then don´t download it */
+					if ((pdb_file = r_bin_pdb_cached_get (core, &pdbopts))) {
+						eprintf ("pdb file already exists in the pdb cache directory");
+					} else if (r_bin_pdb_download (core, 0, NULL, &pdbopts) > 0) {
 						eprintf ("Error while downloading pdb file");
 					}
+					free (pdb_file);
 					input++;
+					}
+					break;
+				case 'f': /* "idpf" */
+					if (input[3] == 'c') {
+						cmd_info_pdb_cache_file (&pdbopts, &input[4]);
+					} else {
+						cmd_info_pdb_file (mode, &pdbopts, &input[3]);
+					}
+					newline = false;
+					while (input[2]) input++;
 					break;
 				case 'i':
 					info = r_bin_get_info (core->bin);
@@ -543,30 +665,38 @@ static int cmd_info(void *data, const char *input) {
 						filename = strdup (filename);
 						file_found = r_file_exists (filename);
 					} else {
+						char *pdb_cached;
+
 						/* Autodetect local file */
 						if (!info || !info->debug_file_name) {
 							eprintf ("Cannot get file's debug information");
 							break;
 						}
-						// Check raw path for debug filename
-						file_found = r_file_exists (info->debug_file_name);
-						if (file_found) {
-							filename = strdup (info->debug_file_name);
-						} else {
-							// Check debug filename basename in current directory
-							char* basename = (char*) r_file_basename (info->debug_file_name);
-							file_found = r_file_exists (basename);
-							if (!file_found) {
-								// Check if debug file is in file directory
-								char* dir = r_file_dirname (core->bin->cur->file);
-								filename = r_str_newf ("%s/%s", dir, basename);
-								file_found = r_file_exists (filename);
+						// Check cache directory for debug filename
+						pdb_cached = r_bin_pdb_cached_get (core, &pdbopts);
+						if (!pdb_cached) {
+							// Check raw path for debug filename
+							file_found = r_file_exists (info->debug_file_name);
+							if (file_found) {
+								filename = strdup (info->debug_file_name);
 							} else {
-								filename = strdup (basename);
+								// Check debug filename basename in current directory
+								char* basename = (char*) r_file_basename (info->debug_file_name);
+								file_found = r_file_exists (basename);
+								if (!file_found) {
+									// Check if debug file is in file directory
+									char* dir = r_file_dirname (core->bin->cur->file);
+									filename = r_str_newf ("%s/%s", dir, basename);
+									file_found = r_file_exists (filename);
+								} else {
+									filename = strdup (basename);
+								}
 							}
+						} else {
+							filename = pdb_cached;
+							file_found = true;
 						}
 					}
-
 					if (!file_found) {
 						eprintf ("File '%s' not found", filename);
 						free (filename);
@@ -604,8 +734,8 @@ static int cmd_info(void *data, const char *input) {
 			}
 			break;
 		case 'i': {
-				  RBinObject *obj = r_bin_cur_object (core->bin);
-				  RBININFO ("imports", R_CORE_BIN_ACC_IMPORTS, NULL,
+				RBinObject *obj = r_bin_cur_object (core->bin);
+				RBININFO ("imports", R_CORE_BIN_ACC_IMPORTS, NULL,
 						  obj? r_list_length (obj->imports): 0);
 			  }
 			  break;
@@ -747,14 +877,14 @@ static int cmd_info(void *data, const char *input) {
 								}
 							}
 						} else if (input[1] == 'c' && obj) { // "icc"
-                					mode = R_CORE_BIN_CLASSDUMP;
+							mode = R_CORE_BIN_CLASSDUMP;
 							RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (obj->classes));
 							input = " ";
 						} else {
 							RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (obj->classes));
 						}
 					}
-        			}
+				}
 			} else {
 				RBinObject *obj = r_bin_cur_object (core->bin);
 				int len = obj? r_list_length (obj->classes): 0;

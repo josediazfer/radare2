@@ -39,7 +39,7 @@
 #endif
 
 static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled);
-static void load_mod_pdb(RDebug *dbg, char *path);
+static void load_mod_pdb(RDebug *dbg, RDebugW32Proc *proc, char *path, ut64 base_addr);
 static void load_mod_info(RDebug *dbg, RDebugW32Proc *proc, char *name, char *path, ut64 base_addr);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
@@ -588,9 +588,10 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 		if (proc->state == PROC_STATE_STARTING) {
 			eprintf ("(%d) loading symbols for %s at %08"PFMT64x"\n", proc->pid, lib->path, lib->base_addr);
 		}
-		load_mod_pdb (dbg, lib->path);
+		load_mod_pdb (dbg, proc, lib->path, lib->base_addr);
 		load_mod_info (dbg, proc, lib->name, lib->path, lib->base_addr);
 	} else {
+		eprintf ("none lib_name %s %x\n", lib->name, h_file);
 		free (path);
 	}
 }
@@ -605,27 +606,26 @@ static void proc_lib_names_resolv(RDebug *dbg, RDebugW32Proc *proc) {
 	}
 }
 
-static void load_mod_pdb(RDebug *dbg, char *path) {
+static void load_mod_pdb(RDebug *dbg, RDebugW32Proc *proc, char *path, ut64 base_addr) {
 	/* Check if autoload PDB is set, and load PDB information if yes */
 	RCore* core = dbg->corebind.core;
 	bool autoload_pdb = dbg->corebind.cfggeti (core, "pdb.autoload");
 	if (autoload_pdb) {
-		char* o_res = dbg->corebind.cmdstrf (core, "o %s", path);
-		// File exists since we loaded it, however the "o" command fails sometimes hence the while loop
-		while (*o_res == 0) {
-			o_res = dbg->corebind.cmdstrf (core, "o %s", path);
-		}
-		int fd = atoi (o_res);
-		dbg->corebind.cmdf (core, "o %d", fd);
-		char* pdb_path = dbg->corebind.cmdstr (core, "i~pdb");
-		if (*pdb_path == 0) {
-			eprintf ("Failure...\n");
-			dbg->corebind.cmd (core, "i");
+		char *cmd = r_str_newf ("idpfc %s", path);
+
+		if (!cmd) {
+			perror ("load_mod_pdb");
 		} else {
-			pdb_path = strchr (pdb_path, ' ') + 1;
-			dbg->corebind.cmdf (core, ".idp* %s", pdb_path);
+			char *pdb_file = dbg->corebind.cmdstr (core, cmd);
+
+			free (cmd);
+			if (pdb_file && *pdb_file) {
+				eprintf ("(%d) loading debug info for %s\n", proc->pid, path);
+				dbg->corebind.cmdf (core, ".idpf* 0x%08"PFMT64x" %s",
+						base_addr, path);
+			}
+			free (pdb_file);
 		}
-		dbg->corebind.cmdf (core, "o-%d", fd);
 	}
 }
 
@@ -639,7 +639,7 @@ static void load_mod_info(RDebug *dbg, RDebugW32Proc *proc, char *name, char *pa
 		r_name_filter (escaped_name, 0);
 		dbg->corebind.cmdf (core, "f mod.%s = 0x%08"PFMT64x,
 				escaped_name, base_addr);
-		dbg->corebind.cmdf (core, ".!rabin2 -rsB 0x%08"PFMT64x" \"%s\" 2> nil",
+		dbg->corebind.cmdf (core, ".!rabin2 -rsB 0x%08"PFMT64x" \"%s\" 2> nul",
 				base_addr, escaped_path);
 	}
 	free (escaped_path);

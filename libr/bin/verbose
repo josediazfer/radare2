@@ -1,0 +1,2561 @@
+bin.c:#define bprintf if(binfile->rbin->verbose)eprintf
+bin.c:	r_io_bind (io, &bin->iob);
+bin.c:		if (bf->rbin->maxstrbuf && size && size > bf->rbin->maxstrbuf) {
+bin.c:			if (bf->rbin->verbose) {
+bin.c:	if (binfile->rbin->minstrlen > 0) {
+bin.c:		minlen = binfile->rbin->minstrlen;
+bin.c:	//if (bin->filter_rules & (R_BIN_REQ_SYMBOLS | R_BIN_REQ_IMPORTS)) {
+bin.c:				if (bin->filter) {
+bin.c:		if (bin->filter) {
+bin.c:	if (bin->filter_rules & (R_BIN_REQ_RELOCS | R_BIN_REQ_IMPORTS)) {
+bin.c:	if (bin->filter_rules & R_BIN_REQ_STRINGS) {
+bin.c:		if (bin->debase64) {
+bin.c:	if (bin->filter_rules & R_BIN_REQ_CLASSES) {
+bin.c:		if (bin->filter) {
+bin.c:	if (bin->filter_rules & (R_BIN_REQ_SYMBOLS | R_BIN_REQ_IMPORTS)) {
+bin.c:	RIOBind *iob = &(bin->iob);
+bin.c:		bin->io_owned = true;
+bin.c:		r_io_bind (iob->io, &bin->iob);		//memleak?
+bin.c:		iob = &bin->iob;
+bin.c:	bin->rawstr = rawstr;
+bin.c:		memset (&bin->iob, 0, sizeof (bin->iob));
+bin.c:		bin->io_owned = false;
+bin.c:	RIOBind *iob = &(bin->iob);
+bin.c:	RIOBind *iob = &(bin->iob);
+bin.c:		// load the bin-properly.  Many of the plugins require all
+bin.c:	RIOBind *iob = &(bin->iob);
+bin.c:	bin->file = fname;
+bin.c:	if (!r_list_length (bin->binfiles)) {
+bin.c:		r_list_foreach (bin->binxtrs, it, xtr) {
+bin.c:						fd, bin->rawstr);
+bin.c:			bin, fname, buf_bytes, sz, file_sz, bin->rawstr,
+bin.c:		//r_list_delete_data (bin->binfiles, a);
+bin.c:		//r_list_delete_data (bin->binfiles, a);
+bin.c:	if (bin) bin->cur = NULL;
+bin.c:	r_id_pool_kick_id (a->rbin->file_ids, a->id);
+bin.c:				       fd, xtrname, bin->sdb, steal_ptr);
+bin.c:		r_list_append (bin->binfiles, bf);
+bin.c:		if (!bin->cur) {
+bin.c:			bin->cur = bf;
+bin.c:		r_list_foreach (bin->plugins, it, plugin) {
+bin.c:	r_list_foreach (bin->plugins, it, plugin) {
+bin.c:	r_list_foreach (bin->binxtrs, it, xtr) {
+bin.c:	if (!r_id_pool_grab_id (bin->file_ids, &binfile->id)) {
+bin.c:	if (bin->force) {
+bin.c:		plugin = r_bin_get_binplugin_by_name (bin, bin->force);
+bin.c:			r_list_delete_data (bin->binfiles, bf);
+bin.c:		foo->init (bin->user);
+bin.c:	r_list_foreach (bin->plugins, it, plugin) {
+bin.c:	r_list_append (bin->plugins, plugin);
+bin.c:		foo->init (bin->user);
+bin.c:	r_list_foreach (bin->binxtrs, it, xtr) {
+bin.c:	r_list_append (bin->binxtrs, foo);
+bin.c:	if (bin->io_owned) {
+bin.c:		r_io_free (bin->iob.io);
+bin.c:	bin->file = NULL;
+bin.c:	free (bin->force);
+bin.c:	free (bin->srcdir);
+bin.c:	r_list_free (bin->binfiles);
+bin.c:	r_list_free (bin->binxtrs);
+bin.c:	r_list_free (bin->plugins);
+bin.c:	sdb_free (bin->sdb);
+bin.c:	r_id_pool_free (bin->file_ids);
+bin.c:		bin->cb_printf ("%s\n", bp->name);
+bin.c:		bin->cb_printf (
+bin.c:		bin->cb_printf ("Name: %s\n", bp->name);
+bin.c:		bin->cb_printf ("Description: %s\n", bp->desc);
+bin.c:			bin->cb_printf ("License: %s\n", bp->license);
+bin.c:			bin->cb_printf ("Version: %s\n", bp->version);
+bin.c:			bin->cb_printf ("Author: %s\n", bp->author);
+bin.c:		bin->cb_printf ("%s\n", bx->name);
+bin.c:		bin->cb_printf (
+bin.c:		bin->cb_printf ("Name: %s\n", bx->name);
+bin.c:		bin->cb_printf ("Description: %s\n", bx->desc);
+bin.c:			bin->cb_printf ("License: %s\n", bx->license);
+bin.c:		r_list_foreach (bin->plugins, it, bp) {
+bin.c:			bin->cb_printf ("%s\n", bp->name);
+bin.c:		r_list_foreach (bin->binxtrs, it, bx) {
+bin.c:			bin->cb_printf ("%s\n", bx->name);
+bin.c:		bin->cb_printf ("{\"bin\":[");
+bin.c:		r_list_foreach (bin->plugins, it, bp) {
+bin.c:			bin->cb_printf (
+bin.c:		bin->cb_printf ("],\"xtr\":[");
+bin.c:		r_list_foreach (bin->binxtrs, it, bx) {
+bin.c:			bin->cb_printf (
+bin.c:		bin->cb_printf ("]}\n");
+bin.c:		r_list_foreach (bin->plugins, it, bp) {
+bin.c:			bin->cb_printf ("bin  %-11s %s (%s) %s %s\n",
+bin.c:		r_list_foreach (bin->binxtrs, it, bx) {
+bin.c:			bin->cb_printf ("xtr  %-11s %s (%s)\n", bx->name,
+bin.c:	r_list_foreach (bin->plugins, it, bp) {
+bin.c:	r_list_foreach (bin->binxtrs, it, bx) {
+bin.c:	if (bin->minstrlen <= 0) {
+bin.c:	a->rawstr = bin->rawstr;
+bin.c:		o->strings = get_strings (a, bin->minstrlen, 0);
+bin.c:	if (bin->debase64) {
+bin.c:	bin->force = NULL;
+bin.c:	bin->filter_rules = UT64_MAX;
+bin.c:	bin->sdb = sdb_new0 ();
+bin.c:	bin->cb_printf = (PrintfCallback)printf;
+bin.c:	bin->plugins = r_list_newf ((RListFree)plugin_free);
+bin.c:	bin->minstrlen = 0;
+bin.c:	bin->want_dbginfo = true;
+bin.c:	bin->cur = NULL;
+bin.c:	bin->io_owned = false;
+bin.c:	bin->binfiles = r_list_newf ((RListFree)r_bin_file_free);
+bin.c:	bin->binxtrs = r_list_new ();
+bin.c:	bin->binxtrs->free = free;
+bin.c:	bin->file_ids = r_id_pool_new (0, 0xffffffff);
+bin.c:			if (bin->cur) {
+bin.c:				bin->cur->curplugin = plugin;
+bin.c:	r_list_foreach (bin->binfiles, iter, binfile) {
+bin.c:	r_list_foreach (bin->binfiles, iter, binfile) {
+bin.c:	r_list_foreach (bin->binfiles, iter, binfile) {
+bin.c:				bin->cb_printf ("%s\n", arch);
+bin.c:				bin->cb_printf (
+bin.c:				bin->cb_printf ("%03i 0x%08" PFMT64x
+bin.c:		bin->cb_printf ("\"bins\":[");
+bin.c:				bin->cb_printf ("%s\n", arch);
+bin.c:				bin->cb_printf ("%s{\"arch\":\"%s\",\"bits\":%d,"
+bin.c:				bin->cb_printf ("%03i 0x%08" PFMT64x " %d %s_%i %s\n", i,
+bin.c:					bin->cb_printf ("%s\n", arch);
+bin.c:					bin->cb_printf ("%s{\"arch\":\"%s\",\"bits\":%d,"
+bin.c:					bin->cb_printf ("%03i 0x%08" PFMT64x " %d %s_%d\n", i,
+bin.c:					bin->cb_printf ("%s\n", arch);
+bin.c:					bin->cb_printf ("%s{\"arch\":\"unk_%d\",\"bits\":%d,"
+bin.c:					bin->cb_printf ("%03i 0x%08" PFMT64x " %d unk_0\n", i,
+bin.c:		bin->cb_printf ("]");
+bin.c:	bin->user = user;
+bin.c:	if (!bin || !bin->cur) {
+bin.c:	if (bin->cur->o && bin->cur->o->info && bin->cur->o->info->arch) {
+bin.c:		if (bin->cur->o->info->bits == 16) {
+bin.c:			RBinSection *s = r_bin_get_section_at (bin->cur->o, paddr, false);
+bin.c:				if (!strcmp (bin->cur->o->info->arch, "arm") && (vaddr & 1)) {
+bin.c:	return r_binfile_get_vaddr (bin->cur, paddr, vaddr);
+bin.c:		counter = r_list_length (bin->binfiles);
+bin.c:		r_list_purge (bin->binfiles);
+bin.c:		bin->cur = NULL;
+bin.c:		r_list_foreach (bin->binfiles, iter, bf) {
+bin.c:					bin->cur = NULL;
+bin.c:				r_list_delete (bin->binfiles, iter);
+bin.c:		r_list_foreach (bin->binfiles, iter, bf) {
+bin.c:	r_list_foreach (bin->binfiles, iter, bf) {
+bin.c:	r_list_foreach (bin->binfiles, iter, bf) {
+bin.c:	bin->file = bf->file;
+bin.c:	bin->cur = bf;
+bin.c:	bin->narch = bf->narch;
+bin.c:	if (bin->minstrlen < 1) {
+bin.c:		bin->minstrlen = plugin? plugin->minstrlen: bin->minstrlen;
+bin.c:	return bin? bin->cur: NULL;
+bin.c:	free (bin->force);
+bin.c:	bin->force = (name && *name)? strdup (name): NULL;
+bin.c:	if (!bin || !(iob = &(bin->iob))) {
+bin.c:	if (!bin || !(iob = &(bin->iob))) {
+bin.c:	bin->filter_rules = rules;
+bin_write.c:		return plugin->write->scn_resize (bin->cur, name, size);
+bin_write.c:		return plugin->write->scn_perms (bin->cur, name, perms);
+bin_write.c:		return plugin->write->rpath_del (bin->cur);
+bin_write.c:		return plugin->write->entry (bin->cur, addr);
+bin_write.c:		return plugin->write->addlib (bin->cur, lib);
+d/trx:# offset[3] = bin-Header
+dbginfo.c:		if (o && addr >= baddr && addr < baddr + bin->cur->o->size) {
+dbginfo.c:					bin->cur, addr, file, len, line);
+dbginfo.c:	if (!bin || !bin->cur) {
+dbginfo.c:		char *file_line = sdb_get (bin->cur->sdb_addrinfo, key, 0);
+dbginfo.c:		if (bin->srcdir && *bin->srcdir) {
+dbginfo.c:			char *nf = r_str_newf ("%s/%s", bin->srcdir, slash? slash + 1: file);
+demangle.c:	r_list_foreach (bin->plugins, it, plugin) {
+demangle.c:		r_list_foreach (bin->plugins, it, plugin) {
+demangle.c:	case R_BIN_NM_SWIFT: return r_bin_demangle_swift (str, bin->demanglercmd);
+format/bflt/bflt.c:        	addr->paddr = bin->hdr->entry;
+format/bflt/bflt.c:	len = r_buf_read_at (bin->b, 0, bhdr, BFLT_HDR_SIZE);
+format/bflt/bflt.c:	bin->hdr = p_hdr;
+format/dex/dex.c:		r_buf_read_at (bin->b, 4, version, 3);
+format/dex/dex.c:	bin->size = buf->length;
+format/dex/dex.c:	bin->b = r_buf_new ();
+format/dex/dex.c:	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)) {
+format/dex/dex.c:	if (bin->size < sizeof (struct dex_header_t)) {
+format/dex/dex.c:	bufptr = bin->b->buf;
+format/dex/dex.c:	dexhdr = &bin->header;
+format/dex/dex.c:	if (bin->size < 112) {
+format/dex/dex.c:	bin->strings = (ut32 *) calloc (dexhdr->strings_size + 1, sizeof (ut32));
+format/dex/dex.c:	if (!bin->strings) {
+format/dex/dex.c:	if (dexhdr->strings_size > bin->size) {
+format/dex/dex.c:		free (bin->strings);
+format/dex/dex.c:		if (offset + 4 > bin->size) {
+format/dex/dex.c:			free (bin->strings);
+format/dex/dex.c:		bin->strings[i] = r_read_le32 (bufptr + offset);
+format/dex/dex.c:	if (dexhdr->class_offset + classes_size >= bin->size) {
+format/dex/dex.c:		classes_size = bin->size - dexhdr->class_offset;
+format/dex/dex.c:	bin->classes = (struct dex_class_t *) calloc (dexhdr->class_size, sizeof (struct dex_class_t));
+format/dex/dex.c:		if (offset + 32 > bin->size) {
+format/dex/dex.c:			free (bin->strings);
+format/dex/dex.c:			free (bin->classes);
+format/dex/dex.c:		bin->classes[i].class_id = r_read_le32 (bufptr + offset + 0);
+format/dex/dex.c:		bin->classes[i].access_flags = r_read_le32 (bufptr + offset + 4);
+format/dex/dex.c:		bin->classes[i].super_class = r_read_le32 (bufptr + offset + 8);
+format/dex/dex.c:		bin->classes[i].interfaces_offset = r_read_le32 (bufptr + offset + 12);
+format/dex/dex.c:		bin->classes[i].source_file = r_read_le32 (bufptr + offset + 16);
+format/dex/dex.c:		bin->classes[i].anotations_offset = r_read_le32 (bufptr + offset + 20);
+format/dex/dex.c:		bin->classes[i].class_data_offset = r_read_le32 (bufptr + offset + 24);
+format/dex/dex.c:		bin->classes[i].static_values_offset = r_read_le32 (bufptr + offset + 28);
+format/dex/dex.c:	if (dexhdr->method_offset + methods_size >= bin->size) {
+format/dex/dex.c:		methods_size = bin->size - dexhdr->method_offset;
+format/dex/dex.c:	bin->methods = (struct dex_method_t *) calloc (methods_size + 1, 1);
+format/dex/dex.c:		if (offset + 8 > bin->size) {
+format/dex/dex.c:			free (bin->strings);
+format/dex/dex.c:			free (bin->classes);
+format/dex/dex.c:			free (bin->methods);
+format/dex/dex.c:		bin->methods[i].class_id = r_read_le16 (bufptr + offset + 0);
+format/dex/dex.c:		bin->methods[i].proto_id = r_read_le16 (bufptr + offset + 2);
+format/dex/dex.c:		bin->methods[i].name_id = r_read_le32 (bufptr + offset + 4);
+format/dex/dex.c:	if (dexhdr->types_offset + types_size >= bin->size) {
+format/dex/dex.c:		types_size = bin->size - dexhdr->types_offset;
+format/dex/dex.c:	bin->types = (struct dex_type_t *) calloc (types_size + 1, 1);
+format/dex/dex.c:		if (offset + 4 > bin->size) {
+format/dex/dex.c:			free (bin->strings);
+format/dex/dex.c:			free (bin->classes);
+format/dex/dex.c:			free (bin->methods);
+format/dex/dex.c:			free (bin->types);
+format/dex/dex.c:		bin->types[i].descriptor_id = r_read_le32 (bufptr + offset);
+format/dex/dex.c:	if (dexhdr->fields_offset + fields_size >= bin->size) {
+format/dex/dex.c:		fields_size = bin->size - dexhdr->fields_offset;
+format/dex/dex.c:	bin->fields = (struct dex_field_t *) calloc (fields_size + 1, 1);
+format/dex/dex.c:		if (offset + 8 > bin->size) {
+format/dex/dex.c:			free (bin->strings);
+format/dex/dex.c:			free (bin->classes);
+format/dex/dex.c:			free (bin->methods);
+format/dex/dex.c:			free (bin->types);
+format/dex/dex.c:			free (bin->fields);
+format/dex/dex.c:		bin->fields[i].class_id = r_read_le16 (bufptr + offset + 0);
+format/dex/dex.c:		bin->fields[i].type_id = r_read_le16 (bufptr + offset + 2);
+format/dex/dex.c:		bin->fields[i].name_id = r_read_le32 (bufptr + offset + 4);
+format/dex/dex.c:	if (dexhdr->prototypes_offset + protos_size >= bin->size) {
+format/dex/dex.c:		protos_size = bin->size - dexhdr->prototypes_offset;
+format/dex/dex.c:	bin->protos = (struct dex_proto_t *) calloc (protos_size, 1);
+format/dex/dex.c:		if (offset + 12 > bin->size) {
+format/dex/dex.c:			free (bin->strings);
+format/dex/dex.c:			free (bin->classes);
+format/dex/dex.c:			free (bin->methods);
+format/dex/dex.c:			free (bin->types);
+format/dex/dex.c:			free (bin->fields);
+format/dex/dex.c:			free (bin->protos);
+format/dex/dex.c:		bin->protos[i].shorty_id = r_read_le32 (bufptr + offset + 0);
+format/dex/dex.c:		bin->protos[i].return_type_id = r_read_le32 (bufptr + offset + 4);
+format/dex/dex.c:		bin->protos[i].parameters_off = r_read_le32 (bufptr + offset + 8);
+format/dex/dex.c:		r_buf_free (bin->b);
+format/elf/elf.c:#define bprintf if(bin->verbose)eprintf
+format/elf/elf.c:#define READ16(x, i) r_read_ble16(x + i, bin->endian); i += 2;
+format/elf/elf.c:#define READ32(x, i) r_read_ble32(x + i, bin->endian); i += 4;
+format/elf/elf.c:#define READ64(x, i) r_read_ble64(x + i, bin->endian); i += 8;
+format/elf/elf.c:	return !strncmp ((char *)bin->ehdr.e_ident, ELFMAG, SELFMAG) ||
+format/elf/elf.c:		   !strncmp ((char *)bin->ehdr.e_ident, CGCMAG, SCGCMAG);
+format/elf/elf.c:	if (r_buf_read_at (bin->b, 0, e_ident, EI_NIDENT) == -1) {
+format/elf/elf.c:	sdb_set (bin->kv, "elf_type.cparse", "enum elf_type { ET_NONE=0, ET_REL=1,"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_machine.cparse", "enum elf_machine{EM_NONE=0, EM_M32=1,"
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_header.offset", 0, 0);
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_header.size", sizeof (Elf_(Ehdr)), 0);
+format/elf/elf.c:	sdb_set (bin->kv, "elf_header.format", "[16]z[2]E[2]Exqqqxwwwwww"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_header.format", "[16]z[2]E[2]Exxxxxwwwwww"
+format/elf/elf.c:	bin->endian = (e_ident[EI_DATA] == ELFDATA2MSB)? 1: 0;
+format/elf/elf.c:	memset (&bin->ehdr, 0, sizeof (Elf_(Ehdr)));
+format/elf/elf.c:	len = r_buf_read_at (bin->b, 0, ehdr, sizeof (Elf_(Ehdr)));
+format/elf/elf.c:	memcpy (&bin->ehdr.e_ident, ehdr, 16);
+format/elf/elf.c:	bin->ehdr.e_type = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_machine = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_version = READ32 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_entry = READ64 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_phoff = READ64 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_shoff = READ64 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_entry = READ32 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_phoff = READ32 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_shoff = READ32 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_flags = READ32 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_ehsize = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_phentsize = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_phnum = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_shentsize = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_shnum = READ16 (ehdr, i)
+format/elf/elf.c:	bin->ehdr.e_shstrndx = READ16 (ehdr, i)
+format/elf/elf.c:	if (!bin->ehdr.e_phnum) {
+format/elf/elf.c:	if (bin->phdr) {
+format/elf/elf.c:	if (!UT32_MUL (&phdr_size, (ut32)bin->ehdr.e_phnum, sizeof (Elf_(Phdr)))) {
+format/elf/elf.c:	if (phdr_size > bin->size) {
+format/elf/elf.c:	if (phdr_size > (ut32)bin->size) {
+format/elf/elf.c:	if (bin->ehdr.e_phoff > bin->size) {
+format/elf/elf.c:	if (bin->ehdr.e_phoff + phdr_size > bin->size) {
+format/elf/elf.c:	if (!(bin->phdr = calloc (phdr_size, 1))) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:		len = r_buf_read_at (bin->b, bin->ehdr.e_phoff + i * sizeof (Elf_(Phdr)), phdr, sizeof (Elf_(Phdr)));
+format/elf/elf.c:			R_FREE (bin->phdr);
+format/elf/elf.c:		bin->phdr[i].p_type = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_flags = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_offset = READ64 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_vaddr = READ64 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_paddr = READ64 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_filesz = READ64 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_memsz = READ64 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_align = READ64 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_offset = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_vaddr = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_paddr = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_filesz = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_memsz = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_flags = READ32 (phdr, j)
+format/elf/elf.c:		bin->phdr[i].p_align = READ32 (phdr, j)
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_phdr.offset", bin->ehdr.e_phoff, 0);
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_phdr.size", sizeof (Elf_(Phdr)), 0);
+format/elf/elf.c:	sdb_set (bin->kv, "elf_p_type.cparse", "enum elf_p_type {PT_NULL=0,PT_LOAD=1,PT_DYNAMIC=2,"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_p_flags.cparse", "enum elf_p_flags {PF_None=0,PF_Exec=1,"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_phdr.format", "[4]E[4]Eqqqqqq (elf_p_type)type (elf_p_flags)flags"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_phdr.format", "[4]Exxxxx[4]Ex (elf_p_type)type offset vaddr paddr"
+format/elf/elf.c:	if (!bin || bin->shdr) {
+format/elf/elf.c:	if (!UT32_MUL (&shdr_size, bin->ehdr.e_shnum, sizeof (Elf_(Shdr)))) {
+format/elf/elf.c:	if (shdr_size > bin->size) {
+format/elf/elf.c:	if (bin->ehdr.e_shoff > bin->size) {
+format/elf/elf.c:	if (bin->ehdr.e_shoff + shdr_size > bin->size) {
+format/elf/elf.c:	if (!(bin->shdr = calloc (1, shdr_size + 1))) {
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_shdr.offset", bin->ehdr.e_shoff, 0);
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_shdr.size", sizeof (Elf_(Shdr)), 0);
+format/elf/elf.c:	sdb_set (bin->kv, "elf_s_type.cparse", "enum elf_s_type {SHT_NULL=0,SHT_PROGBITS=1,"
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+format/elf/elf.c:		len = r_buf_read_at (bin->b, bin->ehdr.e_shoff + i * sizeof (Elf_(Shdr)), shdr, sizeof (Elf_(Shdr)));
+format/elf/elf.c:			bprintf ("Warning: read (shdr) at 0x%"PFMT64x"\n", (ut64) bin->ehdr.e_shoff);
+format/elf/elf.c:			R_FREE (bin->shdr);
+format/elf/elf.c:		bin->shdr[i].sh_name = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_type = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_flags = READ64 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_addr = READ64 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_offset = READ64 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_size = READ64 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_link = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_info = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_addralign = READ64 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_entsize = READ64 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_flags = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_addr = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_offset = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_size = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_link = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_info = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_addralign = READ32 (shdr, j)
+format/elf/elf.c:		bin->shdr[i].sh_entsize = READ32 (shdr, j)
+format/elf/elf.c:	sdb_set (bin->kv, "elf_s_flags_64.cparse", "enum elf_s_flags_64 {SF64_None=0,SF64_Exec=1,"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_shdr.format", "x[4]E[8]Eqqqxxqq name (elf_s_type)type"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_s_flags_32.cparse", "enum elf_s_flags_32 {SF32_None=0,SF32_Exec=1,"
+format/elf/elf.c:	sdb_set (bin->kv, "elf_shdr.format", "x[4]E[4]Exxxxxxx name (elf_s_type)type"
+format/elf/elf.c:	if (bin->strtab || !bin->shdr) {
+format/elf/elf.c:	if (bin->ehdr.e_shstrndx != SHN_UNDEF &&
+format/elf/elf.c:		(bin->ehdr.e_shstrndx >= bin->ehdr.e_shnum ||
+format/elf/elf.c:		(bin->ehdr.e_shstrndx >= SHN_LORESERVE &&
+format/elf/elf.c:		bin->ehdr.e_shstrndx < SHN_HIRESERVE)))
+format/elf/elf.c:	if (bin->shdr[bin->ehdr.e_shstrndx].sh_size > UT32_MAX) {
+format/elf/elf.c:	if (!bin->shdr[bin->ehdr.e_shstrndx].sh_size) {
+format/elf/elf.c:	bin->shstrtab_section = bin->strtab_section = &bin->shdr[bin->ehdr.e_shstrndx];
+format/elf/elf.c:	bin->shstrtab_size = bin->strtab_section->sh_size;
+format/elf/elf.c:	if (bin->shstrtab_size > bin->size) {
+format/elf/elf.c:	if (!(bin->shstrtab = calloc (1, bin->shstrtab_size + 1))) {
+format/elf/elf.c:		bin->shstrtab = NULL;
+format/elf/elf.c:	if (bin->shstrtab_section->sh_offset > bin->size) {
+format/elf/elf.c:		R_FREE (bin->shstrtab);
+format/elf/elf.c:	if (bin->shstrtab_section->sh_offset +
+format/elf/elf.c:		bin->shstrtab_section->sh_size  > bin->size) {
+format/elf/elf.c:		R_FREE (bin->shstrtab);
+format/elf/elf.c:	if (r_buf_read_at (bin->b, bin->shstrtab_section->sh_offset, (ut8*)bin->shstrtab,
+format/elf/elf.c:				bin->shstrtab_section->sh_size + 1) < 1) {
+format/elf/elf.c:				(ut64) bin->shstrtab_section->sh_offset);
+format/elf/elf.c:		R_FREE (bin->shstrtab);
+format/elf/elf.c:	bin->shstrtab[bin->shstrtab_section->sh_size] = '\0';
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_shstrtab.offset", bin->shstrtab_section->sh_offset, 0);
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_shstrtab.size", bin->shstrtab_section->sh_size, 0);
+format/elf/elf.c:	if (!bin || !bin->phdr || !bin->ehdr.e_phnum) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_phnum ; i++) {
+format/elf/elf.c:		if (bin->phdr[i].p_type == PT_DYNAMIC) {
+format/elf/elf.c:			dyn_size = bin->phdr[i].p_filesz;
+format/elf/elf.c:	if (i == bin->ehdr.e_phnum) {
+format/elf/elf.c:	if (bin->phdr[i].p_filesz > bin->size) {
+format/elf/elf.c:	if (bin->phdr[i].p_offset > bin->size) {
+format/elf/elf.c:	if (bin->phdr[i].p_offset + sizeof(Elf_(Dyn)) > bin->size) {
+format/elf/elf.c:		len = r_buf_read_at (bin->b, bin->phdr[i].p_offset + entries * sizeof (Elf_(Dyn)), sdyn, sizeof (Elf_(Dyn)));
+format/elf/elf.c:	offset = Elf_(r_bin_elf_v2p) (bin, bin->phdr[i].p_vaddr);
+format/elf/elf.c:	if (offset > bin->size || offset + dyn_size > bin->size) {
+format/elf/elf.c:		r_buf_read_at (bin->b, offset + i * sizeof (Elf_(Dyn)), sdyn, sizeof (Elf_(Dyn)));
+format/elf/elf.c:		case DT_PLTREL: bin->is_rela = dyn[i].d_un.d_val; break;
+format/elf/elf.c:				bin->version_info[DT_VERSIONTAGIDX (dyn[i].d_tag)] = dyn[i].d_un.d_val;
+format/elf/elf.c:	if (!bin->is_rela) {
+format/elf/elf.c:		bin->is_rela = sizeof (Elf_(Rela)) == relentry? DT_RELA : DT_REL;
+format/elf/elf.c:	if (!strtabaddr || strtabaddr > bin->size || strsize > ST32_MAX || !strsize || strsize > bin->size) {
+format/elf/elf.c:	if (strtabaddr + strsize > bin->size) {
+format/elf/elf.c:	r = r_buf_read_at (bin->b, strtabaddr, (ut8 *)strtab, strsize);
+format/elf/elf.c:	bin->dyn_buf = dyn;
+format/elf/elf.c:	bin->dyn_entries = entries;
+format/elf/elf.c:	bin->strtab = strtab;
+format/elf/elf.c:	bin->strtab_size = strsize;
+format/elf/elf.c:		sdb_set (bin->kv, "elf.relro", "full", 0);
+format/elf/elf.c:		sdb_set (bin->kv, "elf.relro", "partial", 0);
+format/elf/elf.c:		sdb_set (bin->kv, "elf.relro", "no", 0);
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_strtab.offset", strtabaddr, 0);
+format/elf/elf.c:	sdb_num_set (bin->kv, "elf_strtab.size", strsize, 0);
+format/elf/elf.c:	if (!bin->g_sections) {
+format/elf/elf.c:	for (i = 0; !bin->g_sections[i].last; i++) {
+format/elf/elf.c:		if (!strncmp (bin->g_sections[i].name, section_name, ELF_STRING_LENGTH-1)) {
+format/elf/elf.c:			return &bin->g_sections[i];
+format/elf/elf.c:	if (!bin->version_info[DT_VERSIONTAGIDX (DT_VERSYM)]) {
+format/elf/elf.c:	if (shdr->sh_link > bin->ehdr.e_shnum) {
+format/elf/elf.c:	link_shdr = &bin->shdr[shdr->sh_link];
+format/elf/elf.c:	ut64 off = Elf_(r_bin_elf_v2p) (bin, bin->version_info[DT_VERSIONTAGIDX (DT_VERSYM)]);
+format/elf/elf.c:	if (bin->shstrtab && shdr->sh_name < bin->shstrtab_size) {
+format/elf/elf.c:		section_name = &bin->shstrtab[shdr->sh_name];
+format/elf/elf.c:	if (bin->shstrtab && link_shdr->sh_name < bin->shstrtab_size) {
+format/elf/elf.c:		link_section_name = &bin->shstrtab[link_shdr->sh_name];
+format/elf/elf.c:	r_buf_read_at (bin->b, off, edata, sizeof (ut16) * num_entries);
+format/elf/elf.c:		data[i] = r_read_ble16 (&edata[i * sizeof (ut16)], bin->endian);
+format/elf/elf.c:				if (bin->version_info[DT_VERSIONTAGIDX (DT_VERNEED)]) {
+format/elf/elf.c:					ut64 offset = Elf_(r_bin_elf_v2p) (bin, bin->version_info[DT_VERSIONTAGIDX (DT_VERNEED)]);
+format/elf/elf.c:						if (offset > bin->size || offset + sizeof (vn) > bin->size) {
+format/elf/elf.c:						if (r_buf_read_at (bin->b, offset, svn, sizeof (svn)) < 0) {
+format/elf/elf.c:							if (a_off > bin->size || a_off + sizeof (vna) > bin->size) {
+format/elf/elf.c:							if (r_buf_read_at (bin->b, a_off, svna, sizeof (svna)) < 0) {
+format/elf/elf.c:							if (vna.vna_name > bin->strtab_size) {
+format/elf/elf.c:							sdb_set (sdb_entry, key, sdb_fmt (0, "%s(%s)", tmp_val, bin->strtab + vna.vna_name), 0);
+format/elf/elf.c:				ut64 vinfoaddr = bin->version_info[DT_VERSIONTAGIDX (DT_VERDEF)];
+format/elf/elf.c:					if (offset > bin->size || offset + sizeof (vd) > bin->size) {
+format/elf/elf.c:						if (r_buf_read_at (bin->b, offset, svd, sizeof (svd)) < 0) {
+format/elf/elf.c:						if (off_vda > bin->size || off_vda + sizeof (vda) > bin->size) {
+format/elf/elf.c:						if (r_buf_read_at (bin->b, off_vda, svda, sizeof (svda)) < 0) {
+format/elf/elf.c:						if (vda.vda_name > bin->strtab_size) {
+format/elf/elf.c:						const char *name = bin->strtab + vda.vda_name;
+format/elf/elf.c:	if (shdr->sh_link > bin->ehdr.e_shnum) {
+format/elf/elf.c:	link_shdr = &bin->shdr[shdr->sh_link];
+format/elf/elf.c:	if (bin->shstrtab && shdr->sh_name < bin->shstrtab_size) {
+format/elf/elf.c:		section_name = &bin->shstrtab[shdr->sh_name];
+format/elf/elf.c:	if (link_shdr && bin->shstrtab && link_shdr->sh_name < bin->shstrtab_size) {
+format/elf/elf.c:		link_section_name = &bin->shstrtab[link_shdr->sh_name];
+format/elf/elf.c:		r_buf_read_at (bin->b, shdr->sh_offset + i, dfs, sizeof (Elf_(Verdef)));
+format/elf/elf.c:		if (aux.vda_name > bin->dynstr_size) {
+format/elf/elf.c:		sdb_set (sdb_verdef, "vda_name", &bin->dynstr[aux.vda_name], 0);
+format/elf/elf.c:			if (aux.vda_name > bin->dynstr_size) {
+format/elf/elf.c:			sdb_set (sdb_parent, "vda_name", &bin->dynstr[aux.vda_name], 0);
+format/elf/elf.c:	if (!bin || !bin->dynstr) {
+format/elf/elf.c:	if (shdr->sh_link > bin->ehdr.e_shnum) {
+format/elf/elf.c:	link_shdr = &bin->shdr[shdr->sh_link];
+format/elf/elf.c:	if (bin->shstrtab && shdr->sh_name < bin->shstrtab_size) {
+format/elf/elf.c:		section_name = &bin->shstrtab[shdr->sh_name];
+format/elf/elf.c:	if (bin->shstrtab && link_shdr->sh_name < bin->shstrtab_size) {
+format/elf/elf.c:		link_section_name = &bin->shstrtab[link_shdr->sh_name];
+format/elf/elf.c:	if (shdr->sh_offset > bin->size || shdr->sh_offset + shdr->sh_size > bin->size) {
+format/elf/elf.c:	i = r_buf_read_at (bin->b, shdr->sh_offset, need, shdr->sh_size);
+format/elf/elf.c:		if (entry->vn_file > bin->dynstr_size) {
+format/elf/elf.c:			char *s = r_str_ndup (&bin->dynstr[entry->vn_file], 16);
+format/elf/elf.c:			if (aux->vna_name > bin->dynstr_size) {
+format/elf/elf.c:			if (aux->vna_name > 0 && aux->vna_name + 8 < bin->dynstr_size) {
+format/elf/elf.c:				strncpy (name, &bin->dynstr[aux->vna_name], sizeof (name)-1);
+format/elf/elf.c:	if (!bin || !bin->shdr) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+format/elf/elf.c:		int size = bin->shdr[i].sh_size;
+format/elf/elf.c:		if (size - (i*sizeof(Elf_(Shdr)) > bin->size)) {
+format/elf/elf.c:			size = bin->size - (i*sizeof(Elf_(Shdr)));
+format/elf/elf.c:		left = R_MIN (left, bin->shdr[i].sh_size);
+format/elf/elf.c:		switch (bin->shdr[i].sh_type) {
+format/elf/elf.c:			sdb = store_versioninfo_gnu_verdef (bin, &bin->shdr[i], left);
+format/elf/elf.c:			sdb = store_versioninfo_gnu_verneed (bin, &bin->shdr[i], left);
+format/elf/elf.c:			sdb = store_versioninfo_gnu_versym (bin, &bin->shdr[i], left);
+format/elf/elf.c:	if (!bin || !bin->shdr) {
+format/elf/elf.c:	if (!bin->shstrtab) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_shnum; ++i) {
+format/elf/elf.c:		if (bin->shdr[i].sh_name > bin->shstrtab_size) {
+format/elf/elf.c:		section_name = &bin->shstrtab[bin->shdr[i].sh_name];
+format/elf/elf.c:		if (bin->shdr[i].sh_type == SHT_STRTAB && !strcmp (section_name, ".dynstr")) {
+format/elf/elf.c:			if (!(bin->dynstr = (char*) calloc (bin->shdr[i].sh_size + 1, sizeof (char)))) {
+format/elf/elf.c:			if (bin->shdr[i].sh_offset > bin->size) {
+format/elf/elf.c:			if (bin->shdr[i].sh_offset + bin->shdr[i].sh_size > bin->size) {
+format/elf/elf.c:			if (bin->shdr[i].sh_offset + bin->shdr[i].sh_size < bin->shdr[i].sh_size) {
+format/elf/elf.c:			r = r_buf_read_at (bin->b, bin->shdr[i].sh_offset, (ut8*)bin->dynstr, bin->shdr[i].sh_size);
+format/elf/elf.c:				R_FREE (bin->dynstr);
+format/elf/elf.c:				bin->dynstr_size = 0;
+format/elf/elf.c:			bin->dynstr_size = bin->shdr[i].sh_size;
+format/elf/elf.c:	bin->phdr = NULL;
+format/elf/elf.c:	bin->shdr = NULL;
+format/elf/elf.c:	bin->strtab = NULL;
+format/elf/elf.c:	bin->shstrtab = NULL;
+format/elf/elf.c:	bin->strtab_size = 0;
+format/elf/elf.c:	bin->strtab_section = NULL;
+format/elf/elf.c:	bin->dyn_buf = NULL;
+format/elf/elf.c:	bin->dynstr = NULL;
+format/elf/elf.c:	ZERO_FILL (bin->version_info);
+format/elf/elf.c:	bin->g_sections = NULL;
+format/elf/elf.c:	bin->g_symbols = NULL;
+format/elf/elf.c:	bin->g_imports = NULL;
+format/elf/elf.c:	bin->baddr = Elf_(r_bin_elf_get_baddr) (bin);
+format/elf/elf.c:	bin->imports_by_ord_size = 0;
+format/elf/elf.c:	bin->imports_by_ord = NULL;
+format/elf/elf.c:	bin->symbols_by_ord_size = 0;
+format/elf/elf.c:	bin->symbols_by_ord = NULL;
+format/elf/elf.c:	bin->g_sections = Elf_(r_bin_elf_get_sections) (bin);
+format/elf/elf.c:	bin->boffset = Elf_(r_bin_elf_get_boffset) (bin);
+format/elf/elf.c:	sdb_ns_set (bin->kv, "versioninfo", store_versioninfo (bin));
+format/elf/elf.c:	if ((!bin->shdr || !bin->strtab) && !bin->phdr) {
+format/elf/elf.c:	if (bin->is_rela == DT_REL) {
+format/elf/elf.c:	} else if (bin->is_rela == DT_RELA) {
+format/elf/elf.c:		if (rel_sec->offset + j > bin->size) {
+format/elf/elf.c:		if (rel_sec->offset + j + tsize > bin->size) {
+format/elf/elf.c:			bin->b, rel_sec->offset + j, is_rela ? rla : rl,
+format/elf/elf.c:			switch (bin->ehdr.e_machine) {
+format/elf/elf.c:						len = r_buf_read_at (bin->b, s->offset, buf, sizeof (buf));
+format/elf/elf.c:					if (of + sizeof(Elf_(Addr)) < bin->size) {
+format/elf/elf.c:						if (of > bin->size || of + sizeof (Elf_(Addr)) > bin->size) {
+format/elf/elf.c:						len = r_buf_read_at (bin->b, of, buf, sizeof (Elf_(Addr)));
+format/elf/elf.c:								len = r_buf_read_at (bin->b, plt_addr + 2, buf, 4);
+format/elf/elf.c:						len = r_buf_read_at (bin->b, s->offset + s->size, buf, sizeof (buf));
+format/elf/elf.c:					reloc_type, bin->ehdr.e_machine);
+format/elf/elf.c:	if (bin && bin->phdr) {
+format/elf/elf.c:		for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:			if (bin->phdr[i].p_type == PT_GNU_STACK) {
+format/elf/elf.c:				return (!(bin->phdr[i].p_flags & 1))? 1: 0;
+format/elf/elf.c:	if (bin && bin->dyn_buf) {
+format/elf/elf.c:		for (i = 0; i < bin->dyn_entries; i++) {
+format/elf/elf.c:			switch (bin->dyn_buf[i].d_tag) {
+format/elf/elf.c:				for (i++; i < bin->dyn_entries ; i++) {
+format/elf/elf.c:					ut32 dTag = bin->dyn_buf[i].d_tag;
+format/elf/elf.c:						if (bin->dyn_buf[i].d_un.d_val & DF_1_NOW) {
+format/elf/elf.c:	if (bin && bin->phdr) {
+format/elf/elf.c:		for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:			if (bin->phdr[i].p_type == PT_GNU_RELRO) {
+format/elf/elf.c:	if (bin->phdr) {
+format/elf/elf.c:		for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:			if (bin->phdr[i].p_type == PT_LOAD) {
+format/elf/elf.c:				tmp = (ut64)bin->phdr[i].p_vaddr & ELF_PAGE_MASK;
+format/elf/elf.c:	if (base == UT64_MAX && bin->ehdr.e_type == ET_REL) {
+format/elf/elf.c:	if (bin && bin->phdr) {
+format/elf/elf.c:		for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:			if (bin->phdr[i].p_type == PT_LOAD) {
+format/elf/elf.c:				tmp =  (ut64)bin->phdr[i].p_offset & ELF_PAGE_MASK;
+format/elf/elf.c:	if (r_buf_read_at (bin->b, entry + 16, buf, sizeof (buf)) < 1) {
+format/elf/elf.c:	if (r_buf_read_at (bin->b, entry+11, buf, sizeof (buf)) == -1) {
+format/elf/elf.c:	entry = bin->ehdr.e_entry;
+format/elf/elf.c:	if (entry > bin->size || (entry + sizeof (buf)) > bin->size) {
+format/elf/elf.c:	if (r_buf_read_at (bin->b, entry, buf, sizeof (buf)) < 1) {
+format/elf/elf.c:	ut64 text_end = text + bin->size;
+format/elf/elf.c:					r_buf_read_at (bin->b, /* got_entry_offset = */ gp + delta, buf, 4);
+format/elf/elf.c:			if (r_buf_read_at (bin->b, maddr, n32s, sizeof (ut32)) == -1) {
+format/elf/elf.c:			baddr = (bin->ehdr.e_entry >> 16) << 16;
+format/elf/elf.c:			if (bin->phdr) {
+format/elf/elf.c:	if (!bin->shdr) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+format/elf/elf.c:		if (bin->shdr[i].sh_type == SHT_SYMTAB) {
+format/elf/elf.c:	if (!bin || !bin->phdr) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:		if (bin->phdr[i].p_type == PT_INTERP) {
+format/elf/elf.c:			ut64 addr = bin->phdr[i].p_offset;
+format/elf/elf.c:			int sz = bin->phdr[i].p_memsz;
+format/elf/elf.c:			sdb_num_set (bin->kv, "elf_header.intrp_addr", addr, 0);
+format/elf/elf.c:			sdb_num_set (bin->kv, "elf_header.intrp_size", sz, 0);
+format/elf/elf.c:			if (r_buf_read_at (bin->b, addr, (ut8*)str, sz) < 1) {
+format/elf/elf.c:			sdb_set (bin->kv, "elf_header.intrp", str, 0);
+format/elf/elf.c:	if (!bin->phdr) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:		if (bin->phdr[i].p_type == PT_INTERP) {
+format/elf/elf.c:	switch (bin->ehdr.e_ident[EI_DATA]) {
+format/elf/elf.c:	default: return r_str_newf ("<unknown: %x>", bin->ehdr.e_ident[EI_DATA]);
+format/elf/elf.c:	switch (bin->ehdr.e_machine) {
+format/elf/elf.c:	switch (bin->ehdr.e_machine) {
+format/elf/elf.c:	default:             return r_str_newf ("<unknown>: 0x%x", bin->ehdr.e_machine);
+format/elf/elf.c:	e_type = (ut32)bin->ehdr.e_type; // cast to avoid warn in iphone-gcc, must be ut16
+format/elf/elf.c:	switch (bin->ehdr.e_ident[EI_CLASS]) {
+format/elf/elf.c:	default:           return r_str_newf ("<unknown: %x>", bin->ehdr.e_ident[EI_CLASS]);
+format/elf/elf.c:	if (bin->ehdr.e_machine == EM_ARC_A5) {
+format/elf/elf.c:	if (bin->phdr && bin->ehdr.e_machine == EM_MIPS) {
+format/elf/elf.c:		const ut32 mipsType = bin->ehdr.e_flags & EF_MIPS_ARCH;
+format/elf/elf.c:		if (bin->ehdr.e_type == ET_EXEC) {
+format/elf/elf.c:			for (i = 0; i < bin->ehdr.e_phnum; i++) {
+format/elf/elf.c:				if (bin->phdr[i].p_type == PT_INTERP) {
+format/elf/elf.c:	if (bin->ehdr.e_machine == EM_ARM) {
+format/elf/elf.c:		if (bin->ehdr.e_type != ET_EXEC) {
+format/elf/elf.c:	switch (bin->ehdr.e_ident[EI_CLASS]) {
+format/elf/elf.c:	const ut8 *p = bin->b->buf;
+format/elf/elf.c:	if (bin->b->length > 64)  {
+format/elf/elf.c:		p += bin->b->length - 64;
+format/elf/elf.c:	if (bin->shstrtab) {
+format/elf/elf.c:		ut32 len = bin->shstrtab_size;
+format/elf/elf.c:		return r_mem_mem ((const ut8*)bin->shstrtab, len,
+format/elf/elf.c:	switch (bin->ehdr.e_ident[EI_OSABI]) {
+format/elf/elf.c:	if (bin->phdr) {
+format/elf/elf.c:		int num = bin->ehdr.e_phnum;
+format/elf/elf.c:			if (bin->phdr[i].p_type != PT_NOTE) {
+format/elf/elf.c:			if (r_buf_read_at (bin->b, bin->phdr[i].p_offset + regdelta, buf, regsize) != regsize) {
+format/elf/elf.c:	return (bin->ehdr.e_ident[EI_DATA] == ELFDATA2MSB);
+format/elf/elf.c:	if (!bin || !bin->phdr || !bin->dyn_buf || !bin->strtab) {
+format/elf/elf.c:	for (j = 0; j< bin->dyn_entries; j++) {
+format/elf/elf.c:		if (bin->dyn_buf[j].d_tag == DT_RPATH || bin->dyn_buf[j].d_tag == DT_RUNPATH) {
+format/elf/elf.c:			if (bin->dyn_buf[j].d_un.d_val > bin->strtab_size) {
+format/elf/elf.c:			strncpy (ret, bin->strtab + bin->dyn_buf[j].d_un.d_val, ELF_STRING_LENGTH);
+format/elf/elf.c:	if (!bin->g_sections) {
+format/elf/elf.c:	size = bin->is_rela == DT_REL ? sizeof (Elf_(Rel)) : sizeof (Elf_(Rela));
+format/elf/elf.c:	for (i = 0; !bin->g_sections[i].last; i++) {
+format/elf/elf.c:		if (!strncmp (bin->g_sections[i].name, ".rela.", strlen (".rela."))) {
+format/elf/elf.c:			if (!bin->is_rela) {
+format/elf/elf.c:			ret += NUMENTRIES_ROUNDUP (bin->g_sections[i].size, size);
+format/elf/elf.c:		} else if (!strncmp (bin->g_sections[i].name, ".rel.", strlen (".rel."))){
+format/elf/elf.c:			if (!bin->is_rela) {
+format/elf/elf.c:			ret += NUMENTRIES_ROUNDUP (bin->g_sections[i].size, size);
+format/elf/elf.c:	ut8 *buf = bin->b->buf;
+format/elf/elf.c:		    bin->size || offset + sizeof (Elf_(Rela)) < offset) {
+format/elf/elf.c:	if (!bin || !bin->g_sections) {
+format/elf/elf.c:	bin->reloc_num = reloc_num;
+format/elf/elf.c:	for (i = 0, rel = 0; !bin->g_sections[i].last && rel < reloc_num ; i++) {
+format/elf/elf.c:		bool is_rela = 0 == strncmp (bin->g_sections[i].name, ".rela.", strlen (".rela."));
+format/elf/elf.c:		bool is_rel  = 0 == strncmp (bin->g_sections[i].name, ".rel.",  strlen (".rel."));
+format/elf/elf.c:		for (j = 0; j < bin->g_sections[i].size; j += res) {
+format/elf/elf.c:			if (bin->g_sections[i].size > bin->size) {
+format/elf/elf.c:			if (bin->g_sections[i].offset > bin->size) {
+format/elf/elf.c:			if (!bin->is_rela) {
+format/elf/elf.c:				rela = bin->is_rela;
+format/elf/elf.c:			res = read_reloc (bin, &ret[rel], rela, bin->g_sections[i].offset + j);
+format/elf/elf.c:			if (j + res > bin->g_sections[i].size) {
+format/elf/elf.c:			if (bin->ehdr.e_type == ET_REL) {
+format/elf/elf.c:				if (bin->g_sections[i].info < bin->ehdr.e_shnum && bin->shdr) {
+format/elf/elf.c:					ret[rel].rva = bin->shdr[bin->g_sections[i].info].sh_offset + ret[rel].offset;
+format/elf/elf.c:	if (!bin || !bin->phdr || !bin->dyn_buf || !bin->strtab || *(bin->strtab+1) == '0') {
+format/elf/elf.c:	for (j = 0, k = 0; j < bin->dyn_entries; j++)
+format/elf/elf.c:		if (bin->dyn_buf[j].d_tag == DT_NEEDED) {
+format/elf/elf.c:			if (bin->dyn_buf[j].d_un.d_val > bin->strtab_size) {
+format/elf/elf.c:			strncpy (ret[k].name, bin->strtab + bin->dyn_buf[j].d_un.d_val, ELF_STRING_LENGTH);
+format/elf/elf.c:	if (!bin || !bin->phdr || !bin->ehdr.e_phnum)
+format/elf/elf.c:	for (i = 0; i < bin->dyn_entries; i++) {
+format/elf/elf.c:		switch (bin->dyn_buf[i].d_tag) {
+format/elf/elf.c:			reldyn = bin->dyn_buf[i].d_un.d_ptr;
+format/elf/elf.c:			relva = bin->dyn_buf[i].d_un.d_ptr;
+format/elf/elf.c:			reldynsz = bin->dyn_buf[i].d_un.d_val;
+format/elf/elf.c:			relasz = bin->dyn_buf[i].d_un.d_val;
+format/elf/elf.c:			pltgotva = bin->dyn_buf[i].d_un.d_ptr;
+format/elf/elf.c:			pltgotsz = bin->dyn_buf[i].d_un.d_val;
+format/elf/elf.c:			relava = bin->dyn_buf[i].d_un.d_ptr;
+format/elf/elf.c:	if (bin->g_sections) {
+format/elf/elf.c:		return bin->g_sections;
+format/elf/elf.c:	if (!bin->shdr) {
+format/elf/elf.c:	if (!(ret = calloc ((bin->ehdr.e_shnum + 1), sizeof (RBinElfSection)))) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+format/elf/elf.c:		ret[i].offset = bin->shdr[i].sh_offset;
+format/elf/elf.c:		ret[i].size = bin->shdr[i].sh_size;
+format/elf/elf.c:		ret[i].align = bin->shdr[i].sh_addralign;
+format/elf/elf.c:		ret[i].flags = bin->shdr[i].sh_flags;
+format/elf/elf.c:		ret[i].link = bin->shdr[i].sh_link;
+format/elf/elf.c:		ret[i].info = bin->shdr[i].sh_info;
+format/elf/elf.c:		ret[i].type = bin->shdr[i].sh_type;
+format/elf/elf.c:		if (bin->ehdr.e_type == ET_REL)	{
+format/elf/elf.c:			ret[i].rva = bin->baddr + bin->shdr[i].sh_offset;
+format/elf/elf.c:			ret[i].rva = bin->shdr[i].sh_addr;
+format/elf/elf.c:		nidx = bin->shdr[i].sh_name;
+format/elf/elf.c:#define SHNAME (int)bin->shdr[i].sh_name
+format/elf/elf.c:#define SHSIZE (int)bin->shstrtab_size
+format/elf/elf.c:		if (nidx < 0 || !bin->shstrtab_section || !bin->shstrtab_size || nidx > bin->shstrtab_size) {
+format/elf/elf.c:			if (bin->shstrtab && (SHNAME > 0) && (SHNAME < SHSIZE)) {
+format/elf/elf.c:				strncpy (ret[i].name, &bin->shstrtab[SHNAME], SHNLEN);
+format/elf/elf.c:				if (bin->shdr[i].sh_type == SHT_NULL) {
+format/elf/elf.c:	if (!bin || !bin->phdr || !bin->ehdr.e_phnum) {
+format/elf/elf.c:	for (j = 0; j < bin->dyn_entries; j++) {
+format/elf/elf.c:		switch (bin->dyn_buf[j].d_tag) {
+format/elf/elf.c:			addr_sym_table = Elf_(r_bin_elf_v2p) (bin, bin->dyn_buf[j].d_un.d_ptr);
+format/elf/elf.c:			sym_size = bin->dyn_buf[j].d_un.d_val;
+format/elf/elf.c:	nsym = (bin->size - addr_sym_table) / sym_size;
+format/elf/elf.c:	if (addr_sym_table > bin->size || addr_sym_table + size > bin->size) {
+format/elf/elf.c:		r = r_buf_read_at (bin->b, addr_sym_table + i * sizeof (Elf_ (Sym)), s, sizeof (Elf_ (Sym)));
+format/elf/elf.c:		if (tmp_offset > bin->size) {
+format/elf/elf.c:		if (sym[i].st_name + 2 > bin->strtab_size) {
+format/elf/elf.c:			int maxsize = R_MIN (bin->size, bin->strtab_size);
+format/elf/elf.c:				const int len = __strnlen (bin->strtab + st_name, rest);
+format/elf/elf.c:				memcpy (ret[ret_ctr].name, &bin->strtab[st_name], len);
+format/elf/elf.c:	if (type == R_BIN_ELF_IMPORTS && !bin->imports_by_ord_size) {
+format/elf/elf.c:		bin->imports_by_ord_size = ret_ctr + 1;
+format/elf/elf.c:			bin->imports_by_ord = (RBinImport * *) calloc (ret_ctr + 1, sizeof (RBinImport*));
+format/elf/elf.c:			bin->imports_by_ord = NULL;
+format/elf/elf.c:	} else if (type == R_BIN_ELF_SYMBOLS && !bin->symbols_by_ord_size && ret_ctr) {
+format/elf/elf.c:		bin->symbols_by_ord_size = ret_ctr + 1;
+format/elf/elf.c:			bin->symbols_by_ord = (RBinSymbol * *) calloc (ret_ctr + 1, sizeof (RBinSymbol*));
+format/elf/elf.c:			bin->symbols_by_ord = NULL;
+format/elf/elf.c:	if (bin->phdr_symbols) {
+format/elf/elf.c:		return bin->phdr_symbols;
+format/elf/elf.c:	bin->phdr_symbols = get_symbols_from_phdr (bin, R_BIN_ELF_SYMBOLS);
+format/elf/elf.c:	return bin->phdr_symbols;
+format/elf/elf.c:	if (bin->phdr_imports) {
+format/elf/elf.c:		return bin->phdr_imports;
+format/elf/elf.c:	bin->phdr_imports = get_symbols_from_phdr (bin, R_BIN_ELF_IMPORTS);
+format/elf/elf.c:	return bin->phdr_imports;
+format/elf/elf.c:	if (!bin || !bin->shdr || !bin->ehdr.e_shnum || bin->ehdr.e_shnum == 0xffff) {
+format/elf/elf.c:	if (!UT32_MUL (&shdr_size, bin->ehdr.e_shnum, sizeof (Elf_(Shdr)))) {
+format/elf/elf.c:	if (shdr_size + 8 > bin->size) {
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_shnum; i++) {
+format/elf/elf.c:		if ((type == R_BIN_ELF_IMPORTS && bin->shdr[i].sh_type == (bin->ehdr.e_type == ET_REL ? SHT_SYMTAB : SHT_DYNSYM)) ||
+format/elf/elf.c:				(type == R_BIN_ELF_SYMBOLS && bin->shdr[i].sh_type == (Elf_(r_bin_elf_get_stripped) (bin) ? SHT_DYNSYM : SHT_SYMTAB))) {
+format/elf/elf.c:			if (bin->shdr[i].sh_link < 1) {
+format/elf/elf.c:			if ((bin->shdr[i].sh_link * sizeof(Elf_(Shdr))) >= shdr_size) {
+format/elf/elf.c:			strtab_section = &bin->shdr[bin->shdr[i].sh_link];
+format/elf/elf.c:			if (strtab_section->sh_size > ST32_MAX || strtab_section->sh_size+8 > bin->size) {
+format/elf/elf.c:				if (strtab_section->sh_offset > bin->size ||
+format/elf/elf.c:						strtab_section->sh_offset + strtab_section->sh_size > bin->size) {
+format/elf/elf.c:				if (r_buf_read_at (bin->b, strtab_section->sh_offset,
+format/elf/elf.c:			newsize = 1 + bin->shdr[i].sh_size;
+format/elf/elf.c:			if (newsize < 0 || newsize > bin->size) {
+format/elf/elf.c:			nsym = (int)(bin->shdr[i].sh_size / sizeof (Elf_(Sym)));
+format/elf/elf.c:			if (size < 1 || size > bin->size) {
+format/elf/elf.c:			if (bin->shdr[i].sh_offset > bin->size) {
+format/elf/elf.c:			if (bin->shdr[i].sh_offset + size > bin->size) {
+format/elf/elf.c:				r = r_buf_read_at (bin->b, bin->shdr[i].sh_offset + j * sizeof (Elf_(Sym)), s, sizeof (Elf_(Sym)));
+format/elf/elf.c:				if (bin->ehdr.e_type == ET_REL) {
+format/elf/elf.c:					if (sym[k].st_shndx < bin->ehdr.e_shnum)
+format/elf/elf.c:						ret[ret_ctr].offset = sym[k].st_value + bin->shdr[sym[k].st_shndx].sh_offset;
+format/elf/elf.c:					int maxsize = R_MIN (bin->b->length, strtab_section->sh_size);
+format/elf/elf.c:		R_FREE (bin->imports_by_ord);
+format/elf/elf.c:		bin->imports_by_ord_size = nsym + 1;
+format/elf/elf.c:		bin->imports_by_ord = (RBinImport**)calloc (R_MAX (1, nsym + 1), sizeof (RBinImport*));
+format/elf/elf.c:		R_FREE (bin->symbols_by_ord);
+format/elf/elf.c:		bin->symbols_by_ord_size = nsym + 1;
+format/elf/elf.c:		bin->symbols_by_ord = (RBinSymbol**)calloc (R_MAX (1, nsym + 1), sizeof (RBinSymbol*));
+format/elf/elf.c:	if (!bin->g_symbols) {
+format/elf/elf.c:		bin->g_symbols = Elf_(_r_bin_elf_get_symbols_imports) (bin, R_BIN_ELF_SYMBOLS);
+format/elf/elf.c:	return bin->g_symbols;
+format/elf/elf.c:	if (!bin->g_imports) {
+format/elf/elf.c:		bin->g_imports = Elf_(_r_bin_elf_get_symbols_imports) (bin, R_BIN_ELF_IMPORTS);
+format/elf/elf.c:	return bin->g_imports;
+format/elf/elf.c:	if (!bin || !(ret = calloc ((bin->ehdr.e_phnum + 3 + 1), sizeof (RBinElfField)))) {
+format/elf/elf.c:	ret[i].offset = bin->ehdr.e_shoff;
+format/elf/elf.c:	ret[i].offset = bin->ehdr.e_phoff;
+format/elf/elf.c:	for (j = 0; bin->phdr && j < bin->ehdr.e_phnum; i++, j++) {
+format/elf/elf.c:		ret[i].offset = bin->phdr[j].p_offset;
+format/elf/elf.c:	free (bin->phdr);
+format/elf/elf.c:	free (bin->shdr);
+format/elf/elf.c:	free (bin->strtab);
+format/elf/elf.c:	free (bin->dyn_buf);
+format/elf/elf.c:	free (bin->shstrtab);
+format/elf/elf.c:	free (bin->dynstr);
+format/elf/elf.c:	//free (bin->strtab_section);
+format/elf/elf.c:	if (bin->imports_by_ord) {
+format/elf/elf.c:		for (i = 0; i<bin->imports_by_ord_size; i++) {
+format/elf/elf.c:			free (bin->imports_by_ord[i]);
+format/elf/elf.c:		free (bin->imports_by_ord);
+format/elf/elf.c:	if (bin->symbols_by_ord) {
+format/elf/elf.c:		for (i = 0; i<bin->symbols_by_ord_size; i++) {
+format/elf/elf.c:			free (bin->symbols_by_ord[i]);
+format/elf/elf.c:		free (bin->symbols_by_ord);
+format/elf/elf.c:	r_buf_free (bin->b);
+format/elf/elf.c:	if (bin->g_symbols != bin->phdr_symbols) {
+format/elf/elf.c:		R_FREE (bin->phdr_symbols);
+format/elf/elf.c:	if (bin->g_imports != bin->phdr_imports) {
+format/elf/elf.c:		R_FREE (bin->phdr_imports);
+format/elf/elf.c:	R_FREE (bin->g_sections);
+format/elf/elf.c:	R_FREE (bin->g_symbols);
+format/elf/elf.c:	R_FREE (bin->g_imports);
+format/elf/elf.c:	bin->file = file;
+format/elf/elf.c:	bin->size = size;
+format/elf/elf.c:	bin->verbose = verbose;
+format/elf/elf.c:	bin->b = r_buf_new ();
+format/elf/elf.c:	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+format/elf/elf.c:	bin->kv = sdb_new0 ();
+format/elf/elf.c:	bin->b = r_buf_new ();
+format/elf/elf.c:	bin->size = (ut32)buf->length;
+format/elf/elf.c:	bin->verbose = verbose;
+format/elf/elf.c:	if (!r_buf_set_bytes (bin->b, buf->buf, buf->length)) {
+format/elf/elf.c:	if (!bin->phdr) {
+format/elf/elf.c:		if (bin->ehdr.e_type == ET_REL) {
+format/elf/elf.c:			return bin->baddr + paddr;
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_phnum; ++i) {
+format/elf/elf.c:		Elf_(Phdr) *p = &bin->phdr[i];
+format/elf/elf.c:	if (!bin->phdr) {
+format/elf/elf.c:		if (bin->ehdr.e_type == ET_REL) {
+format/elf/elf.c:			return vaddr - bin->baddr;
+format/elf/elf.c:	for (i = 0; i < bin->ehdr.e_phnum; ++i) {
+format/elf/elf.c:		Elf_(Phdr) *p = &bin->phdr[i];
+format/elf/elf_write.c:	Elf_(Ehdr) *ehdr = &bin->ehdr;
+format/elf/elf_write.c:	Elf_(Phdr) *phdr = bin->phdr, *phdrp;
+format/elf/elf_write.c:	Elf_(Shdr) *shdr = bin->shdr, *shdrp;
+format/elf/elf_write.c:	const char *strtab = bin->shstrtab;
+format/elf/elf_write.c:		if (idx < 0 || idx >= bin->shstrtab_size) {
+format/elf/elf_write.c:			if (r_buf_read_at (bin->b, shdrp->sh_offset, (ut8*)rel, shdrp->sh_size) == -1)
+format/elf/elf_write.c:					if (r_buf_write_at (bin->b, off, (ut8*)relp, sizeof (Elf_(Rel))) == -1)
+format/elf/elf_write.c:			if (r_buf_read_at (bin->b, shdrp->sh_offset, (ut8*)rel, shdrp->sh_size) == -1)
+format/elf/elf_write.c:					if (r_buf_write_at (bin->b, off, (ut8*)relp, sizeof (Elf_(Rela))) == -1)
+format/elf/elf_write.c:		if (r_buf_write_at (bin->b, off, (ut8*)shdrp, sizeof (Elf_(Shdr))) == -1)
+format/elf/elf_write.c:		if (r_buf_write_at (bin->b, off, (ut8*)phdrp, sizeof (Elf_(Phdr))) == -1)
+format/elf/elf_write.c:	if (ehdr->e_entry - bin->baddr >= rsz_offset + rsz_osize)
+format/elf/elf_write.c:	if (r_buf_write_at (bin->b, 0, (ut8*)ehdr, sizeof (Elf_(Ehdr))) == -1)
+format/elf/elf_write.c:	rest_size = bin->size - (rsz_offset + rsz_osize);
+format/elf/elf_write.c:	buf = (ut8 *)malloc (1+bin->size);
+format/elf/elf_write.c:	r_buf_read_at (bin->b, 0, (ut8*)buf, bin->size);
+format/elf/elf_write.c:	r_buf_set_bytes (bin->b, (ut8*)buf, (int)(rsz_offset+rsz_size+rest_size));
+format/elf/elf_write.c:	r_buf_read_at (bin->b, rsz_offset + rsz_osize, (ut8*)buf, rest_size);
+format/elf/elf_write.c:	r_buf_write_at (bin->b, rsz_offset + rsz_size, (ut8*)buf, rest_size);
+format/elf/elf_write.c:	bin->size = bin->b->length;
+format/elf/elf_write.c:	if (!bin->phdr) {
+format/elf/elf_write.c:	for (i = 0; i < bin->ehdr.e_phnum; i++)
+format/elf/elf_write.c:		if (bin->phdr[i].p_type == PT_DYNAMIC) {
+format/elf/elf_write.c:			if (!(dyn = malloc (bin->phdr[i].p_filesz + 1))) {
+format/elf/elf_write.c:			if (r_buf_read_at (bin->b, bin->phdr[i].p_offset, (ut8*)dyn, bin->phdr[i].p_filesz) == -1) {
+format/elf/elf_write.c:			if ((ndyn = (int)(bin->phdr[i].p_filesz / sizeof (Elf_(Dyn)))) > 0) {
+format/elf/elf_write.c:						stroff = (ut64)(dyn[j].d_un.d_ptr - bin->baddr);
+format/elf/elf_write.c:						if (r_buf_write_at (bin->b, stroff + dyn[j].d_un.d_val,
+format/elf/elf_write.c:	Elf_(Ehdr) *ehdr = &bin->ehdr;
+format/elf/elf_write.c:	Elf_(Shdr) *shdr = bin->shdr, *shdrp;
+format/elf/elf_write.c:	const char *strtab = bin->shstrtab;
+format/elf/elf_write.c:			patchoff = bin->ehdr.e_shoff;
+format/elf/elf_write.c:			patchoff += ((const ut8*)shdrp - (const ut8*)bin->shdr);
+format/elf/elf_write.c:			r_buf_write_at (bin->b, patchoff, (ut8*)&newperms, 1);
+format/elf/elf_write.c:	eprintf ("%d\n", r_buf_write_at (bin->b, patchoff, (ut8*)&addr, sizeof (addr)));
+format/elf/elf_write.c:	r_buf_write_at (bin->b, patchoff, (ut8*)&addr32, sizeof (addr32));
+format/mach0/dyldcache.c:	int len = r_buf_fread_at (bin->b, 0, (ut8*)&bin->hdr, "16c4i7l", 1);
+format/mach0/dyldcache.c:	bin->nlibs = bin->hdr.numlibs;
+format/mach0/dyldcache.c:	if (bin->size < 1) {
+format/mach0/dyldcache.c:		eprintf ("Empty file? (%s)\n", bin->file? bin->file: "(null)");
+format/mach0/dyldcache.c:	if (bin->nlibs < 0 || idx < 0 || idx >= bin->nlibs) {
+format/mach0/dyldcache.c:	*nlib = bin->nlibs;
+format/mach0/dyldcache.c:	if (bin->hdr.startaddr > bin->size) {
+format/mach0/dyldcache.c:	if (bin->hdr.startaddr > bin->size || bin->hdr.baseaddroff > bin->size) {
+format/mach0/dyldcache.c:	image_infos = (struct dyld_cache_image_info*) (bin->b->buf + bin->hdr.startaddr);
+format/mach0/dyldcache.c:	dyld_vmbase = *(ut64 *)(bin->b->buf + bin->hdr.baseaddroff);
+format/mach0/dyldcache.c:	if (liboff > bin->size) {
+format/mach0/dyldcache.c:	if (image_infos[idx].pathFileOffset > bin->size) {
+format/mach0/dyldcache.c:	libname = (char *)(bin->b->buf + image_infos[idx].pathFileOffset);
+format/mach0/dyldcache.c:	data = bin->b->buf + liboff;
+format/mach0/dyldcache.c:			if (seg->fileoff + seg->filesize > bin->size || seg->fileoff > bin->size) {
+format/mach0/dyldcache.c:			r_buf_append_bytes (dbuf, bin->b->buf+seg->fileoff, t);
+format/mach0/dyldcache.c:	r_buf_free (bin->b);
+format/mach0/dyldcache.c:	bin->file = file;
+format/mach0/dyldcache.c:	if (!(buf = (ut8*)r_file_slurp (file, &bin->size))) {
+format/mach0/dyldcache.c:	bin->b = r_buf_new ();
+format/mach0/dyldcache.c:	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+format/mach0/dyldcache.c:	bin->b = r_buf_new();
+format/mach0/dyldcache.c:	if (!r_buf_set_bytes (bin->b, buf, size))
+format/mach0/dyldcache.c:	bin->size = size;
+format/mach0/fatmach0.c:	int len = r_buf_read_at (bin->b, 0, &hdrbytes[0], sizeof (struct fat_header));
+format/mach0/fatmach0.c:	bin->hdr.magic = r_read_be32 (&hdrbytes[0]);
+format/mach0/fatmach0.c:	bin->hdr.nfat_arch = r_read_be32 (&hdrbytes[4]);
+format/mach0/fatmach0.c:	bin->nfat_arch = bin->hdr.nfat_arch;
+format/mach0/fatmach0.c:	if (sizeof (struct fat_header) + bin->nfat_arch *
+format/mach0/fatmach0.c:		sizeof (struct fat_arch) > bin->size) {
+format/mach0/fatmach0.c:	if (bin->hdr.magic != FAT_MAGIC || !bin->nfat_arch || bin->nfat_arch < 1) {
+format/mach0/fatmach0.c:	size = bin->nfat_arch * sizeof (struct fat_arch);
+format/mach0/fatmach0.c:	if (size < bin->nfat_arch) {
+format/mach0/fatmach0.c:	if (!(bin->archs = malloc (size))) {
+format/mach0/fatmach0.c:	for (i = 0; i < bin->nfat_arch; i++) {
+format/mach0/fatmach0.c:		len = r_buf_read_at (bin->b, 8 + i * sizeof (struct fat_arch), &archbytes[0], sizeof (struct fat_arch));
+format/mach0/fatmach0.c:			R_FREE (bin->archs);
+format/mach0/fatmach0.c:		bin->archs[i].cputype = r_read_be32 (&archbytes[0]);
+format/mach0/fatmach0.c:		bin->archs[i].cpusubtype = r_read_be32 (&archbytes[4]);
+format/mach0/fatmach0.c:		bin->archs[i].offset = r_read_be32 (&archbytes[8]);
+format/mach0/fatmach0.c:		bin->archs[i].size = r_read_be32 (&archbytes[12]);
+format/mach0/fatmach0.c:		bin->archs[i].align = r_read_be32 (&archbytes[16]);
+format/mach0/fatmach0.c:	if (!bin || (idx < 0) || (idx > bin->nfat_arch)) {
+format/mach0/fatmach0.c:	if (bin->archs[idx].offset > bin->size || \
+format/mach0/fatmach0.c:	  bin->archs[idx].offset + bin->archs[idx].size > bin->size)
+format/mach0/fatmach0.c:		*narch = bin->nfat_arch;
+format/mach0/fatmach0.c:	if (!bin->archs[idx].size || bin->archs[idx].size > bin->size) {
+format/mach0/fatmach0.c:		eprintf ("Skipping corrupted sub-bin %d arch %d\n", idx, bin->archs[idx].size);
+format/mach0/fatmach0.c:	if (!(buf = malloc (1 + bin->archs[idx].size))) {
+format/mach0/fatmach0.c:	if (r_buf_read_at (bin->b, bin->archs[idx].offset, buf, bin->archs[idx].size) != bin->archs[idx].size) {
+format/mach0/fatmach0.c:	if (!r_buf_set_bytes (ret->b, buf, bin->archs[idx].size)) {
+format/mach0/fatmach0.c:	ret->offset = bin->archs[idx].offset;
+format/mach0/fatmach0.c:	ret->size = bin->archs[idx].size;
+format/mach0/fatmach0.c:	free (bin->archs);
+format/mach0/fatmach0.c:	r_buf_free (bin->b);
+format/mach0/fatmach0.c:	bin->file = file;
+format/mach0/fatmach0.c:	if (!(buf = (ut8*)r_file_slurp (file, &bin->size))) {
+format/mach0/fatmach0.c:	bin->b = r_buf_new ();
+format/mach0/fatmach0.c:	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+format/mach0/fatmach0.c:	bin->b = r_buf_new ();
+format/mach0/fatmach0.c:	bin->size = size;
+format/mach0/fatmach0.c:	if (!r_buf_set_bytes (bin->b, buf, size)) {
+format/mach0/mach0.c:#define bprintf if(bin->verbose)eprintf
+format/mach0/mach0.c:	switch (bin->main_cmd.cmd) {
+format/mach0/mach0.c:		return bin->entry + bin->baddr;
+format/mach0/mach0.c:		return bin->entry;
+format/mach0/mach0.c:	if (!bin->segs) {
+format/mach0/mach0.c:	for (i = 0; i < bin->nsegs; i++) {
+format/mach0/mach0.c:		segment_base = (ut64)bin->segs[i].vmaddr;
+format/mach0/mach0.c:		segment_size = (ut64)bin->segs[i].vmsize;
+format/mach0/mach0.c:			return bin->segs[i].fileoff + (addr - segment_base);
+format/mach0/mach0.c:	if (r_buf_read_at (bin->b, 0, magicbytes, 4) < 1) {
+format/mach0/mach0.c:		bin->big_endian = false;
+format/mach0/mach0.c:		bin->big_endian = true;
+format/mach0/mach0.c:		bin->big_endian = false;
+format/mach0/mach0.c:		bin->big_endian = true;
+format/mach0/mach0.c:		bin->big_endian = false;
+format/mach0/mach0.c:		bin->big_endian = true;
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, 0, machohdrbytes, sizeof (machohdrbytes));
+format/mach0/mach0.c:	bin->hdr.magic = r_read_ble (&machohdrbytes[0], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.cputype = r_read_ble (&machohdrbytes[4], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.cpusubtype = r_read_ble (&machohdrbytes[8], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.filetype = r_read_ble (&machohdrbytes[12], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.ncmds = r_read_ble (&machohdrbytes[16], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.sizeofcmds = r_read_ble (&machohdrbytes[20], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.flags = r_read_ble (&machohdrbytes[24], bin->big_endian, 32);
+format/mach0/mach0.c:	bin->hdr.reserved = r_read_ble (&machohdrbytes[28], bin->big_endian, 32);
+format/mach0/mach0.c:	sdb_set (bin->kv, "mach0_header.format",
+format/mach0/mach0.c:	sdb_num_set (bin->kv, "mach0_header.offset", 0, 0); // wat about fatmach0?
+format/mach0/mach0.c:	sdb_set (bin->kv, "mach_filetype.cparse", "enum mach_filetype{MH_OBJECT=1,"
+format/mach0/mach0.c:	sdb_set (bin->kv, "mach_flags.cparse", "enum mach_flags{MH_NOUNDEFS=1,"
+format/mach0/mach0.c:	if (!UT32_MUL (&size_sects, bin->nsegs, sizeof (struct MACH0_(segment_command)))) {
+format/mach0/mach0.c:	if (!size_sects || size_sects > bin->size) {
+format/mach0/mach0.c:	if (off > bin->size || off + sizeof (struct MACH0_(segment_command)) > bin->size) {
+format/mach0/mach0.c:	if (!(bin->segs = realloc (bin->segs, bin->nsegs * sizeof(struct MACH0_(segment_command))))) {
+format/mach0/mach0.c:	j = bin->nsegs - 1;
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off, segcom, sizeof (struct MACH0_(segment_command)));
+format/mach0/mach0.c:	bin->segs[j].cmd = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].cmdsize = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	memcpy (&bin->segs[j].segname, &segcom[i], 16);
+format/mach0/mach0.c:	bin->segs[j].vmaddr = r_read_ble64 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].vmsize = r_read_ble64 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].fileoff = r_read_ble64 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].filesize = r_read_ble64 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].vmaddr = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].vmsize = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].fileoff = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].filesize = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].maxprot = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].initprot = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].nsects = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	bin->segs[j].flags = r_read_ble32 (&segcom[i], bin->big_endian);
+format/mach0/mach0.c:	sdb_num_set (bin->kv, sdb_fmt (0, "mach0_segment_%d.offset", j), off, 0);
+format/mach0/mach0.c:	sdb_num_set (bin->kv, "mach0_segments.count", 0, 0);
+format/mach0/mach0.c:	sdb_set (bin->kv, "mach0_segment.format",
+format/mach0/mach0.c:	if (bin->segs[j].nsects > 0) {
+format/mach0/mach0.c:		sect = bin->nsects;
+format/mach0/mach0.c:		bin->nsects += bin->segs[j].nsects;
+format/mach0/mach0.c:		if (bin->nsects > 128) {
+format/mach0/mach0.c:			int new_nsects = bin->nsects & 0xf;
+format/mach0/mach0.c:				 bin->nsects, new_nsects);
+format/mach0/mach0.c:			bin->nsects = new_nsects;
+format/mach0/mach0.c:		if ((int)bin->nsects < 1) {
+format/mach0/mach0.c:			bin->nsects = sect;
+format/mach0/mach0.c:		if (!UT32_MUL (&size_sects, bin->nsects-sect, sizeof (struct MACH0_(section)))){
+format/mach0/mach0.c:			bin->nsects = sect;
+format/mach0/mach0.c:		if (!size_sects || size_sects > bin->size){
+format/mach0/mach0.c:			bin->nsects = sect;
+format/mach0/mach0.c:		if (bin->segs[j].cmdsize != sizeof (struct MACH0_(segment_command)) \
+format/mach0/mach0.c:				  + (sizeof (struct MACH0_(section))*bin->segs[j].nsects)){
+format/mach0/mach0.c:			bin->nsects = sect;
+format/mach0/mach0.c:		if (off + sizeof (struct MACH0_(segment_command)) > bin->size ||\
+format/mach0/mach0.c:				off + sizeof (struct MACH0_(segment_command)) + size_sects > bin->size){
+format/mach0/mach0.c:			bin->nsects = sect;
+format/mach0/mach0.c:		if (!(bin->sects = realloc (bin->sects, bin->nsects * sizeof (struct MACH0_(section))))) {
+format/mach0/mach0.c:			bin->nsects = sect;
+format/mach0/mach0.c:		for (k = sect, j = 0; k < bin->nsects; k++, j++) {
+format/mach0/mach0.c:			len = r_buf_read_at (bin->b, offset, sec, sizeof (struct MACH0_(section)));
+format/mach0/mach0.c:				bin->nsects = sect;
+format/mach0/mach0.c:			memcpy (&bin->sects[k].sectname, &sec[i], 16);
+format/mach0/mach0.c:			memcpy (&bin->sects[k].segname, &sec[i], 16);
+format/mach0/mach0.c:			bin->sects[k].segname[15] = 0;
+format/mach0/mach0.c:			bin->sects[k].addr = r_read_ble64 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].size = r_read_ble64 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].addr = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].size = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].offset = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].align = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].reloff = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].nreloc = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].flags = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].reserved1 = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].reserved2 = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:			bin->sects[k].reserved3 = r_read_ble32 (&sec[i], bin->big_endian);
+format/mach0/mach0.c:	if (off > (ut64)bin->size || off + sizeof (struct symtab_command) > (ut64)bin->size) {
+format/mach0/mach0.c:	int len = r_buf_read_at (bin->b, off, symt, sizeof (struct symtab_command));
+format/mach0/mach0.c:	st.cmd = r_read_ble32 (&symt[0], bin->big_endian);
+format/mach0/mach0.c:	st.cmdsize = r_read_ble32 (&symt[4], bin->big_endian);
+format/mach0/mach0.c:	st.symoff = r_read_ble32 (&symt[8], bin->big_endian);
+format/mach0/mach0.c:	st.nsyms = r_read_ble32 (&symt[12], bin->big_endian);
+format/mach0/mach0.c:	st.stroff = r_read_ble32 (&symt[16], bin->big_endian);
+format/mach0/mach0.c:	st.strsize = r_read_ble32 (&symt[20], bin->big_endian);
+format/mach0/mach0.c:	bin->symtab = NULL;
+format/mach0/mach0.c:	bin->nsymtab = 0;
+format/mach0/mach0.c:	if (st.strsize > 0 && st.strsize < bin->size && st.nsyms > 0) {
+format/mach0/mach0.c:		bin->nsymtab = st.nsyms;
+format/mach0/mach0.c:		if (st.stroff > bin->size || st.stroff + st.strsize > bin->size) {
+format/mach0/mach0.c:		if (!UT32_MUL (&size_sym, bin->nsymtab, sizeof (struct MACH0_(nlist)))) {
+format/mach0/mach0.c:		if (st.symoff > bin->size || st.symoff + size_sym > bin->size) {
+format/mach0/mach0.c:		if (!(bin->symstr = calloc (1, st.strsize + 2))) {
+format/mach0/mach0.c:		bin->symstrlen = st.strsize;
+format/mach0/mach0.c:		len = r_buf_read_at (bin->b, st.stroff, (ut8*)bin->symstr, st.strsize);
+format/mach0/mach0.c:			R_FREE (bin->symstr);
+format/mach0/mach0.c:		if (!(bin->symtab = calloc (bin->nsymtab, sizeof (struct MACH0_(nlist))))) {
+format/mach0/mach0.c:		for (i = 0; i < bin->nsymtab; i++) {
+format/mach0/mach0.c:			len = r_buf_read_at (bin->b, st.symoff + (i * sizeof (struct MACH0_(nlist))),
+format/mach0/mach0.c:				R_FREE (bin->symtab);
+format/mach0/mach0.c:			bin->symtab[i].n_strx = r_read_ble32 (&nlst[0], bin->big_endian);
+format/mach0/mach0.c:			bin->symtab[i].n_type = r_read_ble8 (&nlst[4]);
+format/mach0/mach0.c:			bin->symtab[i].n_sect = r_read_ble8 (&nlst[5]);
+format/mach0/mach0.c:			bin->symtab[i].n_desc = r_read_ble16 (&nlst[6], bin->big_endian);
+format/mach0/mach0.c:			bin->symtab[i].n_value = r_read_ble64 (&nlst[8], bin->big_endian);
+format/mach0/mach0.c:			bin->symtab[i].n_value = r_read_ble32 (&nlst[8], bin->big_endian);
+format/mach0/mach0.c:	if (off > bin->size || off + sizeof (struct dysymtab_command) > bin->size) {
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off, dysym, sizeof (struct dysymtab_command));
+format/mach0/mach0.c:	bin->dysymtab.cmd = r_read_ble32 (&dysym[0], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.cmdsize = r_read_ble32 (&dysym[4], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.ilocalsym = r_read_ble32 (&dysym[8], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nlocalsym = r_read_ble32 (&dysym[12], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.iextdefsym = r_read_ble32 (&dysym[16], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nextdefsym = r_read_ble32 (&dysym[20], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.iundefsym = r_read_ble32 (&dysym[24], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nundefsym = r_read_ble32 (&dysym[28], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.tocoff = r_read_ble32 (&dysym[32], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.ntoc = r_read_ble32 (&dysym[36], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.modtaboff = r_read_ble32 (&dysym[40], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nmodtab = r_read_ble32 (&dysym[44], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.extrefsymoff = r_read_ble32 (&dysym[48], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nextrefsyms = r_read_ble32 (&dysym[52], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.indirectsymoff = r_read_ble32 (&dysym[56], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nindirectsyms = r_read_ble32 (&dysym[60], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.extreloff = r_read_ble32 (&dysym[64], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nextrel = r_read_ble32 (&dysym[68], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.locreloff = r_read_ble32 (&dysym[72], bin->big_endian);
+format/mach0/mach0.c:	bin->dysymtab.nlocrel = r_read_ble32 (&dysym[76], bin->big_endian);
+format/mach0/mach0.c:	bin->ntoc = bin->dysymtab.ntoc;
+format/mach0/mach0.c:	if (bin->ntoc > 0) {
+format/mach0/mach0.c:		if (!(bin->toc = calloc (bin->ntoc, sizeof (struct dylib_table_of_contents)))) {
+format/mach0/mach0.c:		if (!UT32_MUL (&size_tab, bin->ntoc, sizeof (struct dylib_table_of_contents))){
+format/mach0/mach0.c:			R_FREE (bin->toc);
+format/mach0/mach0.c:			R_FREE (bin->toc);
+format/mach0/mach0.c:		if (bin->dysymtab.tocoff > bin->size || bin->dysymtab.tocoff + size_tab > bin->size){
+format/mach0/mach0.c:			R_FREE (bin->toc);
+format/mach0/mach0.c:		for (i = 0; i < bin->ntoc; i++) {
+format/mach0/mach0.c:			len = r_buf_read_at (bin->b, bin->dysymtab.tocoff +
+format/mach0/mach0.c:				R_FREE (bin->toc);
+format/mach0/mach0.c:			bin->toc[i].symbol_index = r_read_ble32 (&dytoc[0], bin->big_endian);
+format/mach0/mach0.c:			bin->toc[i].module_index = r_read_ble32 (&dytoc[4], bin->big_endian);
+format/mach0/mach0.c:	bin->nmodtab = bin->dysymtab.nmodtab;
+format/mach0/mach0.c:	if (bin->nmodtab > 0) {
+format/mach0/mach0.c:		if (!(bin->modtab = calloc (bin->nmodtab, sizeof (struct MACH0_(dylib_module))))) {
+format/mach0/mach0.c:		if (!UT32_MUL (&size_tab, bin->nmodtab, sizeof (struct MACH0_(dylib_module)))){
+format/mach0/mach0.c:			R_FREE (bin->modtab);
+format/mach0/mach0.c:			R_FREE (bin->modtab);
+format/mach0/mach0.c:		if (bin->dysymtab.modtaboff > bin->size || \
+format/mach0/mach0.c:		  bin->dysymtab.modtaboff + size_tab > bin->size){
+format/mach0/mach0.c:			R_FREE (bin->modtab);
+format/mach0/mach0.c:		for (i = 0; i < bin->nmodtab; i++) {
+format/mach0/mach0.c:			len = r_buf_read_at (bin->b, bin->dysymtab.modtaboff +
+format/mach0/mach0.c:				R_FREE (bin->modtab);
+format/mach0/mach0.c:			bin->modtab[i].module_name = r_read_ble32 (&dymod[0], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].iextdefsym = r_read_ble32 (&dymod[4], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].nextdefsym = r_read_ble32 (&dymod[8], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].irefsym = r_read_ble32 (&dymod[12], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].nrefsym = r_read_ble32 (&dymod[16], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].ilocalsym = r_read_ble32 (&dymod[20], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].nlocalsym = r_read_ble32 (&dymod[24], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].iextrel = r_read_ble32 (&dymod[28], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].nextrel = r_read_ble32 (&dymod[32], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].iinit_iterm = r_read_ble32 (&dymod[36], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].ninit_nterm = r_read_ble32 (&dymod[40], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].objc_module_info_size = r_read_ble32 (&dymod[44], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].objc_module_info_addr = r_read_ble64 (&dymod[48], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].objc_module_info_addr = r_read_ble32 (&dymod[44], bin->big_endian);
+format/mach0/mach0.c:			bin->modtab[i].objc_module_info_size = r_read_ble32 (&dymod[48], bin->big_endian);
+format/mach0/mach0.c:	bin->nindirectsyms = bin->dysymtab.nindirectsyms;
+format/mach0/mach0.c:	if (bin->nindirectsyms > 0) {
+format/mach0/mach0.c:		if (!(bin->indirectsyms = calloc (bin->nindirectsyms, sizeof (ut32)))) {
+format/mach0/mach0.c:		if (!UT32_MUL (&size_tab, bin->nindirectsyms, sizeof (ut32))){
+format/mach0/mach0.c:			R_FREE (bin->indirectsyms);
+format/mach0/mach0.c:			R_FREE (bin->indirectsyms);
+format/mach0/mach0.c:		if (bin->dysymtab.indirectsymoff > bin->size || \
+format/mach0/mach0.c:				bin->dysymtab.indirectsymoff + size_tab > bin->size){
+format/mach0/mach0.c:			R_FREE (bin->indirectsyms);
+format/mach0/mach0.c:		for (i = 0; i < bin->nindirectsyms; i++) {
+format/mach0/mach0.c:			len = r_buf_read_at (bin->b, bin->dysymtab.indirectsymoff + i * sizeof (ut32), idsyms, 4);
+format/mach0/mach0.c:				R_FREE (bin->indirectsyms);
+format/mach0/mach0.c:			bin->indirectsyms[i] = r_read_ble32 (&idsyms[0], bin->big_endian);
+format/mach0/mach0.c:	bin->signature = NULL;
+format/mach0/mach0.c:	if (off > bin->size || off + sizeof (struct linkedit_data_command) > bin->size) {
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off, lit, sizeof (struct linkedit_data_command));
+format/mach0/mach0.c:	link.cmd = r_read_ble32 (&lit[0], bin->big_endian);
+format/mach0/mach0.c:	link.cmdsize = r_read_ble32 (&lit[4], bin->big_endian);
+format/mach0/mach0.c:	link.dataoff = r_read_ble32 (&lit[8], bin->big_endian);
+format/mach0/mach0.c:	link.datasize = r_read_ble32 (&lit[12], bin->big_endian);
+format/mach0/mach0.c:	if (data > bin->size || data + sizeof (struct super_blob_t) > bin->size) {
+format/mach0/mach0.c:		bin->signature = (ut8 *)strdup ("Malformed entitlement");
+format/mach0/mach0.c:	super.blob.magic = r_read_ble32 (bin->b->buf + data, little_);
+format/mach0/mach0.c:	super.blob.length = r_read_ble32 (bin->b->buf + data + 4, little_);
+format/mach0/mach0.c:	super.count = r_read_ble32 (bin->b->buf + data + 8, little_);
+format/mach0/mach0.c:		if ((ut8 *)(bin->b->buf + data + i) > (ut8 *)(bin->b->buf + bin->size)) {
+format/mach0/mach0.c:			bin->signature = (ut8 *)strdup ("Malformed entitlement");
+format/mach0/mach0.c:		if (r_buf_read_at (bin->b, data + 12 + (i * sizeof (struct blob_index_t)),
+format/mach0/mach0.c:			if (off > bin->size || off + sizeof (struct blob_t) > bin->size) {
+format/mach0/mach0.c:				bin->signature = (ut8 *)strdup ("Malformed entitlement");
+format/mach0/mach0.c:			entitlements.magic = r_read_ble32 (bin->b->buf + off, little_);
+format/mach0/mach0.c:			entitlements.length = r_read_ble32 (bin->b->buf + off + 4, little_);
+format/mach0/mach0.c:			if (len <= bin->size && len > 1) {
+format/mach0/mach0.c:				bin->signature = calloc (1, len + 1);
+format/mach0/mach0.c:				if (bin->signature) {
+format/mach0/mach0.c:					ut8 *src = bin->b->buf + off + sizeof (struct blob_t);
+format/mach0/mach0.c:					if (off + sizeof (struct blob_t) + len < bin->b->length) {
+format/mach0/mach0.c:						memcpy (bin->signature, src, len);
+format/mach0/mach0.c:						bin->signature[len] = '\0';
+format/mach0/mach0.c:					bin->signature = (ut8 *)strdup ("Malformed entitlement");
+format/mach0/mach0.c:				bin->signature = (ut8 *)strdup ("Malformed entitlement");
+format/mach0/mach0.c:	if (!bin->signature) {
+format/mach0/mach0.c:		bin->signature = (ut8 *)strdup ("No entitlement found");
+format/mach0/mach0.c:	if (off > bin->size || off + sizeof (struct thread_command) > bin->size)
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off, thc, 8);
+format/mach0/mach0.c:	bin->thread.cmd = r_read_ble32 (&thc[0], bin->big_endian);
+format/mach0/mach0.c:	bin->thread.cmdsize = r_read_ble32 (&thc[4], bin->big_endian);
+format/mach0/mach0.c:	flavor = r_read_ble32 (bin->b->buf + off + sizeof (struct thread_command), bin->big_endian);
+format/mach0/mach0.c:	if (off + sizeof (struct thread_command) + sizeof (flavor) > bin->size || \
+format/mach0/mach0.c:	  off + sizeof (struct thread_command) + sizeof (flavor) + sizeof (ut32) > bin->size)
+format/mach0/mach0.c:	count = r_read_ble32 (bin->b->buf + off + sizeof (struct thread_command) + sizeof (flavor),
+format/mach0/mach0.c:				bin->big_endian);
+format/mach0/mach0.c:	if (ptr_thread > bin->size)
+format/mach0/mach0.c:	switch (bin->hdr.cputype) {
+format/mach0/mach0.c:			if (ptr_thread + sizeof (struct x86_thread_state32) > bin->size)
+format/mach0/mach0.c:			if ((len = r_buf_fread_at (bin->b, ptr_thread,
+format/mach0/mach0.c:				(ut8*)&bin->thread_state.x86_32, "16i", 1)) == -1) {
+format/mach0/mach0.c:			pc = bin->thread_state.x86_32.eip;
+format/mach0/mach0.c:			arw_ptr = (ut8 *)&bin->thread_state.x86_32;
+format/mach0/mach0.c:			if (ptr_thread + sizeof (struct x86_thread_state64) > bin->size)
+format/mach0/mach0.c:			if ((len = r_buf_fread_at (bin->b, ptr_thread,
+format/mach0/mach0.c:				(ut8*)&bin->thread_state.x86_64, "32l", 1)) == -1) {
+format/mach0/mach0.c:			pc = bin->thread_state.x86_64.rip;
+format/mach0/mach0.c:			arw_ptr = (ut8 *)&bin->thread_state.x86_64;
+format/mach0/mach0.c:			if (ptr_thread + sizeof (struct ppc_thread_state32) > bin->size)
+format/mach0/mach0.c:			if ((len = r_buf_fread_at (bin->b, ptr_thread,
+format/mach0/mach0.c:				(ut8*)&bin->thread_state.ppc_32, bin->big_endian?"40I":"40i", 1)) == -1) {
+format/mach0/mach0.c:			pc = bin->thread_state.ppc_32.srr0;
+format/mach0/mach0.c:			arw_ptr = (ut8 *)&bin->thread_state.ppc_32;
+format/mach0/mach0.c:			if (ptr_thread + sizeof (struct ppc_thread_state64) > bin->size)
+format/mach0/mach0.c:			if ((len = r_buf_fread_at (bin->b, ptr_thread,
+format/mach0/mach0.c:				(ut8*)&bin->thread_state.ppc_64, bin->big_endian?"34LI3LI":"34li3li", 1)) == -1) {
+format/mach0/mach0.c:			pc = bin->thread_state.ppc_64.srr0;
+format/mach0/mach0.c:			arw_ptr = (ut8 *)&bin->thread_state.ppc_64;
+format/mach0/mach0.c:		if (ptr_thread + sizeof (struct arm_thread_state32) > bin->size)
+format/mach0/mach0.c:		if ((len = r_buf_fread_at (bin->b, ptr_thread,
+format/mach0/mach0.c:				(ut8*)&bin->thread_state.arm_32, bin->big_endian?"17I":"17i", 1)) == -1) {
+format/mach0/mach0.c:		pc = bin->thread_state.arm_32.r15;
+format/mach0/mach0.c:		arw_ptr = (ut8 *)&bin->thread_state.arm_32;
+format/mach0/mach0.c:		if (ptr_thread + sizeof (struct arm_thread_state64) > bin->size) {
+format/mach0/mach0.c:		if ((len = r_buf_fread_at(bin->b, ptr_thread,
+format/mach0/mach0.c:				(ut8*)&bin->thread_state.arm_64, bin->big_endian?"34LI1I":"34Li1i", 1)) == -1) {
+format/mach0/mach0.c:		pc = r_read_be64 (&bin->thread_state.arm_64.pc);
+format/mach0/mach0.c:		arw_ptr = (ut8*)&bin->thread_state.arm_64;
+format/mach0/mach0.c:		bin->main_cmd = *lc;
+format/mach0/mach0.c:			bin->entry = pc;
+format/mach0/mach0.c:			sdb_num_set (bin->kv, "mach0.entry.offset", pc_offset, 0);
+format/mach0/mach0.c:	if (off > bin->size || off + sizeof (struct linkedit_data_command) > bin->size) {
+format/mach0/mach0.c:	bin->func_start = NULL;
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off, sfc, sizeof (struct linkedit_data_command));
+format/mach0/mach0.c:	fc.cmd = r_read_ble32 (&sfc[0], bin->big_endian);
+format/mach0/mach0.c:	fc.cmdsize = r_read_ble32 (&sfc[4], bin->big_endian);
+format/mach0/mach0.c:	fc.dataoff = r_read_ble32 (&sfc[8], bin->big_endian);
+format/mach0/mach0.c:	fc.datasize = r_read_ble32 (&sfc[12], bin->big_endian);
+format/mach0/mach0.c:	bin->func_size = fc.datasize;
+format/mach0/mach0.c:	if (fc.dataoff > bin->size || fc.dataoff + fc.datasize > bin->size) {
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, fc.dataoff, buf, fc.datasize);
+format/mach0/mach0.c:	bin->func_start = buf;
+format/mach0/mach0.c:	if (off > bin->size || off + sizeof (struct dylib_command) > bin->size)
+format/mach0/mach0.c:	lib = bin->nlibs - 1;
+format/mach0/mach0.c:	if (!(bin->libs = realloc (bin->libs, bin->nlibs * R_BIN_MACH0_STRING_LENGTH))) {
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off, sdl, sizeof (struct dylib_command));
+format/mach0/mach0.c:	dl.cmd = r_read_ble32 (&sdl[0], bin->big_endian);
+format/mach0/mach0.c:	dl.cmdsize = r_read_ble32 (&sdl[4], bin->big_endian);
+format/mach0/mach0.c:	dl.dylib.name = r_read_ble32 (&sdl[8], bin->big_endian);
+format/mach0/mach0.c:	dl.dylib.timestamp = r_read_ble32 (&sdl[12], bin->big_endian);
+format/mach0/mach0.c:	dl.dylib.current_version = r_read_ble32 (&sdl[16], bin->big_endian);
+format/mach0/mach0.c:	dl.dylib.compatibility_version = r_read_ble32 (&sdl[20], bin->big_endian);
+format/mach0/mach0.c:	if (off + dl.dylib.name > bin->size ||\
+format/mach0/mach0.c:	  off + dl.dylib.name + R_BIN_MACH0_STRING_LENGTH > bin->size)
+format/mach0/mach0.c:	len = r_buf_read_at (bin->b, off+dl.dylib.name, (ut8*)bin->libs[lib], R_BIN_MACH0_STRING_LENGTH);
+format/mach0/mach0.c:	bin->uuidn = 0;
+format/mach0/mach0.c:	bin->os = 0;
+format/mach0/mach0.c:	bin->has_crypto = 0;
+format/mach0/mach0.c:	if (bin->hdr.sizeofcmds > bin->size) {
+format/mach0/mach0.c:		bin->hdr.sizeofcmds = bin->size - 128;
+format/mach0/mach0.c:	//bprintf ("Commands: %d\n", bin->hdr.ncmds);
+format/mach0/mach0.c:			i < bin->hdr.ncmds; i++, off += lc.cmdsize) {
+format/mach0/mach0.c:		if (off > bin->size || off + sizeof (struct load_command) > bin->size){
+format/mach0/mach0.c:		len = r_buf_read_at (bin->b, off, loadc, sizeof (struct load_command));
+format/mach0/mach0.c:		lc.cmd = r_read_ble32 (&loadc[0], bin->big_endian);
+format/mach0/mach0.c:		lc.cmdsize = r_read_ble32 (&loadc[4], bin->big_endian);
+format/mach0/mach0.c:		if (lc.cmdsize < 1 || off + lc.cmdsize > bin->size) {
+format/mach0/mach0.c:		sdb_num_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.offset", i), off, 0);
+format/mach0/mach0.c:		sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.format", i), "xd cmd size", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "data_in_code", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "rpath", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "segment", 0);
+format/mach0/mach0.c:			bin->nsegs++;
+format/mach0/mach0.c:				bin->nsegs--;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "symtab", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "dysymtab", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "dylib_code_sign_drs", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "version_min_macosx", 0);
+format/mach0/mach0.c:			bin->os = 1;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "version_min_iphoneos", 0);
+format/mach0/mach0.c:			bin->os = 2;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "version_min_tvos", 0);
+format/mach0/mach0.c:			bin->os = 4;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "version_min_watchos", 0);
+format/mach0/mach0.c:			bin->os = 3;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "uuid", 0);
+format/mach0/mach0.c:			if (off + sizeof (struct uuid_command) > bin->size) {
+format/mach0/mach0.c:			if (r_buf_fread_at (bin->b, off, (ut8*)&uc, "24c", 1) != -1) {
+format/mach0/mach0.c:				snprintf (key, sizeof (key)-1, "uuid.%d", bin->uuidn++);
+format/mach0/mach0.c:				sdb_set (bin->kv, key, val, 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "encryption_info", 0);
+format/mach0/mach0.c:			if (off + sizeof (struct MACH0_(encryption_info_command)) > bin->size) {
+format/mach0/mach0.c:			if (r_buf_read_at (bin->b, off, seic, sizeof (struct MACH0_(encryption_info_command))) != -1) {
+format/mach0/mach0.c:				eic.cmd = r_read_ble32 (&seic[0], bin->big_endian);
+format/mach0/mach0.c:				eic.cmdsize = r_read_ble32 (&seic[4], bin->big_endian);
+format/mach0/mach0.c:				eic.cryptoff = r_read_ble32 (&seic[8], bin->big_endian);
+format/mach0/mach0.c:				eic.cryptsize = r_read_ble32 (&seic[12], bin->big_endian);
+format/mach0/mach0.c:				eic.cryptid = r_read_ble32 (&seic[16], bin->big_endian);
+format/mach0/mach0.c:				bin->has_crypto = eic.cryptid;
+format/mach0/mach0.c:				sdb_set (bin->kv, "crypto", "true", 0);
+format/mach0/mach0.c:				sdb_num_set (bin->kv, "cryptid", eic.cryptid, 0);
+format/mach0/mach0.c:				sdb_num_set (bin->kv, "cryptoff", eic.cryptoff, 0);
+format/mach0/mach0.c:				sdb_num_set (bin->kv, "cryptsize", eic.cryptsize, 0);
+format/mach0/mach0.c:				sdb_num_set (bin->kv, "cryptheader", off, 0);
+format/mach0/mach0.c:				sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "dylinker", 0);
+format/mach0/mach0.c:				free (bin->intrp);
+format/mach0/mach0.c:				bin->intrp = NULL;
+format/mach0/mach0.c:				if (off + sizeof (struct dylinker_command) > bin->size){
+format/mach0/mach0.c:				if (r_buf_read_at (bin->b, off, sdy, sizeof (struct dylinker_command)) == -1) {
+format/mach0/mach0.c:					dy.cmd = r_read_ble32 (&sdy[0], bin->big_endian);
+format/mach0/mach0.c:					dy.cmdsize = r_read_ble32 (&sdy[4], bin->big_endian);
+format/mach0/mach0.c:					dy.name = r_read_ble32 (&sdy[8], bin->big_endian);
+format/mach0/mach0.c:						r_buf_read_at (bin->b, off + 0xc, (ut8*)buf, len);
+format/mach0/mach0.c:						free (bin->intrp);
+format/mach0/mach0.c:						bin->intrp = buf;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "main", 0);
+format/mach0/mach0.c:			if (off + 8 > bin->size || off + sizeof (ep) > bin->size) {
+format/mach0/mach0.c:			r_buf_read_at (bin->b, off + 8, sep, 2 * sizeof (ut64));
+format/mach0/mach0.c:			ep.eo = r_read_ble64 (&sep[0], bin->big_endian);
+format/mach0/mach0.c:			ep.ss = r_read_ble64 (&sep[8], bin->big_endian);
+format/mach0/mach0.c:			bin->entry = ep.eo;
+format/mach0/mach0.c:			bin->main_cmd = lc;
+format/mach0/mach0.c:			sdb_num_set (bin->kv, "mach0.entry.offset", off + 8, 0);
+format/mach0/mach0.c:			sdb_num_set (bin->kv, "stacksize", ep.ss, 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "unixthread", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "thread", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "load_dylib", 0);
+format/mach0/mach0.c:			bin->nlibs++;
+format/mach0/mach0.c:				bin->nlibs--;
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "dyld_info", 0);
+format/mach0/mach0.c:			bin->dyld_info = calloc (1, sizeof (struct dyld_info_command));
+format/mach0/mach0.c:			if (bin->dyld_info) {
+format/mach0/mach0.c:				if (off + sizeof (struct dyld_info_command) > bin->size){
+format/mach0/mach0.c:					R_FREE (bin->dyld_info);
+format/mach0/mach0.c:				if (r_buf_read_at (bin->b, off, dyldi, sizeof (struct dyld_info_command)) == -1) {
+format/mach0/mach0.c:					free (bin->dyld_info);
+format/mach0/mach0.c:					bin->dyld_info = NULL;
+format/mach0/mach0.c:					bin->dyld_info->cmd = r_read_ble32 (&dyldi[0], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->cmdsize = r_read_ble32 (&dyldi[4], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->rebase_off = r_read_ble32 (&dyldi[8], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->rebase_size = r_read_ble32 (&dyldi[12], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->bind_off = r_read_ble32 (&dyldi[16], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->bind_size = r_read_ble32 (&dyldi[20], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->weak_bind_off = r_read_ble32 (&dyldi[24], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->weak_bind_size = r_read_ble32 (&dyldi[28], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->lazy_bind_off = r_read_ble32 (&dyldi[32], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->lazy_bind_size = r_read_ble32 (&dyldi[36], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->export_off = r_read_ble32 (&dyldi[40], bin->big_endian);
+format/mach0/mach0.c:					bin->dyld_info->export_size = r_read_ble32 (&dyldi[44], bin->big_endian);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "signature", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "version", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "split_info", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "function_starts", 0);
+format/mach0/mach0.c:			sdb_set (bin->kv, sdb_fmt (0, "mach0_cmd_%d.cmd", i), "dylib", 0);
+format/mach0/mach0.c:	bin->baddr = MACH0_(get_baddr)(bin);
+format/mach0/mach0.c:	free (bin->segs);
+format/mach0/mach0.c:	free (bin->sects);
+format/mach0/mach0.c:	free (bin->symtab);
+format/mach0/mach0.c:	free (bin->symstr);
+format/mach0/mach0.c:	free (bin->indirectsyms);
+format/mach0/mach0.c:	free (bin->imports_by_ord);
+format/mach0/mach0.c:	free (bin->dyld_info);
+format/mach0/mach0.c:	free (bin->toc);
+format/mach0/mach0.c:	free (bin->modtab);
+format/mach0/mach0.c:	free (bin->libs);
+format/mach0/mach0.c:	free (bin->func_start);
+format/mach0/mach0.c:	free (bin->signature);
+format/mach0/mach0.c:	r_buf_free (bin->b);
+format/mach0/mach0.c:	bin->verbose = verbose;
+format/mach0/mach0.c:	bin->file = file;
+format/mach0/mach0.c:	if (!(buf = (ut8*)r_file_slurp(file, &bin->size)))
+format/mach0/mach0.c:	bin->b = r_buf_new ();
+format/mach0/mach0.c:	if (!r_buf_set_bytes(bin->b, buf, bin->size)) {
+format/mach0/mach0.c:	bin->dyld_info = NULL;
+format/mach0/mach0.c:	bin->imports_by_ord_size = 0;
+format/mach0/mach0.c:	bin->imports_by_ord = NULL;
+format/mach0/mach0.c:	bin->kv = sdb_new (NULL, "bin.mach0", 0);
+format/mach0/mach0.c:	bin->b = r_buf_new ();
+format/mach0/mach0.c:	bin->size = buf->length;
+format/mach0/mach0.c:	bin->verbose = verbose;
+format/mach0/mach0.c:	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)){
+format/mach0/mach0.c:	if (bin->nsects < 1 && bin->nsegs > 0) {
+format/mach0/mach0.c:		if (!(sections = calloc ((bin->nsegs + 1), sizeof (struct section_t)))) {
+format/mach0/mach0.c:		for (i = 0; i < bin->nsegs; i++) {
+format/mach0/mach0.c:			seg = &bin->segs[i];
+format/mach0/mach0.c:	if (!bin->sects) {
+format/mach0/mach0.c:	to = R_MIN (bin->nsects, 128); // limit number of sections here to avoid fuzzed bins
+format/mach0/mach0.c:	if (!(sections = calloc (bin->nsects + 1, sizeof (struct section_t)))) {
+format/mach0/mach0.c:		sections[i].offset = (ut64)bin->sects[i].offset;
+format/mach0/mach0.c:		sections[i].addr = (ut64)bin->sects[i].addr;
+format/mach0/mach0.c:		sections[i].size = (ut64)bin->sects[i].size;
+format/mach0/mach0.c:		sections[i].align = bin->sects[i].align;
+format/mach0/mach0.c:		sections[i].flags = bin->sects[i].flags;
+format/mach0/mach0.c:		r_str_ncpy (sectname, bin->sects[i].sectname, sizeof (sectname));
+format/mach0/mach0.c:		snprintf (segname, sizeof (segname), "%d.%s", i, bin->sects[i].segname);
+format/mach0/mach0.c:		for (j = 0; j < bin->nsegs; j++) {
+format/mach0/mach0.c:			if (sections[i].addr >= bin->segs[j].vmaddr &&
+format/mach0/mach0.c:				sections[i].addr < (bin->segs[j].vmaddr + bin->segs[j].vmsize)) {
+format/mach0/mach0.c:				sections[i].srwx = prot2perm (bin->segs[j].initprot);
+format/mach0/mach0.c:	if (!bin || !bin->sects) {
+format/mach0/mach0.c:	for (i = 0; i < bin->nsects; i++) {
+format/mach0/mach0.c:		if ((bin->sects[i].flags & SECTION_TYPE) == S_SYMBOL_STUBS && bin->sects[i].reserved2 > 0) {
+format/mach0/mach0.c:			nsyms = (int)(bin->sects[i].size / bin->sects[i].reserved2);
+format/mach0/mach0.c:			if (nsyms > bin->size) {
+format/mach0/mach0.c:				if (bin->sects) {
+format/mach0/mach0.c:					if (bin->sects[i].reserved1 + j >= bin->nindirectsyms) {
+format/mach0/mach0.c:				if (bin->indirectsyms) {
+format/mach0/mach0.c:					if (idx != bin->indirectsyms[bin->sects[i].reserved1 + j]) {
+format/mach0/mach0.c:				if (idx > bin->nsymtab) {
+format/mach0/mach0.c:				symbol->offset = bin->sects[i].offset + j * bin->sects[i].reserved2;
+format/mach0/mach0.c:				symbol->addr = bin->sects[i].addr + j * bin->sects[i].reserved2;
+format/mach0/mach0.c:				stridx = bin->symtab[idx].n_strx;
+format/mach0/mach0.c:				if (stridx >= 0 && stridx < bin->symstrlen) {
+format/mach0/mach0.c:					symstr = (char *)bin->symstr+stridx;
+format/mach0/mach0.c:	if (!bin || !bin->symtab || !bin->symstr) {
+format/mach0/mach0.c:	symbols_count = (bin->dysymtab.nextdefsym + \
+format/mach0/mach0.c:			bin->dysymtab.nlocalsym + \
+format/mach0/mach0.c:			bin->dysymtab.nundefsym );
+format/mach0/mach0.c:	symbols_count += bin->nsymtab;
+format/mach0/mach0.c:	//symbols_count = bin->nsymtab;
+format/mach0/mach0.c:			from = bin->dysymtab.iextdefsym;
+format/mach0/mach0.c:			to = from + bin->dysymtab.nextdefsym;
+format/mach0/mach0.c:			from = bin->dysymtab.ilocalsym;
+format/mach0/mach0.c:			to = from + bin->dysymtab.nlocalsym;
+format/mach0/mach0.c:			from = bin->dysymtab.iundefsym;
+format/mach0/mach0.c:			to = from + bin->dysymtab.nundefsym;
+format/mach0/mach0.c:		to = R_MIN (to, bin->nsymtab);
+format/mach0/mach0.c:			symbols[j].offset = addr_to_offset (bin, bin->symtab[i].n_value);
+format/mach0/mach0.c:			symbols[j].addr = bin->symtab[i].n_value;
+format/mach0/mach0.c:			if (bin->symtab[i].n_type & N_EXT) {
+format/mach0/mach0.c:			stridx = bin->symtab[i].n_strx;
+format/mach0/mach0.c:			if (stridx >= 0 && stridx < bin->symstrlen) {
+format/mach0/mach0.c:				symstr = (char*)bin->symstr+stridx;
+format/mach0/mach0.c:				len = bin->symstrlen - stridx;
+format/mach0/mach0.c:	to = R_MIN (bin->nsymtab, bin->dysymtab.iundefsym + bin->dysymtab.nundefsym);
+format/mach0/mach0.c:	for (i = bin->dysymtab.iundefsym; i < to; i++) {
+format/mach0/mach0.c:	for (i = 0; i < bin->nsymtab; i++) {
+format/mach0/mach0.c:		struct MACH0_(nlist) *st = &bin->symtab[i];
+format/mach0/mach0.c:		if (stridx >= 0 && stridx < bin->symstrlen) {
+format/mach0/mach0.c:			symstr = (char*)bin->symstr + stridx;
+format/mach0/mach0.c:	if (idx < 0 || idx >= bin->nsymtab) {
+format/mach0/mach0.c:	if ((bin->symtab[idx].n_desc & REFERENCE_TYPE) == REFERENCE_FLAG_UNDEFINED_LAZY) {
+format/mach0/mach0.c:	for (i = 0; i < bin->nsects; i++) {
+format/mach0/mach0.c:		if ((bin->sects[i].flags & SECTION_TYPE) == stype) {
+format/mach0/mach0.c:			for (j=0, sym=-1; bin->sects[i].reserved1+j < bin->nindirectsyms; j++)
+format/mach0/mach0.c:				if (idx == bin->indirectsyms[bin->sects[i].reserved1 + j]) {
+format/mach0/mach0.c:			reloc->offset = sym == -1 ? 0 : bin->sects[i].offset + sym * wordsize;
+format/mach0/mach0.c:			reloc->addr = sym == -1 ? 0 : bin->sects[i].addr + sym * wordsize;
+format/mach0/mach0.c:	if (!bin->symtab || !bin->symstr || !bin->sects || !bin->indirectsyms)
+format/mach0/mach0.c:	if (bin->dysymtab.nundefsym < 1 || bin->dysymtab.nundefsym > 0xfffff) {
+format/mach0/mach0.c:	if (!(imports = malloc ((bin->dysymtab.nundefsym + 1) * sizeof (struct import_t)))) {
+format/mach0/mach0.c:	for (i = j = 0; i < bin->dysymtab.nundefsym; i++) {
+format/mach0/mach0.c:		idx = bin->dysymtab.iundefsym +i;
+format/mach0/mach0.c:		if (idx < 0 || idx >= bin->nsymtab) {
+format/mach0/mach0.c:		stridx = bin->symtab[idx].n_strx;
+format/mach0/mach0.c:		if (stridx >= 0 && stridx < bin->symstrlen) {
+format/mach0/mach0.c:			symstr = (char *)bin->symstr + stridx;
+format/mach0/mach0.c:			len = bin->symstrlen - stridx;
+format/mach0/mach0.c:	if (!bin->imports_by_ord_size) {
+format/mach0/mach0.c:			bin->imports_by_ord_size = j;
+format/mach0/mach0.c:			bin->imports_by_ord = (RBinImport**)calloc (j, sizeof (RBinImport*));
+format/mach0/mach0.c:			bin->imports_by_ord_size = 0;
+format/mach0/mach0.c:			bin->imports_by_ord = NULL;
+format/mach0/mach0.c:	if (bin->dyld_info) {
+format/mach0/mach0.c:		bind_size = bin->dyld_info->bind_size;
+format/mach0/mach0.c:		lazy_size = bin->dyld_info->lazy_bind_size;
+format/mach0/mach0.c:		if (bin->dyld_info->bind_off > bin->size || bin->dyld_info->bind_off + bind_size > bin->size) {
+format/mach0/mach0.c:		if (bin->dyld_info->lazy_bind_off > bin->size || \
+format/mach0/mach0.c:			bin->dyld_info->lazy_bind_off + lazy_size > bin->size) {
+format/mach0/mach0.c:		if (bin->dyld_info->bind_off+bind_size+lazy_size > bin->size) {
+format/mach0/mach0.c:		len = r_buf_read_at (bin->b, bin->dyld_info->bind_off, opcodes, bind_size);
+format/mach0/mach0.c:		i = r_buf_read_at (bin->b, bin->dyld_info->lazy_bind_off, opcodes + bind_size, lazy_size);
+format/mach0/mach0.c:			(ut64)(size_t)bin->dyld_info->bind_off);
+format/mach0/mach0.c:				if (bin->symtab && bin->dysymtab.nundefsym < 0xffff)
+format/mach0/mach0.c:				for (j = 0; j < bin->dysymtab.nundefsym; j++) {
+format/mach0/mach0.c:					int iundefsym = bin->dysymtab.iundefsym;
+format/mach0/mach0.c:					if (iundefsym>=0 && iundefsym < bin->nsymtab) {
+format/mach0/mach0.c:						if (sidx<0 || sidx>= bin->nsymtab)
+format/mach0/mach0.c:						stridx = bin->symtab[sidx].n_strx;
+format/mach0/mach0.c:						if (stridx < 0 || stridx >= bin->symstrlen)
+format/mach0/mach0.c:					if (!strcmp ((char *)bin->symstr + stridx, sym_name)) {
+format/mach0/mach0.c:				if (seg_idx < 0 || seg_idx >= bin->nsegs) {
+format/mach0/mach0.c:					addr = bin->segs[seg_idx].vmaddr + ULEB();
+format/mach0/mach0.c:					segmentAddress = bin->segs[seg_idx].vmaddr \
+format/mach0/mach0.c:							+ bin->segs[seg_idx].vmsize;
+format/mach0/mach0.c:relocs[i].offset = addr - bin->segs[seg_idx].vmaddr + bin->segs[seg_idx].fileoff;\
+format/mach0/mach0.c:	relocs[i].addend = addend - (bin->baddr + addr);\
+format/mach0/mach0.c:		if (!bin->symtab || !bin->symstr || !bin->sects || !bin->indirectsyms) {
+format/mach0/mach0.c:		if (!(relocs = malloc ((bin->dysymtab.nundefsym + 1) * sizeof (struct reloc_t)))) {
+format/mach0/mach0.c:		for (j = 0; j < bin->dysymtab.nundefsym; j++) {
+format/mach0/mach0.c:			if (parse_import_ptr (bin, &relocs[i], bin->dysymtab.iundefsym + j)) {
+format/mach0/mach0.c:	if (!bin->entry && !bin->sects) {
+format/mach0/mach0.c:	if (bin->entry) {
+format/mach0/mach0.c:		entry->haddr = sdb_num_get (bin->kv, "mach0.entry.offset", 0);
+format/mach0/mach0.c:		sdb_num_set (bin->kv, "mach0.entry.vaddr", entry->addr, 0);
+format/mach0/mach0.c:		sdb_num_set (bin->kv, "mach0.entry.paddr", bin->entry, 0);
+format/mach0/mach0.c:	if (!bin->entry || entry->offset == 0) {
+format/mach0/mach0.c:		for (i = 0; i < bin->nsects; i++) {
+format/mach0/mach0.c:			if (!strncmp (bin->sects[i].sectname, "__text", 6)) {
+format/mach0/mach0.c:				entry->offset = (ut64)bin->sects[i].offset;
+format/mach0/mach0.c:				sdb_num_set (bin->kv, "mach0.entry", entry->offset, 0);
+format/mach0/mach0.c:				entry->addr = (ut64)bin->sects[i].addr;
+format/mach0/mach0.c:		bin->entry = entry->addr;
+format/mach0/mach0.c:	for (i = 0; i < bin->nlibs; i++) {
+format/mach0/mach0.c:		sdb_set (bin->kv, sdb_fmt (0, "libs.%d.name", i), bin->libs[i], 0);
+format/mach0/mach0.c:	if (!bin->nlibs) {
+format/mach0/mach0.c:	if (!(libs = calloc ((bin->nlibs + 1), sizeof (struct lib_t)))) {
+format/mach0/mach0.c:	for (i = 0; i < bin->nlibs; i++) {
+format/mach0/mach0.c:		sdb_set (bin->kv, sdb_fmt (0, "libs.%d.name", i), bin->libs[i], 0);
+format/mach0/mach0.c:		strncpy (libs[i].name, bin->libs[i], R_BIN_MACH0_STRING_LENGTH);
+format/mach0/mach0.c:	if (bin->hdr.filetype != MH_EXECUTE && bin->hdr.filetype != MH_DYLINKER) {
+format/mach0/mach0.c:	for (i = 0; i < bin->nsegs; ++i) {
+format/mach0/mach0.c:		if (bin->segs[i].fileoff == 0 && bin->segs[i].filesize != 0) {
+format/mach0/mach0.c:			return bin->segs[i].vmaddr;
+format/mach0/mach0.c:		int bits = MACH0_(get_bits_from_hdr) (&bin->hdr);
+format/mach0/mach0.c:		if (bin->hdr.cputype == CPU_TYPE_ARM && bin->entry & 1) {
+format/mach0/mach0.c:		const int cpu = bin->hdr.cputype;
+format/mach0/mach0.c:	return bin? bin->intrp: NULL;
+format/mach0/mach0.c:	switch (bin->os) {
+format/mach0/mach0.c:	return bin? MACH0_(get_cputype_from_hdr) (&bin->hdr): "unknown";
+format/mach0/mach0.c:		return MACH0_(get_cpusubtype_from_hdr) (&bin->hdr);
+format/mach0/mach0.c:	return (bin && bin->hdr.filetype == MH_EXECUTE && bin->hdr.flags & MH_PIE);
+format/mach0/mach0.c:	return (bin && bin->hdr.filetype == MH_EXECUTE &&
+format/mach0/mach0.c:		bin->hdr.flags & MH_NO_HEAP_EXECUTION);
+format/mach0/mach0.c:		return MACH0_(get_filetype_from_hdr) (&bin->hdr);
+format/mach0/mach0.c:	if (!addr && bin->main_cmd.cmd == LC_MAIN) {
+format/mach0/mach0.c:		addr = bin->entry + bin->baddr;
+format/mach0/mach0.c:		ut64 entry = addr_to_offset(bin, bin->entry);
+format/mach0/mach0.c:		if (entry > bin->size || entry + sizeof (b) > bin->size) {
+format/mach0/mach0.c:		i = r_buf_read_at (bin->b, entry, b, sizeof (b));
+format/mach0/mach0.c:				return bin->entry + i + 5 + delta;
+format/mdmp/mdmp.c:		sdb_free (pe_bin->bin->kv);
+format/mdmp/mdmp.c:		Pe32_r_bin_pe_free (pe_bin->bin);
+format/mdmp/mdmp.c:		sdb_free (pe_bin->bin->kv);
+format/mdmp/mdmp.c:		Pe64_r_bin_pe_free (pe_bin->bin);
+format/mdmp/mdmp.c:			pe32_bin->vaddr = module->base_of_image;
+format/mdmp/mdmp.c:			pe32_bin->paddr = paddr;
+format/mdmp/mdmp.c:			pe32_bin->bin = Pe32_r_bin_pe_new_buf (buf, 0);
+format/mdmp/mdmp.c:			pe64_bin->vaddr = module->base_of_image;
+format/mdmp/mdmp.c:			pe64_bin->paddr = paddr;
+format/mdmp/mdmp.c:			pe64_bin->bin = Pe64_r_bin_pe_new_buf (buf, 0);
+format/mdmp/mdmp_pe.c:		paddr = sdb_num_get (bin->kv, key, 0);
+format/mdmp/mdmp_pe.c:		vaddr = sdb_num_get (bin->kv, key, 0);
+format/mdmp/mdmp_pe.c:		haddr = sdb_num_get (bin->kv, key, 0);
+format/mdmp/mdmp_pe.c:	if (!(entry = PE_(r_bin_pe_get_entrypoint) (pe_bin->bin))) {
+format/mdmp/mdmp_pe.c:		if (offset > pe_bin->vaddr) {
+format/mdmp/mdmp_pe.c:			offset -= pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:		ptr->paddr = offset + pe_bin->paddr;
+format/mdmp/mdmp_pe.c:		ptr->vaddr = offset + pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:		ptr->haddr = pe_bin->paddr + entry->haddr;
+format/mdmp/mdmp_pe.c:	PE_(add_tls_callbacks) (pe_bin->bin, ret);
+format/mdmp/mdmp_pe.c:	if (!(imports = PE_(r_bin_pe_get_imports) (pe_bin->bin))) {
+format/mdmp/mdmp_pe.c:	pe_bin->bin->relocs = relocs;
+format/mdmp/mdmp_pe.c:		if (offset > pe_bin->vaddr) {
+format/mdmp/mdmp_pe.c:			offset -= pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:		rel->vaddr = offset + pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:		rel->paddr = imports[i].paddr + pe_bin->paddr;
+format/mdmp/mdmp_pe.c:	ut64 ba = pe_bin->vaddr;//baddr (arch);
+format/mdmp/mdmp_pe.c:	if (!(sections = PE_(r_bin_pe_get_sections) (pe_bin->bin))){
+format/mdmp/mdmp_pe.c:	PE_(r_bin_pe_check_sections) (pe_bin->bin, &sections);
+format/mdmp/mdmp_pe.c:		if (ptr->size > pe_bin->bin->size) {
+format/mdmp/mdmp_pe.c:			if (sections[i].vsize < pe_bin->bin->size) {
+format/mdmp/mdmp_pe.c:		ptr->paddr = sections[i].paddr + pe_bin->paddr;
+format/mdmp/mdmp_pe.c:	if ((symbols = PE_(r_bin_pe_get_exports) (pe_bin->bin))) {
+format/mdmp/mdmp_pe.c:			if (offset > pe_bin->vaddr) {
+format/mdmp/mdmp_pe.c:				offset -= pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:			ptr->vaddr = offset + pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:			ptr->paddr = symbols[i].paddr + pe_bin->paddr;
+format/mdmp/mdmp_pe.c:	if ((imports = PE_(r_bin_pe_get_imports) (pe_bin->bin))) {
+format/mdmp/mdmp_pe.c:			if (offset > pe_bin->vaddr) {
+format/mdmp/mdmp_pe.c:				offset -= pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:			ptr->vaddr = offset + pe_bin->vaddr;
+format/mdmp/mdmp_pe.c:			ptr->paddr = imports[i].paddr + pe_bin->paddr;
+format/mz/mz.c:	return (bin->dos_header->header_paragraphs + segment) << 4;
+format/mz/mz.c:	const short cs = bin->dos_header->cs;
+format/mz/mz.c:	ut32 pa = bin->dos_header->header_paragraphs + cs;
+format/mz/mz.c:	const ut32 paddr = (pa<<4) + bin->dos_header->ip;
+format/mz/mz.c:	if (paddr < bin->dos_file_size) {
+format/mz/mz.c:	const MZ_image_relocation_entry * const relocs = bin->relocation_entries;
+format/mz/mz.c:	const int num_relocs = bin->dos_header->num_relocs;
+format/mz/mz.c:	eprintf ("cs 0x%x\n", bin->dos_header->cs);
+format/mz/mz.c:	eprintf ("ss 0x%x\n", bin->dos_header->ss);
+format/mz/mz.c:	if (r_bin_mz_seg_to_paddr (bin, stack_segment) < bin->dos_file_size) {
+format/mz/mz.c:	const ut16 stack_segment = bin->dos_header->ss;
+format/mz/mz.c:	const MZ_image_relocation_entry * const relocs = bin->relocation_entries;
+format/mz/mz.c:	const int num_relocs = bin->dos_header->num_relocs;
+format/mz/mz.c:	const ut64 last_parag = ((bin->dos_file_size + 0xF) >> 4) - \
+format/mz/mz.c:		bin->dos_header->header_paragraphs;
+format/mz/mz.c:		if ((paddr + 2) < bin->dos_file_size) {
+format/mz/mz.c:			curr_seg = (ut16 *)(bin->b->buf + paddr);
+format/mz/mz.c:	if (r_bin_mz_seg_to_paddr (bin, stack_segment) < bin->dos_file_size) {
+format/mz/mz.c:	ret[i - 1].size = bin->dos_file_size - ret[i - 1].paddr;
+format/mz/mz.c:	const int num_relocs = bin->dos_header->num_relocs;
+format/mz/mz.c:		bin->relocation_entries;
+format/mz/mz.c:		if (relocs[j].paddr < bin->dos_file_size) j++;
+format/mz/mz.c:	free ((void *)bin->dos_header);
+format/mz/mz.c:	free ((void *)bin->dos_extended_header);
+format/mz/mz.c:	free ((void *)bin->relocation_entries);
+format/mz/mz.c:	r_buf_free (bin->b);
+format/mz/mz.c:	bin->b = NULL;
+format/mz/mz.c:	if (!(bin->dos_header = R_NEW0 (MZ_image_dos_header))) {
+format/mz/mz.c:	if (r_buf_read_at (bin->b, 0, (ut8*)bin->dos_header,
+format/mz/mz.c:			sizeof (*bin->dos_header)) == -1) {
+format/mz/mz.c:	if (bin->dos_header->blocks_in_file < 1) {
+format/mz/mz.c:	dos_file_size = ((bin->dos_header->blocks_in_file - 1) << 9) + \
+format/mz/mz.c:			bin->dos_header->bytes_in_last_block;
+format/mz/mz.c:	bin->dos_file_size = dos_file_size;
+format/mz/mz.c:	if (dos_file_size > bin->size) {
+format/mz/mz.c:	relocations_size = bin->dos_header->num_relocs * sizeof (MZ_image_relocation_entry);
+format/mz/mz.c:	if ((bin->dos_header->reloc_table_offset + relocations_size) > bin->size) {
+format/mz/mz.c:	sdb_num_set (bin->kv, "mz.initial.cs", bin->dos_header->cs, 0);
+format/mz/mz.c:	sdb_num_set (bin->kv, "mz.initial.ip", bin->dos_header->ip, 0);
+format/mz/mz.c:	sdb_num_set (bin->kv, "mz.initial.ss", bin->dos_header->ss, 0);
+format/mz/mz.c:	sdb_num_set (bin->kv, "mz.initial.sp", bin->dos_header->sp, 0);
+format/mz/mz.c:	sdb_num_set (bin->kv, "mz.overlay_number", bin->dos_header->overlay_number, 0);
+format/mz/mz.c:	sdb_num_set (bin->kv, "mz.dos_header.offset", 0, 0);
+format/mz/mz.c:	sdb_set (bin->kv, "mz.dos_header.format", "[2]zwwwwwwwwwwwww"
+format/mz/mz.c:	bin->dos_extended_header_size = bin->dos_header->reloc_table_offset - \
+format/mz/mz.c:	if (bin->dos_extended_header_size > 0) {
+format/mz/mz.c:		if (!(bin->dos_extended_header =
+format/mz/mz.c:			      malloc (bin->dos_extended_header_size))) {
+format/mz/mz.c:		if (r_buf_read_at (bin->b, sizeof (MZ_image_dos_header),
+format/mz/mz.c:				(ut8*)bin->dos_extended_header,
+format/mz/mz.c:				bin->dos_extended_header_size) == -1) {
+format/mz/mz.c:		if (!(bin->relocation_entries = malloc (relocations_size))) {
+format/mz/mz.c:		if (r_buf_read_at (bin->b, bin->dos_header->reloc_table_offset,
+format/mz/mz.c:				(ut8*)bin->relocation_entries, relocations_size) == -1) {
+format/mz/mz.c:			R_FREE (bin->relocation_entries);
+format/mz/mz.c:	bin->dos_header = NULL;
+format/mz/mz.c:	bin->dos_extended_header = NULL;
+format/mz/mz.c:	bin->relocation_entries = NULL;
+format/mz/mz.c:	bin->kv = sdb_new0 ();
+format/mz/mz.c:	bin->file = file;
+format/mz/mz.c:	if (!(buf = (ut8*)r_file_slurp (file, &bin->size))) {
+format/mz/mz.c:	bin->b = r_buf_new ();
+format/mz/mz.c:	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+format/mz/mz.c:	bin->b = r_buf_new ();
+format/mz/mz.c:	bin->size = buf->length;
+format/mz/mz.c:	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)){
+format/objc/mach0_classes.c:	if (bin->hdr.cputype == 12) {
+format/objc/mach0_classes.c:		if (bin->hdr.cpusubtype == 9) {
+format/objc/mach0_classes.c:			if (bin->has_crypto) {
+format/objc/mach0_classes.c:			int is_crypted = bin->has_crypto;
+format/objc/mach0_classes.c:			if (bin->has_crypto) {
+format/objc/mach0_classes.c:			int is_crypted = bin->has_crypto;
+format/objc/mach0_classes.c:			if (bin->has_crypto) {
+format/objc/mach0_classes.c:			if (bin->has_crypto) {
+format/objc/mach0_classes.c:			if (bin->has_crypto) {
+format/objc/mach0_classes.c:		if (bin->has_crypto) {
+format/objc/mach0_classes.c:		sdb_num_set (bin->kv, sdb_fmt (0, "objc_class_%s.offset", klass->name), s, 0);
+format/objc/mach0_classes.c:	sdb_set (bin->kv, sdb_fmt (0, "objc_class.format", 0), "lllll isa super cache vtable data", 0);
+format/objc/mach0_classes.c:	sdb_set (bin->kv, sdb_fmt (0, "objc_class.format", 0), "xxxxx isa super cache vtable data", 0);
+format/pe/pe.c:#define bprintf if(bin->verbose) eprintf
+format/pe/pe.c:	return bin->nt_headers->optional_header.AddressOfEntryPoint & 1;
+format/pe/pe.c:	switch (bin->nt_headers->file_header.Machine) {
+format/pe/pe.c:	if (!bin || !bin->b) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, entry->paddr, b, sizeof (b)) < 0) {
+format/pe/pe.c:		const st32 jmp_dst = r_read_ble32 (b + 6, bin->big_endian);
+format/pe/pe.c:		if (r_buf_read_at (bin->b, entry->paddr, b, sizeof (b)) > 0) {
+format/pe/pe.c:			ut32 imageBase = bin->nt_headers->optional_header.ImageBase;
+format/pe/pe.c:					const st32 call_dst = r_read_ble32 (b + n + 6, bin->big_endian);
+format/pe/pe.c:					const st32 call_dst = r_read_ble32 (b + n + 6, bin->big_endian);
+format/pe/pe.c:					const st32 call_dst = r_read_ble32 (b + n + 14, bin->big_endian);
+format/pe/pe.c:		const st32 jmp_dst = r_read_ble32 (b + 14, bin->big_endian);
+format/pe/pe.c:		if (r_buf_read_at (bin->b, entry->paddr, b, sizeof (b)) > 0) {
+format/pe/pe.c:					const st32 call_dst = r_read_ble32 (b + n + 9, bin->big_endian);
+format/pe/pe.c:		const st32 call_dst = r_read_ble32 (b + 202, bin->big_endian);
+format/pe/pe.c:		const st32 call_dst = r_read_ble32 (b + 304, bin->big_endian);
+format/pe/pe.c:	if (!bin || !bin->b) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, entry->paddr, b, sizeof (b)) < 0) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, entry->paddr, b, sizeof (b)) > 0) {
+format/pe/pe.c:			// ut32 imageBase = bin->nt_headers->optional_header.ImageBase;
+format/pe/pe.c:	if (!bin || !bin->b) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, entry->paddr, b, 512) < 1) {
+format/pe/pe.c:	for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:		section_base = bin->section_header[i].VirtualAddress;
+format/pe/pe.c:		section_size = bin->section_header[i].Misc.VirtualSize;
+format/pe/pe.c:			return bin->section_header[i].PointerToRawData + (rva - section_base);
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	imageBase = bin->nt_headers->optional_header.ImageBase;
+format/pe/pe.c:		if (off + i * sizeof(PE_DWord) > bin->size) {
+format/pe/pe.c:		len = r_buf_read_at (bin->b, off + i * sizeof (PE_DWord), (ut8*) &import_table, sizeof (PE_DWord));
+format/pe/pe.c:				if (off > bin->size || (off + sizeof (PE_Word)) > bin->size) {
+format/pe/pe.c:					bprintf ("Warning: off > bin->size\n");
+format/pe/pe.c:				len = r_buf_read_at (bin->b, off, (ut8*) &import_hint, sizeof (PE_Word));
+format/pe/pe.c:				len = r_buf_read_at (bin->b, off + sizeof(PE_Word), (ut8*) name, PE_NAME_LENGTH);
+format/pe/pe.c:	if (!(bin->dos_header = malloc (sizeof(PE_(image_dos_header))))) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, 0, (ut8*) bin->dos_header, sizeof(PE_(image_dos_header))) == -1) {
+format/pe/pe.c:	sdb_num_set (bin->kv, "pe_dos_header.offset", 0, 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_dos_header.format", "[2]zwwwwwwwwwwwww[4]www[10]wx"
+format/pe/pe.c:	if (bin->dos_header->e_lfanew > (unsigned int) bin->size) {
+format/pe/pe.c:	if (!(bin->nt_headers = malloc (sizeof (PE_(image_nt_headers))))) {
+format/pe/pe.c:	bin->nt_header_offset = bin->dos_header->e_lfanew;
+format/pe/pe.c:	if (r_buf_read_at (bin->b, bin->dos_header->e_lfanew, (ut8*) bin->nt_headers, sizeof (PE_(image_nt_headers))) < -1) {
+format/pe/pe.c:	sdb_set (bin->kv, "pe_magic.cparse",     "enum pe_magic { IMAGE_NT_OPTIONAL_HDR32_MAGIC=0x10b, IMAGE_NT_OPTIONAL_HDR64_MAGIC=0x20b, IMAGE_ROM_OPTIONAL_HDR_MAGIC=0x107 };", 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_subsystem.cparse", "enum pe_subsystem { IMAGE_SUBSYSTEM_UNKNOWN=0, IMAGE_SUBSYSTEM_NATIVE=1, IMAGE_SUBSYSTEM_WINDOWS_GUI=2, "
+format/pe/pe.c:	sdb_set (bin->kv, "pe_dllcharacteristics.cparse", "enum pe_dllcharacteristics { IMAGE_LIBRARY_PROCESS_INIT=0x0001, IMAGE_LIBRARY_PROCESS_TERM=0x0002, "
+format/pe/pe.c:	sdb_num_set (bin->kv, "pe_nt_image_headers64.offset", bin->dos_header->e_lfanew, 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_nt_image_headers64.format",      "[4]z?? signature (pe_image_file_header)fileHeader (pe_image_optional_header64)optionalHeader", 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_image_optional_header64.format", "[2]Ebbxxxxxqxxwwwwwwxxxx[2]E[2]Bqqqqxx[16]?"
+format/pe/pe.c:	sdb_num_set (bin->kv, "pe_nt_image_headers32.offset", bin->dos_header->e_lfanew, 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_nt_image_headers32.format",      "[4]z?? signature (pe_image_file_header)fileHeader (pe_image_optional_header32)optionalHeader", 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_image_optional_header32.format", "[2]Ebbxxxxxxxxxwwwwwwxxxx[2]E[2]Bxxxxxx[16]?"
+format/pe/pe.c:	sdb_set (bin->kv, "pe_machine.cparse",         "enum pe_machine { IMAGE_FILE_MACHINE_I386=0x014c, IMAGE_FILE_MACHINE_IA64=0x0200, IMAGE_FILE_MACHINE_AMD64=0x8664 };", 0);
+format/pe/pe.c:	sdb_set (bin->kv, "pe_characteristics.cparse", "enum pe_characteristics { "
+format/pe/pe.c:	sdb_set (bin->kv, "pe_image_file_header.format",    "[2]Ewtxxw[2]B"
+format/pe/pe.c:	sdb_set (bin->kv, "pe_image_data_directory.format", "xx virtualAddress size",0);
+format/pe/pe.c:		sdb_num_set (bin->kv, "image_file_header.TimeDateStamp", bin->nt_headers->file_header.TimeDateStamp, 0);
+format/pe/pe.c:		char *timestr = _time_stamp_to_str (bin->nt_headers->file_header.TimeDateStamp);
+format/pe/pe.c:		sdb_set_owned (bin->kv, "image_file_header.TimeDateStamp_string", timestr, 0);
+format/pe/pe.c:	bin->optional_header = &bin->nt_headers->optional_header;
+format/pe/pe.c:	bin->data_directory = (PE_(image_data_directory*)) & bin->optional_header->DataDirectory;
+format/pe/pe.c:	if (strncmp ((char*) &bin->dos_header->e_magic, "MZ", 2) ||
+format/pe/pe.c:	(strncmp ((char*) &bin->nt_headers->Signature, "PE", 2) &&
+format/pe/pe.c:	strncmp ((char*) &bin->nt_headers->Signature, "PL", 2))) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	sym_tbl_off = bin->nt_headers->file_header.PointerToSymbolTable;
+format/pe/pe.c:	num = bin->nt_headers->file_header.NumberOfSymbols;
+format/pe/pe.c:	if (bufsz < 1 || bufsz > bin->size) {
+format/pe/pe.c:	for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, sym_tbl_off, (ut8*) buf, bufsz)) {
+format/pe/pe.c:						if (r_buf_read_at (bin->b, sym_tbl_off + *idx + shsz, (ut8*) name, 128)) { // == 128) {
+format/pe/pe.c:	bin->num_sections = bin->nt_headers->file_header.NumberOfSections;
+format/pe/pe.c:	if (bin->num_sections < 1) {
+format/pe/pe.c:	sections_size = sizeof (PE_(image_section_header)) * bin->num_sections;
+format/pe/pe.c:	if (sections_size > bin->size) {
+format/pe/pe.c:		sections_size = bin->size;
+format/pe/pe.c:		bin->num_sections = bin->size / sizeof (PE_(image_section_header));
+format/pe/pe.c:	if (!(bin->section_header = malloc (sections_size))) {
+format/pe/pe.c:	bin->section_header_offset = bin->dos_header->e_lfanew + 4 + sizeof (PE_(image_file_header)) +
+format/pe/pe.c:		bin->nt_headers->file_header.SizeOfOptionalHeader;
+format/pe/pe.c:	if (r_buf_read_at (bin->b, bin->section_header_offset,
+format/pe/pe.c:		(ut8*) bin->section_header, sections_size) == -1) {
+format/pe/pe.c:		R_FREE (bin->section_header);
+format/pe/pe.c:	bin->num_sections = 0;
+format/pe/pe.c:	if (!bin || !bin->optional_header) {
+format/pe/pe.c:	return bin->optional_header->CheckSum;
+format/pe/pe.c:	if (!bin || !bin->nt_header_offset) {
+format/pe/pe.c:	buf = bin->b->buf;
+format/pe/pe.c:	checksum_offset = bin->nt_header_offset + 4 + sizeof(PE_(image_file_header)) + 0x40;
+format/pe/pe.c:	for (i = 0; i < bin->size / 4; i++) {
+format/pe/pe.c:	remaining_bytes = bin->size % 4;
+format/pe/pe.c:	computed_cs += bin->size;
+format/pe/pe.c:	if (bin->optional_header) {
+format/pe/pe.c:				bin->nt_header_offset+4+sizeof(bin->nt_headers->file_header),
+format/pe/pe.c:				bin->nt_headers->file_header.SizeOfOptionalHeader,
+format/pe/pe.c:				bin->size,
+format/pe/pe.c:				bin->size,
+format/pe/pe.c:	if (bin->optional_header) {
+format/pe/pe.c:				bin_pe_rva_to_paddr (bin, bin->optional_header->DataDirectory[i].VirtualAddress),
+format/pe/pe.c:				bin->optional_header->DataDirectory[i].Size,
+format/pe/pe.c:				bin->size,
+format/pe/pe.c:	if ((ut64) bin->size > largest_offset + largest_size) {
+format/pe/pe.c:		*size = bin->size - largest_offset - largest_size;
+format/pe/pe.c:	PE_DWord metadata_directory = bin->clr_hdr? bin_pe_rva_to_paddr (bin, bin->clr_hdr->MetaDataDirectoryAddress): 0;
+format/pe/pe.c:	rr = r_buf_fread_at (bin->b, metadata_directory,
+format/pe/pe.c:		(ut8*) metadata, bin->big_endian? "1I2S": "1i2s", 1);
+format/pe/pe.c:	rr = r_buf_fread_at (bin->b, metadata_directory + 8,
+format/pe/pe.c:		(ut8*) (&metadata->Reserved), bin->big_endian? "1I": "1i", 1);
+format/pe/pe.c:	rr = r_buf_fread_at (bin->b, metadata_directory + 12,
+format/pe/pe.c:		(ut8*) (&metadata->VersionStringLength), bin->big_endian? "1I": "1i", 1);
+format/pe/pe.c:		rr = r_buf_read_at (bin->b, metadata_directory + 16, (ut8*)(metadata->VersionString),  len);
+format/pe/pe.c:	rr = r_buf_fread_at (bin->b, metadata_directory + 16 + metadata->VersionStringLength,
+format/pe/pe.c:		(ut8*) (&metadata->Flags), bin->big_endian? "2S": "2s", 1);
+format/pe/pe.c:	bin->metadata_header = metadata;
+format/pe/pe.c:		if (r_buf_fread_at (bin->b, start_of_stream, (ut8*) stream, bin->big_endian? "2I": "2i", 1) < 1) {
+format/pe/pe.c:		if (r_buf_size (bin->b) < (start_of_stream + 8 + MAX_METADATA_STRING_LENGTH)) {
+format/pe/pe.c:			(char *)(bin->b->buf + start_of_stream + 8));
+format/pe/pe.c:	bin->streams = streams;
+format/pe/pe.c:		sdb_num_set (bin->kv, "pe_overlay.offset", pe_overlay_offset, 0);
+format/pe/pe.c:		sdb_num_set (bin->kv, "pe_overlay.size", pe_overlay_size, 0);
+format/pe/pe.c:	PE_(image_data_directory) * clr_dir = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR];
+format/pe/pe.c:	rr = r_buf_read_at (bin->b, image_clr_hdr_paddr, (ut8*) (clr_hdr), len);
+format/pe/pe.c:	bin->clr_hdr = clr_hdr;
+format/pe/pe.c:	PE_(image_data_directory) * data_dir_import = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_IMPORT];
+format/pe/pe.c:	PE_(image_data_directory) * data_dir_delay_import = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
+format/pe/pe.c:	int maxidsz = R_MIN ((PE_DWord) bin->size, import_dir_offset + import_dir_size);
+format/pe/pe.c:	free (bin->import_directory);
+format/pe/pe.c:	bin->import_directory = NULL;
+format/pe/pe.c:		bin->import_directory_offset = import_dir_offset;
+format/pe/pe.c:			if (r_buf_read_at (bin->b, import_dir_offset + (indx - 1) * dir_size, (ut8*) (curr_import_dir), dir_size) < 1) {
+format/pe/pe.c:		bin->import_directory = import_dir;
+format/pe/pe.c:		bin->import_directory_size = import_dir_size;
+format/pe/pe.c:	if (bin->b->length > 0) {
+format/pe/pe.c:		if ((delay_import_dir_offset != 0) && (delay_import_dir_offset < (ut32) bin->b->length)) {
+format/pe/pe.c:			bin->delay_import_directory_offset = delay_import_dir_offset;
+format/pe/pe.c:				if (off >= bin->b->length) {
+format/pe/pe.c:				rr = r_buf_read_at (bin->b, delay_import_dir_offset + (indx - 1) * delay_import_size,
+format/pe/pe.c:			bin->delay_import_directory = delay_import_dir;
+format/pe/pe.c:	bin->import_directory = import_dir;
+format/pe/pe.c:	PE_(image_data_directory) * data_dir_export = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_EXPORT];
+format/pe/pe.c:	if (!(bin->export_directory = malloc (sizeof(PE_(image_export_directory))))) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, export_dir_paddr, (ut8*) bin->export_directory, sizeof (PE_(image_export_directory))) == -1) {
+format/pe/pe.c:		free (bin->export_directory);
+format/pe/pe.c:		bin->export_directory = NULL;
+format/pe/pe.c:	PE_(image_data_directory) * resource_dir = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_RESOURCE];
+format/pe/pe.c:	bin->resources = r_list_newf ((RListFree)_free_resources);
+format/pe/pe.c:	if (!bin->resources) {
+format/pe/pe.c:	if (!(bin->resource_directory = malloc (sizeof(*bin->resource_directory)))) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, resource_dir_paddr, (ut8*) bin->resource_directory,
+format/pe/pe.c:		sizeof (*bin->resource_directory)) != sizeof (*bin->resource_directory)) {
+format/pe/pe.c:		free (bin->resource_directory);
+format/pe/pe.c:		bin->resource_directory = NULL;
+format/pe/pe.c:	bin->resource_directory_offset = resource_dir_paddr;
+format/pe/pe.c:		if (r_buf_read_at (bin->b, callbacks, (ut8*) &addressOfTLSCallback, sizeof(addressOfTLSCallback)) != sizeof (addressOfTLSCallback)) {
+format/pe/pe.c:		if (bin->optional_header->SizeOfImage) {
+format/pe/pe.c:			if (rva_callback > bin->optional_header->SizeOfImage) {
+format/pe/pe.c:		sdb_num_set (bin->kv, key, addressOfTLSCallback, 0);
+format/pe/pe.c:		sdb_num_set (bin->kv, key, paddr,                0);
+format/pe/pe.c:		sdb_num_set (bin->kv, key, haddr,                0);
+format/pe/pe.c:	PE_(image_data_directory) * data_dir_tls = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_TLS];
+format/pe/pe.c:	if (r_buf_read_at (bin->b, tls_paddr, (ut8*) image_tls_directory, sizeof (PE_(image_tls_directory))) != sizeof (PE_(image_tls_directory))) {
+format/pe/pe.c:	bin->tls_directory = image_tls_directory;
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &var->wLength, sizeof(var->wLength)) != sizeof(var->wLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &var->wValueLength, sizeof(var->wValueLength)) != sizeof(var->wValueLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &var->wType, sizeof(var->wType)) != sizeof(var->wType)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) var->szKey, TRANSLATION_UTF_16_LEN) < 1) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) var->Value, var->wValueLength) != var->wValueLength) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &varFileInfo->wLength, sizeof(varFileInfo->wLength)) != sizeof(varFileInfo->wLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &varFileInfo->wValueLength, sizeof(varFileInfo->wValueLength)) != sizeof(varFileInfo->wValueLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &varFileInfo->wType, sizeof(varFileInfo->wType)) != sizeof(varFileInfo->wType)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) varFileInfo->szKey, VARFILEINFO_UTF_16_LEN) != VARFILEINFO_UTF_16_LEN) {
+format/pe/pe.c:	if (begAddr > bin->size || begAddr + sizeof(string->wLength) > bin->size) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &string->wLength, sizeof(string->wLength)) != sizeof(string->wLength)) {
+format/pe/pe.c:	if (*curAddr > bin->size || *curAddr + sizeof(string->wValueLength) > bin->size) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &string->wValueLength, sizeof(string->wValueLength)) != sizeof(string->wValueLength)) {
+format/pe/pe.c:	if (*curAddr > bin->size || *curAddr + sizeof(string->wType) > bin->size) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &string->wType, sizeof(string->wType)) != sizeof(string->wType)) {
+format/pe/pe.c:		if (*curAddr > bin->size || *curAddr + sizeof (ut16) > bin->size) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, *curAddr, (ut8*) &utf16_char, sizeof (ut16)) != sizeof (ut16)) {
+format/pe/pe.c:	if (*curAddr > bin->size || *curAddr + len_value > bin->size) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) string->Value, len_value) != len_value) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &stringTable->wLength, sizeof(stringTable->wLength)) != sizeof(stringTable->wLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &stringTable->wValueLength, sizeof(stringTable->wValueLength)) != sizeof(stringTable->wValueLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &stringTable->wType, sizeof(stringTable->wType)) != sizeof(stringTable->wType)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) stringTable->szKey, EIGHT_HEX_DIG_UTF_16_LEN) != EIGHT_HEX_DIG_UTF_16_LEN) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &stringFileInfo->wLength, sizeof(stringFileInfo->wLength)) != sizeof(stringFileInfo->wLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &stringFileInfo->wValueLength, sizeof(stringFileInfo->wValueLength)) != sizeof(stringFileInfo->wValueLength)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) &stringFileInfo->wType, sizeof(stringFileInfo->wType)) != sizeof(stringFileInfo->wType)) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, *curAddr, (ut8*) stringFileInfo->szKey, STRINGFILEINFO_UTF_16_LEN) != STRINGFILEINFO_UTF_16_LEN) {
+format/pe/pe.c:	if (curAddr > bin->size || curAddr + (S) > bin->size) { \
+format/pe/pe.c:	if (r_buf_read_at (bin->b, curAddr, (ut8*) &vs_VersionInfo->wLength, sz) != sz) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, curAddr, (ut8*) &vs_VersionInfo->wValueLength, sz) != sz) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, curAddr, (ut8*) &vs_VersionInfo->wType, sz) != sz) {
+format/pe/pe.c:	if (r_buf_read_at (bin->b, curAddr, (ut8*) vs_VersionInfo->szKey, sz) != sz) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, curAddr, (ut8*) vs_VersionInfo->Value, sz) != sz) {
+format/pe/pe.c:		if (curAddr + 3 * sizeof(ut16) > bin->size || curAddr + 3 + sizeof(ut64) + 1 > bin->size) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, curAddr + 3 * sizeof(ut16), (ut8*) &t, 1) != 1) {
+format/pe/pe.c:	ut64 rsrc_base = bin->resource_directory_offset;
+format/pe/pe.c:		if (off > bin->size || off + sizeof (entry) > bin->size) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, off, (ut8*)&entry, sizeof(entry)) < 1) {
+format/pe/pe.c:			int len = r_buf_read_at (bin->b, off, (ut8*) &identEntry, sizeof (identEntry));
+format/pe/pe.c:		if (off > bin->size || off + sizeof (data) > bin->size) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, off, (ut8*)data, sizeof (*data)) != sizeof (*data)) {
+format/pe/pe.c:			while (cur_paddr < (data_paddr + data->Size) && cur_paddr < bin->size) {
+format/pe/pe.c:			sdb_ns_set (bin->kv, "vs_version_info", sdb);
+format/pe/pe.c:		r_list_append (bin->resources, rs);
+format/pe/pe.c:	r_list_foreach (bin->resources, iter, rs) {
+format/pe/pe.c:	sdb_ns_set (bin->kv, "pe_resource", sdb);
+format/pe/pe.c:	ut64 off = 0, rsrc_base = bin->resource_directory_offset;
+format/pe/pe.c:	Pe_image_resource_directory *rs_directory = bin->resource_directory;
+format/pe/pe.c:		if (off > bin->size || off + sizeof(typeEntry) > bin->size) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, off, (ut8*)&typeEntry, sizeof(typeEntry)) < 1) {
+format/pe/pe.c:			int len = r_buf_read_at (bin->b, off, (ut8*)&identEntry, sizeof(identEntry));
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	bin->cms = NULL;
+format/pe/pe.c:	size = bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_SECURITY].Size;
+format/pe/pe.c:	vaddr = bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_SECURITY].VirtualAddress;
+format/pe/pe.c:	if (vaddr > bin->size || vaddr + size > bin->size) {
+format/pe/pe.c:	len = r_buf_read_at (bin->b, vaddr + 8, data, size - 8);
+format/pe/pe.c:	bin->cms = r_pkcs7_parse_cms (data, size);
+format/pe/pe.c:	bin->is_signed = bin->cms != NULL;
+format/pe/pe.c:	bin->dos_header = NULL;
+format/pe/pe.c:	bin->nt_headers = NULL;
+format/pe/pe.c:	bin->section_header = NULL;
+format/pe/pe.c:	bin->export_directory = NULL;
+format/pe/pe.c:	bin->import_directory = NULL;
+format/pe/pe.c:	bin->resource_directory = NULL;
+format/pe/pe.c:	bin->delay_import_directory = NULL;
+format/pe/pe.c:	bin->optional_header = NULL;
+format/pe/pe.c:	bin->data_directory = NULL;
+format/pe/pe.c:	bin->big_endian = 0;
+format/pe/pe.c:	bin->big_endian = PE_(r_bin_pe_is_big_endian) (bin);
+format/pe/pe.c:	bin->relocs = NULL;
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	switch (bin->nt_headers->file_header.Machine) {
+format/pe/pe.c:	if (!bin || !bin->optional_header) {
+format/pe/pe.c:	pe_entry = bin->optional_header->AddressOfEntryPoint;
+format/pe/pe.c:	entry->haddr = bin->dos_header->e_lfanew + 4 + sizeof (PE_(image_file_header)) + 16;
+format/pe/pe.c:	if (entry->paddr >= bin->size) {
+format/pe/pe.c:		for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:			for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:				int sa = R_MAX (bin->optional_header->SectionAlignment, 0x1000);
+format/pe/pe.c:		for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:	if (!bin || !bin->data_directory) {
+format/pe/pe.c:	data_dir_export = &bin->data_directory[PE_IMAGE_DIRECTORY_ENTRY_EXPORT];
+format/pe/pe.c:	if (bin->export_directory) {
+format/pe/pe.c:		if (bin->export_directory->NumberOfFunctions + 1 <
+format/pe/pe.c:		bin->export_directory->NumberOfFunctions) {
+format/pe/pe.c:		exports_sz = (bin->export_directory->NumberOfFunctions + 1) * sizeof (struct r_bin_pe_export_t);
+format/pe/pe.c:		// we cant exit with export_sz > bin->size, us r_bin_pe_export_t is 256+256+8+8+8+4 bytes is easy get over file size
+format/pe/pe.c:		if (exports_sz < 0 || bin->export_directory->NumberOfFunctions + 1 > 0xffff) {
+format/pe/pe.c:		if (r_buf_read_at (bin->b, bin_pe_rva_to_paddr (bin, bin->export_directory->Name), (ut8*) dll_name, PE_NAME_LENGTH) < 1) {
+format/pe/pe.c:		functions_paddr = bin_pe_rva_to_paddr (bin, bin->export_directory->AddressOfFunctions);
+format/pe/pe.c:		names_paddr = bin_pe_rva_to_paddr (bin, bin->export_directory->AddressOfNames);
+format/pe/pe.c:		ordinals_paddr = bin_pe_rva_to_paddr (bin, bin->export_directory->AddressOfOrdinals);
+format/pe/pe.c:		for (i = 0; i < bin->export_directory->NumberOfFunctions; i++) {
+format/pe/pe.c:			int ret = r_buf_read_at (bin->b, functions_paddr + i * sizeof(PE_VWord), (ut8*) &function_rva, sizeof(PE_VWord));
+format/pe/pe.c:			if (bin->export_directory->NumberOfNames != 0) {
+format/pe/pe.c:				for (n = 0; n < bin->export_directory->NumberOfNames; n++) {
+format/pe/pe.c:					ret = r_buf_read_at (bin->b, ordinals_paddr + n * sizeof(PE_Word), (ut8*) &function_ordinal, sizeof (PE_Word));
+format/pe/pe.c:						r_buf_read_at (bin->b, names_paddr + n * sizeof (PE_VWord), (ut8*) &name_vaddr, sizeof (PE_VWord));
+format/pe/pe.c:					if (r_buf_read_at (bin->b, name_paddr, (ut8*) function_name, PE_NAME_LENGTH) < 1) {
+format/pe/pe.c:				function_ordinal = i + bin->export_directory->Base;
+format/pe/pe.c:				if (r_buf_read_at (bin->b, bin_pe_rva_to_paddr (bin, function_rva), (ut8*) forwarder_name, PE_NAME_LENGTH) < 1) {
+format/pe/pe.c:	dbg_dir = &bin->nt_headers->optional_header.DataDirectory[6 /*IMAGE_DIRECTORY_ENTRY_DEBUG*/];
+format/pe/pe.c:	if ((int) dbg_dir_offset < 0 || dbg_dir_offset >= bin->size) {
+format/pe/pe.c:	if (dbg_dir_offset >= bin->b->length) {
+format/pe/pe.c:	img_dbg_dir_entry = (PE_(image_debug_directory_entry)*)(bin->b->buf + dbg_dir_offset);
+format/pe/pe.c:	if ((bin->b->length - dbg_dir_offset) < sizeof (PE_(image_debug_directory_entry))) {
+format/pe/pe.c:		ut32 dbg_data_poff = R_MIN (img_dbg_dir_entry->PointerToRawData, bin->b->length);
+format/pe/pe.c:		int dbg_data_len = R_MIN (img_dbg_dir_entry->SizeOfData, bin->b->length - dbg_data_poff);
+format/pe/pe.c:			r_buf_read_at (bin->b, dbg_data_poff, dbg_data, dbg_data_len);
+format/pe/pe.c:	if (bin->import_directory_offset >= bin->size) {
+format/pe/pe.c:	if (bin->import_directory_offset + 32 >= bin->size) {
+format/pe/pe.c:	off = bin->import_directory_offset;
+format/pe/pe.c:	if (off < bin->size && off > 0) {
+format/pe/pe.c:		if (off + sizeof(PE_(image_import_directory)) > bin->size) {
+format/pe/pe.c:		curr_import_dir = (PE_(image_import_directory)*)(bin->b->buf + bin->import_directory_offset);
+format/pe/pe.c:		if (bin->import_directory_size < 1) {
+format/pe/pe.c:		if (off + bin->import_directory_size > bin->size) {
+format/pe/pe.c:			bin->import_directory_size = bin->size - bin->import_directory_offset;
+format/pe/pe.c:		last = (char*) curr_import_dir + bin->import_directory_size;
+format/pe/pe.c:			if (paddr > bin->size) {
+format/pe/pe.c:			if (paddr + PE_NAME_LENGTH > bin->size) {
+format/pe/pe.c:				rr = r_buf_read_at (bin->b, paddr, (ut8*) dll_name, bin->size - paddr);
+format/pe/pe.c:				if (rr != bin->size - paddr) {
+format/pe/pe.c:				dll_name[bin->size - paddr] = '\0';
+format/pe/pe.c:				rr = r_buf_read_at (bin->b, paddr, (ut8*) dll_name, PE_NAME_LENGTH);
+format/pe/pe.c:	off = bin->delay_import_directory_offset;
+format/pe/pe.c:	if (off < bin->size && off > 0) {
+format/pe/pe.c:		if (off + sizeof(PE_(image_delay_import_directory)) > bin->size) {
+format/pe/pe.c:		curr_delay_import_dir = (PE_(image_delay_import_directory)*)(bin->b->buf + off);
+format/pe/pe.c:			if (dll_name_offset > bin->size || dll_name_offset + PE_NAME_LENGTH > bin->size) {
+format/pe/pe.c:			int rr = r_buf_read_at (bin->b, dll_name_offset, (ut8*) dll_name, PE_NAME_LENGTH);
+format/pe/pe.c:			if ((char*) (curr_delay_import_dir + 2) > (char*) (bin->b->buf + bin->size)) {
+format/pe/pe.c:	if (bin->import_directory_offset + bin->import_directory_size > bin->size) {
+format/pe/pe.c:	off = bin->import_directory_offset;
+format/pe/pe.c:	if (off < bin->size && off > 0) {
+format/pe/pe.c:		if (off + sizeof (PE_(image_import_directory)) > bin->size) {
+format/pe/pe.c:		curr_import_dir = (PE_(image_import_directory)*)(bin->b->buf + off);
+format/pe/pe.c:		last = (char*) curr_import_dir + bin->import_directory_size;
+format/pe/pe.c:			len = r_buf_read_at (bin->b, name_off, (ut8*) libs[index].name, PE_STRING_LENGTH);
+format/pe/pe.c:	off = bin->delay_import_directory_offset;
+format/pe/pe.c:	if (off < bin->size && off > 0) {
+format/pe/pe.c:		if (off + sizeof(PE_(image_delay_import_directory)) > bin->size) {
+format/pe/pe.c:		curr_delay_import_dir = (PE_(image_delay_import_directory)*)(bin->b->buf + off);
+format/pe/pe.c:			if (name_off > bin->size || name_off + PE_STRING_LENGTH > bin->size) {
+format/pe/pe.c:			len = r_buf_read_at (bin->b, name_off, (ut8*) libs[index].name, PE_STRING_LENGTH);
+format/pe/pe.c:			if ((const ut8*) (curr_delay_import_dir + 1) >= (const ut8*) (bin->b->buf + bin->size)) {
+format/pe/pe.c:	return bin->nt_headers->optional_header.SizeOfImage;
+format/pe/pe.c:	if (bin && bin->nt_headers) {
+format/pe/pe.c:		switch (bin->nt_headers->file_header.Machine) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	switch (bin->nt_headers->optional_header.Subsystem) {
+format/pe/pe.c:	if (bin && bin->nt_headers) {
+format/pe/pe.c:		switch (bin->nt_headers->optional_header.Magic) {
+format/pe/pe.c:	if (bin && bin->nt_headers) {
+format/pe/pe.c:			switch (bin->nt_headers->optional_header.Magic) {
+format/pe/pe.c:	new_section_size = bin->size;
+format/pe/pe.c:	new_section_size -= entry->paddr > bin->size? 0: entry->paddr;
+format/pe/pe.c:		if (sections[i].size > bin->size) {
+format/pe/pe.c:	sections = realloc (sections, (bin->num_sections + 2) * sizeof(struct r_bin_pe_section_t));
+format/pe/pe.c:	i = bin->num_sections;
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	shdr = bin->section_header;
+format/pe/pe.c:	for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:	for (i = 0, j = 0; i < bin->num_sections; i++) {
+format/pe/pe.c:			ut64 sym_tbl_off = bin->nt_headers->file_header.PointerToSymbolTable;
+format/pe/pe.c:			int num_symbols = bin->nt_headers->file_header.NumberOfSymbols;
+format/pe/pe.c:			    sym_tbl_off + off + idx < bin->size &&
+format/pe/pe.c:				if (r_buf_read_at (bin->b,
+format/pe/pe.c:		if (bin->optional_header) {
+format/pe/pe.c:			int sa = R_MAX (bin->optional_header->SectionAlignment, 0x1000);
+format/pe/pe.c:	bin->num_sections = section_count;
+format/pe/pe.c:	if (bin && bin->nt_headers) {
+format/pe/pe.c:		switch (bin->nt_headers->optional_header.Subsystem) {
+format/pe/pe.c:#define HASCHR(x) bin->nt_headers->file_header.Characteristics & x
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	arch = bin->nt_headers->file_header.Machine;
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	if (!bin || !bin->nt_headers) {
+format/pe/pe.c:	free (bin->dos_header);
+format/pe/pe.c:	free (bin->nt_headers);
+format/pe/pe.c:	free (bin->section_header);
+format/pe/pe.c:	free (bin->export_directory);
+format/pe/pe.c:	free (bin->import_directory);
+format/pe/pe.c:	free (bin->resource_directory);
+format/pe/pe.c:	free (bin->delay_import_directory);
+format/pe/pe.c:	free (bin->tls_directory);
+format/pe/pe.c:	r_list_free (bin->resources);
+format/pe/pe.c:	r_pkcs7_free_cms (bin->cms);
+format/pe/pe.c:	r_buf_free (bin->b);
+format/pe/pe.c:	bin->b = NULL;
+format/pe/pe.c:	bin->file = file;
+format/pe/pe.c:	if (!(buf = (ut8*) r_file_slurp (file, &bin->size))) {
+format/pe/pe.c:	bin->b = r_buf_new ();
+format/pe/pe.c:	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+format/pe/pe.c:	bin->verbose = verbose;
+format/pe/pe.c:	bin->kv = sdb_new0 ();
+format/pe/pe.c:	bin->b = r_buf_new ();
+format/pe/pe.c:	bin->verbose = verbose;
+format/pe/pe.c:	bin->size = buf->length;
+format/pe/pe.c:	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)) {
+Coincidencia en el fichero binario format/pe/pe.o
+Coincidencia en el fichero binario format/pe/pe64.o
+format/pe/pe_write.c:	PE_(image_section_header) *shdr = bin->section_header;
+format/pe/pe_write.c:	for (i = 0; i < bin->num_sections; i++) {
+format/pe/pe_write.c:			patchoff = bin->section_header_offset;
+format/pe/pe_write.c:			r_buf_write_at (bin->b, patchoff, (ut8*)&newperms_le, sizeof (newperms_le));
+format/te/te.c:	if (bin && bin->header)
+format/te/te.c:		return bin->header->StrippedSize - sizeof(TE_image_file_header);
+format/te/te.c:	if (!(bin->header = malloc (sizeof(TE_image_file_header)))) {
+format/te/te.c:	if (r_buf_read_at (bin->b, 0, (ut8*)bin->header, sizeof (TE_image_file_header)) == -1) {
+format/te/te.c:	if (!bin->kv) {
+format/te/te.c:	sdb_set (bin->kv, "te_machine.cparse", "enum te_machine { TE_IMAGE_FILE_MACHINE_UNKNOWN=0x0, TE_IMAGE_FILE_MACHINE_ALPHA=0x184, "
+format/te/te.c:	sdb_set (bin->kv, "te_subsystem.cparse", "enum te_subsystem { TE_IMAGE_SUBSYSTEM_UNKNOWN=0, TE_IMAGE_SUBSYSTEM_NATIVE=1, "
+format/te/te.c:	sdb_num_set (bin->kv, "te_header.offset", 0, 0);
+format/te/te.c:	sdb_set (bin->kv, "te_header.format", "[2]z[2]Eb[1]Ewxxq"
+format/te/te.c:	sdb_num_set (bin->kv, "te_directory1_header.offset", 24, 0);
+format/te/te.c:	sdb_set (bin->kv, "te_directory1_header.format", "xx"
+format/te/te.c:	sdb_num_set (bin->kv, "te_directory2_header.offset", 32, 0);
+format/te/te.c:	sdb_set (bin->kv, "te_directory2_header.format", "xx"
+format/te/te.c:	if (strncmp ((char*)&bin->header->Signature, "VZ", 2))
+format/te/te.c:	if (r_buf_read_at (bin->b, entry->paddr, buf, sizeof (buf)) == -1) {
+format/te/te.c:	for (i = 0; i < bin->header->NumberOfSections; i++) {
+format/te/te.c:		section_base = bin->section_header[i].VirtualAddress;
+format/te/te.c:		section_size = bin->section_header[i].VirtualSize;
+format/te/te.c:			return bin->section_header[i].PointerToRawData + (vaddr - section_base);
+format/te/te.c:	int sections_size = sizeof(TE_image_section_header) * bin->header->NumberOfSections;
+format/te/te.c:	if (sections_size > bin->size) {
+format/te/te.c:	if (!(bin->section_header = malloc (sections_size))) {
+format/te/te.c:	if (r_buf_read_at (bin->b, sizeof(TE_image_file_header),
+format/te/te.c:				(ut8*)bin->section_header, sections_size) == -1) {
+format/te/te.c:	bin->header = NULL;
+format/te/te.c:	bin->section_header = NULL;
+format/te/te.c:	bin->endian = 0;
+format/te/te.c:	switch (bin->header->Machine) {
+format/te/te.c:	if (!bin || !bin->header)
+format/te/te.c:	entry->vaddr = bin->header->AddressOfEntryPoint - r_bin_te_get_stripped_delta (bin);
+format/te/te.c:		entry->vaddr = bin->header->ImageBase;
+format/te/te.c:	if (bin && bin->header)
+format/te/te.c:		return (ut64)bin->header->ImageBase;
+format/te/te.c:	switch (bin->header->Machine) {
+format/te/te.c:	switch (bin->header->Subsystem) {
+format/te/te.c:	shdr = bin->section_header;
+format/te/te.c:	sections_count = bin->header->NumberOfSections;
+format/te/te.c:	switch (bin->header->Subsystem) {
+format/te/te.c:	free (bin->header);
+format/te/te.c:	free (bin->section_header);
+format/te/te.c:	r_buf_free (bin->b);
+format/te/te.c:	bin->file = file;
+format/te/te.c:	if (!(buf = (ut8*)r_file_slurp (file, &bin->size)))
+format/te/te.c:	bin->b = r_buf_new ();
+format/te/te.c:	if (!r_buf_set_bytes (bin->b, buf, bin->size)) {
+format/te/te.c:	bin->kv = sdb_new0 ();
+format/te/te.c:	bin->b = r_buf_new ();
+format/te/te.c:	bin->size = buf->length;
+format/te/te.c:	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)){
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	if (!(bin->buf = r_buf_new ())) {
+format/wasm/wasm.c:	bin->size = (ut32)bf->buf->length;
+format/wasm/wasm.c:	if (!r_buf_set_bytes (bin->buf, bf->buf->buf, bin->size)) {
+format/wasm/wasm.c:	bin->g_sections = r_bin_wasm_get_sections (bin);
+format/wasm/wasm.c:	bin->g_types = r_bin_wasm_get_types (bin);
+format/wasm/wasm.c:	bin->g_imports = r_bin_wasm_get_imports (bin);
+format/wasm/wasm.c:	bin->g_exports = r_bin_wasm_get_exports (bin);
+format/wasm/wasm.c:	bin->g_tables = r_bin_wasm_get_tables (bin);
+format/wasm/wasm.c:	bin->g_memories = r_bin_wasm_get_memories (bin);
+format/wasm/wasm.c:	bin->g_globals = r_bin_wasm_get_globals (bin);
+format/wasm/wasm.c:	bin->g_codes = r_bin_wasm_get_codes (bin);
+format/wasm/wasm.c:	bin->g_datas = r_bin_wasm_get_datas (bin);
+format/wasm/wasm.c:	bin->entrypoint = r_bin_wasm_get_entrypoint (bin);
+format/wasm/wasm.c:	r_buf_free (bin->buf);
+format/wasm/wasm.c:	r_list_free (bin->g_sections);
+format/wasm/wasm.c:	r_list_free (bin->g_types);
+format/wasm/wasm.c:	r_list_free (bin->g_imports);
+format/wasm/wasm.c:	r_list_free (bin->g_exports);
+format/wasm/wasm.c:	r_list_free (bin->g_tables);
+format/wasm/wasm.c:	r_list_free (bin->g_memories);
+format/wasm/wasm.c:	r_list_free (bin->g_globals);
+format/wasm/wasm.c:	r_list_free (bin->g_codes);
+format/wasm/wasm.c:	r_list_free (bin->g_datas);
+format/wasm/wasm.c:	free (bin->g_start);
+format/wasm/wasm.c:	if (bin->g_sections) {
+format/wasm/wasm.c:		return bin->g_sections;
+format/wasm/wasm.c:	RBuffer *b = bin->buf;
+format/wasm/wasm.c:	bin->g_sections = ret;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->entrypoint) {
+format/wasm/wasm.c:		return bin->entrypoint;
+format/wasm/wasm.c:	if (bin->g_start) {
+format/wasm/wasm.c:		start = bin->g_start;
+format/wasm/wasm.c:	} else if (!(secs = r_bin_wasm_get_sections_by_id (bin->g_sections, R_BIN_WASM_SECTION_START))) {
+format/wasm/wasm.c:		bin->g_start = start;
+format/wasm/wasm.c:	if (!bin->g_codes) {
+format/wasm/wasm.c:	func = r_list_get_n (bin->g_codes, start->index);
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_imports) {
+format/wasm/wasm.c:		return bin->g_imports;
+format/wasm/wasm.c:	if (!(imports = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_imports = r_bin_wasm_get_import_entries (bin, import);
+format/wasm/wasm.c:	return bin->g_imports;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_exports) {
+format/wasm/wasm.c:		return bin->g_exports;
+format/wasm/wasm.c:	if (!(exports= r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_exports = r_bin_wasm_get_export_entries (bin, export);
+format/wasm/wasm.c:	return bin->g_exports;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_types) {
+format/wasm/wasm.c:		return bin->g_types;
+format/wasm/wasm.c:	if (!(types = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_types = r_bin_wasm_get_type_entries (bin, type);
+format/wasm/wasm.c:	return bin->g_types;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_tables) {
+format/wasm/wasm.c:		return bin->g_tables;
+format/wasm/wasm.c:	if (!(tables = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_tables = r_bin_wasm_get_table_entries (bin, table);
+format/wasm/wasm.c:	return bin->g_tables;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_memories) {
+format/wasm/wasm.c:		return bin->g_memories;
+format/wasm/wasm.c:	if (!(memories = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_memories = r_bin_wasm_get_memory_entries (bin, memory);
+format/wasm/wasm.c:	return bin->g_memories;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_globals) {
+format/wasm/wasm.c:		return bin->g_globals;
+format/wasm/wasm.c:	if (!(globals = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_globals = r_bin_wasm_get_global_entries (bin, global);
+format/wasm/wasm.c:	return bin->g_globals;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_elements) {
+format/wasm/wasm.c:		return bin->g_elements;
+format/wasm/wasm.c:	if (!(elements = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_elements = r_bin_wasm_get_element_entries (bin, element);
+format/wasm/wasm.c:	return bin->g_elements;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_codes) {
+format/wasm/wasm.c:		return bin->g_codes;
+format/wasm/wasm.c:	if (!(codes = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_codes = r_bin_wasm_get_code_entries (bin, code);
+format/wasm/wasm.c:	return bin->g_codes;
+format/wasm/wasm.c:	if (!bin || !bin->g_sections) {
+format/wasm/wasm.c:	if (bin->g_datas) {
+format/wasm/wasm.c:		return bin->g_datas;
+format/wasm/wasm.c:	if (!(datas = r_bin_wasm_get_sections_by_id (bin->g_sections,
+format/wasm/wasm.c:	bin->g_datas = r_bin_wasm_get_data_entries (bin, data);
+format/wasm/wasm.c:	return bin->g_datas;
+format/zimg/zimg.c:	bin->size = buf->length;
+format/zimg/zimg.c:	bin->b = r_buf_new ();
+format/zimg/zimg.c:	if (!r_buf_set_bytes (bin->b, buf->buf, bin->size)){
+format/zimg/zimg.c:	bin->header = (*(struct zimg_header_t*)bin->b->buf);
+format/zimg/zimg.c:		r_buf_free (bin->b);
+Coincidencia en el fichero binario libr_bin.dll
+p/bin_bflt.c:	if (bin->got_table) {
+p/bin_bflt.c:		struct reloc_struct_t *got_table = bin->got_table;
+p/bin_bflt.c:		for (i = 0; i < bin->n_got; i++) {
+p/bin_bflt.c:			__patch_reloc (bin->b, got_table[i].addr_to_patch,
+p/bin_bflt.c:		R_FREE (bin->got_table);
+p/bin_bflt.c:	if (bin->reloc_table) {
+p/bin_bflt.c:		struct reloc_struct_t *reloc_table = bin->reloc_table;
+p/bin_bflt.c:		for (i = 0; i < bin->hdr->reloc_count; i++) {
+p/bin_bflt.c:				bin->hdr->reloc_count);
+p/bin_bflt.c:				__patch_reloc (bin->b, reloc_table[found].addr_to_patch,
+p/bin_bflt.c:				__patch_reloc (bin->b, reloc_table[i].addr_to_patch,
+p/bin_bflt.c:		R_FREE (bin->reloc_table);
+p/bin_bflt.c:	b->iob.write_at (b->iob.io, bin->b->base, bin->b->buf, bin->b->length);
+p/bin_coff.c:	if (bin->kv) {
+p/bin_coff.c:		return bin->kv;
+p/bin_coff.c:	void *res = r_bin_coff_new_buf (tbuf, bf->rbin->verbose);
+p/bin_coff.c:	if (idx < 0 || idx > bin->hdr.f_nsyms) {
+p/bin_coff.c:	if (!bin->symbols) {
+p/bin_coff.c:	s = &bin->symbols[idx];
+p/bin_coff.c:	if (bin->symbols[idx].n_scnum < bin->hdr.f_nscns &&
+p/bin_coff.c:	    bin->symbols[idx].n_scnum > 0) {
+p/bin_coff.c:		ptr->paddr = bin->scn_hdrs[s->n_scnum - 1].s_scnptr + s->n_value;
+p/bin_coff.c:	if (!list_rel || !bin || !bin->scn_hdrs) {
+p/bin_coff.c:	for (i = 0; i < bin->hdr.f_nscns; i++) {
+p/bin_coff.c:		if (bin->scn_hdrs[i].s_nreloc) {
+p/bin_coff.c:			int len = 0, size = bin->scn_hdrs[i].s_nreloc * sizeof (struct coff_reloc);
+p/bin_coff.c:			if (bin->scn_hdrs[i].s_relptr > bin->size ||
+p/bin_coff.c:				bin->scn_hdrs[i].s_relptr + size > bin->size) {
+p/bin_coff.c:			len = r_buf_read_at (bin->b, bin->scn_hdrs[i].s_relptr, (ut8*)rel, size);
+p/bin_coff.c:			for (j = 0; j < bin->scn_hdrs[i].s_nreloc; j++) {
+p/bin_coff.c:				reloc->paddr = bin->scn_hdrs[i].s_scnptr + rel[j].r_vaddr;
+p/bin_dex.c:	if (!bin || idx < 0 || idx >= bin->header.strings_size || !bin->strings) {
+p/bin_dex.c:	if (bin->strings[idx] >= bin->size) {
+p/bin_dex.c:	if (r_buf_read_at (bin->b, bin->strings[idx], buf, sizeof (buf)) < 1) {
+p/bin_dex.c:	bin->b->buf[bin->b->length - 1] = 0;
+p/bin_dex.c:	if (!uleblen || uleblen >= bin->size) {
+p/bin_dex.c:	if (!len || len >= bin->size) {
+p/bin_dex.c:	if (bin->strings[idx] + uleblen >= bin->strings[idx] + bin->header.strings_size) {
+p/bin_dex.c:	char* ptr = (char*) r_buf_get_at (bin->b, bin->strings[idx] + uleblen, NULL);
+p/bin_dex.c:	if (type_idx < 0 || type_idx >= bin->header.types_size) {
+p/bin_dex.c:	return getstr (bin, bin->types[type_idx].descriptor_id);
+p/bin_dex.c:	if (proto_id >= bin->header.prototypes_size) {
+p/bin_dex.c:	params_off = bin->protos[proto_id].parameters_off;
+p/bin_dex.c:	if (params_off >= bin->size) {
+p/bin_dex.c:	type_id = bin->protos[proto_id].return_type_id;
+p/bin_dex.c:	if (type_id >= bin->header.types_size ) {
+p/bin_dex.c:	return_type = getstr (bin, bin->types[type_id].descriptor_id);
+p/bin_dex.c:	bufptr = bin->b->buf;
+p/bin_dex.c:	if (list_size * sizeof (ut16) >= bin->size) {
+p/bin_dex.c:		if (params_off + 4 + (i * 2) >= bin->size) {
+p/bin_dex.c:			    bin->header.types_size || type_idx >= bin->size) {
+p/bin_dex.c:		buff = getstr (bin, bin->types[type_idx].descriptor_id);
+p/bin_dex.c:	if (method_idx < 0 || method_idx >= bin->header.method_size) {
+p/bin_dex.c:	return dex_get_proto (bin, bin->methods[method_idx].proto_id);
+p/bin_dex.c:	if (method_idx < 0 || method_idx >= bin->header.method_size) {
+p/bin_dex.c:	proto_id = bin->methods[method_idx].proto_id;
+p/bin_dex.c:	if (proto_id >= bin->header.prototypes_size) {
+p/bin_dex.c:	params_off = bin->protos[proto_id].parameters_off;
+p/bin_dex.c:	if (params_off  >= bin->size) {
+p/bin_dex.c:	bufptr = bin->b->buf;
+p/bin_dex.c:		if (of >= bin->size || of < params_off) {
+p/bin_dex.c:		if (type_idx >= bin->header.types_size ||
+p/bin_dex.c:		    type_idx > bin->size) {
+p/bin_dex.c:		buff = getstr (bin, bin->types[type_idx].descriptor_id);
+p/bin_dex.c:	rbin->cb_printf ("      positions     :\n");
+p/bin_dex.c:		rbin->cb_printf ("        0x%04llx line=%llu\n",
+p/bin_dex.c:	rbin->cb_printf ("      locals        :\n");
+p/bin_dex.c:			rbin->cb_printf (
+p/bin_dex.c:			rbin->cb_printf (
+p/bin_dex.c:				rbin->cb_printf (
+p/bin_dex.c:				rbin->cb_printf (
+p/bin_dex.c:	return bin? bin->kv: NULL;
+p/bin_dex.c:	if (!bin || !bin->strings) {
+p/bin_dex.c:	if (bin->header.strings_size > bin->size) {
+p/bin_dex.c:		bin->strings = NULL;
+p/bin_dex.c:	for (i = 0; i < bin->header.strings_size; i++) {
+p/bin_dex.c:		if (bin->strings[i] > bin->size || bin->strings[i] + 6 > bin->size) {
+p/bin_dex.c:		r_buf_read_at (bin->b, bin->strings[i], (ut8*)&buf, 6);
+p/bin_dex.c:			off = bin->strings[i] + dex_uleb128_len (buf, sizeof (buf));
+p/bin_dex.c:			if (off + len >= bin->size || off + len < len) {
+p/bin_dex.c:			r_buf_read_at (bin->b, off, (ut8*)ptr->string, len);
+p/bin_dex.c:			ptr->vaddr = ptr->paddr = bin->strings[i];
+p/bin_dex.c:	if (idx < 0 || idx >= bin->header.method_size) {
+p/bin_dex.c:	int cid = bin->methods[idx].class_id;
+p/bin_dex.c:	if (cid < 0 || cid >= bin->header.strings_size) {
+p/bin_dex.c:	int tid = bin->methods[idx].name_id;
+p/bin_dex.c:	if (tid < 0 || tid >= bin->header.strings_size) {
+p/bin_dex.c:	if (!bin || !bin->types) {
+p/bin_dex.c:	if (cid < 0 || cid >= bin->header.types_size) {
+p/bin_dex.c:	tid = bin->types[cid].descriptor_id;
+p/bin_dex.c:	if (!bin || !bin->fields) {
+p/bin_dex.c:	if (fid < 0 || fid >= bin->header.fields_size) {
+p/bin_dex.c:	cid = bin->fields[fid].class_id;
+p/bin_dex.c:	if (cid < 0 || cid >= bin->header.types_size) {
+p/bin_dex.c:	type_id = bin->fields[fid].type_id;
+p/bin_dex.c:	if (type_id < 0 || type_id >= bin->header.types_size) {
+p/bin_dex.c:	tid = bin->fields[fid].name_id;
+p/bin_dex.c:	return r_str_newf ("%s->%s %s", getstr (bin, bin->types[cid].descriptor_id),
+p/bin_dex.c:		getstr (bin, tid), getstr (bin, bin->types[type_id].descriptor_id));
+p/bin_dex.c:	if (!bin || !bin->types) {
+p/bin_dex.c:	if (method_idx < 0 || method_idx >= bin->header.method_size) {
+p/bin_dex.c:	int cid = bin->methods[method_idx].class_id;
+p/bin_dex.c:	if (cid < 0 || cid >= bin->header.types_size) {
+p/bin_dex.c:	if (!bin || !bin->types) {
+p/bin_dex.c:	if (type_idx < 0 || type_idx >= bin->header.types_size) {
+p/bin_dex.c:	return bin->header.types_offset + type_idx * 0x04; //&bin->types[type_idx];
+p/bin_dex.c:	if (!bin || !c || !bin->types) {
+p/bin_dex.c:	if (cid < 0 || cid >= bin->header.types_size) {
+p/bin_dex.c:	tid = bin->types[cid].descriptor_id;
+p/bin_dex.c:		total = bin->header.fields_offset + (sizeof (DexField) * fieldIndex);
+p/bin_dex.c:		if (total >= bin->size || total < bin->header.fields_offset) {
+p/bin_dex.c:		if (field.type_id >= bin->header.types_size) {
+p/bin_dex.c:		tid = bin->types[field.type_id].descriptor_id;
+p/bin_dex.c:			rbin->cb_printf ("    #%d              : (in %s;)\n", i,
+p/bin_dex.c:			rbin->cb_printf ("      name          : '%s'\n", fieldName);
+p/bin_dex.c:			rbin->cb_printf ("      type          : '%s'\n", type_str);
+p/bin_dex.c:			rbin->cb_printf ("      access        : 0x%04x (%s)\n",
+p/bin_dex.c:		r_list_append (bin->methods_list, sym);
+p/bin_dex.c:	bool bin_dbginfo = rbin->want_dbginfo;
+p/bin_dex.c:		if (MI < bin->header.method_size) {
+p/bin_dex.c:			if (MC + 16 >= bin->size || MC + 16 < MC) {
+p/bin_dex.c:			rbin->cb_printf ("    #%d              : (in %s;)\n", i, cls->name);
+p/bin_dex.c:			rbin->cb_printf ("      name          : '%s'\n", method_name);
+p/bin_dex.c:			rbin->cb_printf ("      type          : '%s'\n", signature);
+p/bin_dex.c:			rbin->cb_printf ("      access        : 0x%04x (%s)\n",
+p/bin_dex.c:				rbin->cb_printf ("      code          -\n");
+p/bin_dex.c:				rbin->cb_printf ("      registers     : %d\n", regsz);
+p/bin_dex.c:				rbin->cb_printf ("      ins           : %d\n", ins_size);
+p/bin_dex.c:				rbin->cb_printf ("      outs          : %d\n", outs_size);
+p/bin_dex.c:				rbin->cb_printf (
+p/bin_dex.c:					rbin->cb_printf ("      catches       : %d\n", tries_size);
+p/bin_dex.c:					if (offset >= bin->size || offset < MC) {
+p/bin_dex.c:						rbin->cb_printf ("        0x%04x - 0x%04x\n",
+p/bin_dex.c:					if (off >= bin->size || off < tries_size) {
+p/bin_dex.c:						if (handler_type > 0 && handler_type < bin->header.types_size) {
+p/bin_dex.c:							s = getstr (bin, bin->types[handler_type].descriptor_id);
+p/bin_dex.c:								rbin->cb_printf (
+p/bin_dex.c:								rbin->cb_printf ("          (error) -> 0x%04llx\n", handler_addr);
+p/bin_dex.c:							rbin->cb_printf ("          <any> -> 0x%04llx\n", v2);
+p/bin_dex.c:					rbin->cb_printf (
+p/bin_dex.c:				rbin->cb_printf (
+p/bin_dex.c:				r_list_append (bin->methods_list, sym);
+p/bin_dex.c:				if (bin->code_from > sym->paddr) {
+p/bin_dex.c:					bin->code_from = sym->paddr;
+p/bin_dex.c:				if (bin->code_to < sym->paddr) {
+p/bin_dex.c:					bin->code_to = sym->paddr;
+p/bin_dex.c:				r_list_append (bin->methods_list, sym);
+p/bin_dex.c:			if (MC > 0 && debug_info_off > 0 && bin->header.data_offset < debug_info_off &&
+p/bin_dex.c:				debug_info_off < bin->header.data_offset + bin->header.data_size) {
+p/bin_dex.c:					rbin->cb_printf ("      positions     :\n");
+p/bin_dex.c:					rbin->cb_printf ("      locals        :\n");
+p/bin_dex.c:	cls->addr = bin->header.class_offset + class_index * DEX_CLASS_SIZE;
+p/bin_dex.c:	r_list_append (bin->classes_list, cls);
+p/bin_dex.c:		rbin->cb_printf ("  Class descriptor  : '%s;'\n", class_name);
+p/bin_dex.c:		rbin->cb_printf (
+p/bin_dex.c:		rbin->cb_printf ("  Superclass        : '%s'\n",
+p/bin_dex.c:		rbin->cb_printf ("  Interfaces        -\n");
+p/bin_dex.c:	    bin->header.data_offset < c->interfaces_offset &&
+p/bin_dex.c:		    bin->header.data_offset + bin->header.data_size) {
+p/bin_dex.c:		if (types_list_size < 0 || types_list_size >= bin->header.types_size ) {
+p/bin_dex.c:			if (t > 0 && t < bin->header.types_size ) {
+p/bin_dex.c:				int tid = bin->types[t].descriptor_id;
+p/bin_dex.c:					rbin->cb_printf (
+p/bin_dex.c:			rbin->cb_printf (
+p/bin_dex.c:		if (bin->header.class_offset > c->class_data_offset ||
+p/bin_dex.c:			    bin->header.class_offset +
+p/bin_dex.c:				    bin->header.class_size * DEX_CLASS_SIZE) {
+p/bin_dex.c:			rbin->cb_printf ("  Static fields     -\n");
+p/bin_dex.c:			rbin->cb_printf ("  Instance fields   -\n");
+p/bin_dex.c:			rbin->cb_printf ("  Direct methods    -\n");
+p/bin_dex.c:			rbin->cb_printf ("  Virtual methods   -\n");
+p/bin_dex.c:			rbin->cb_printf (
+p/bin_dex.c:			rbin->cb_printf ("  source_file_idx   : %d (%s)\n\n",
+p/bin_dex.c:	for (i = 0; i < bin->header.class_size; i++) {
+p/bin_dex.c:		if (class_idx == bin->classes[i].class_id) {
+p/bin_dex.c:	if (!bin || bin->methods_list) {
+p/bin_dex.c:	bin->version = r_bin_dex_get_version (bin);
+p/bin_dex.c:	bin->code_from = UT64_MAX;
+p/bin_dex.c:	bin->code_to = 0;
+p/bin_dex.c:	bin->methods_list = r_list_newf ((RListFree)free);
+p/bin_dex.c:	if (!bin->methods_list) {
+p/bin_dex.c:	bin->imports_list = r_list_newf ((RListFree)free);
+p/bin_dex.c:	if (!bin->imports_list) {
+p/bin_dex.c:		r_list_free (bin->methods_list);
+p/bin_dex.c:	bin->lines_list = r_list_newf ((RListFree)free);
+p/bin_dex.c:	if (!bin->lines_list) {
+p/bin_dex.c:	bin->classes_list = r_list_newf ((RListFree)r_bin_class_free);
+p/bin_dex.c:	if (!bin->classes_list) {
+p/bin_dex.c:		r_list_free (bin->methods_list);
+p/bin_dex.c:		r_list_free (bin->lines_list);
+p/bin_dex.c:		r_list_free (bin->imports_list);
+p/bin_dex.c:	if (bin->header.method_size>bin->size) {
+p/bin_dex.c:		bin->header.method_size = 0;
+p/bin_dex.c:	bin->header.method_size = R_MIN (bin->header.method_size, bin->size);
+p/bin_dex.c:	bin->header.class_size = R_MIN (bin->header.class_size, bin->size);
+p/bin_dex.c:	bin->header.strings_size = R_MIN (bin->header.strings_size, bin->size);
+p/bin_dex.c:	if (bin->header.strings_size > bin->size) {
+p/bin_dex.c:	if (bin->classes) {
+p/bin_dex.c:		ut64 amount = sizeof (int) * bin->header.method_size;
+p/bin_dex.c:		if (amount > UT32_MAX || amount < bin->header.method_size) {
+p/bin_dex.c:		for (i = 0; i < bin->header.class_size; i++) {
+p/bin_dex.c:			struct dex_class_t *c = &bin->classes[i];
+p/bin_dex.c:				rbin->cb_printf ("Class #%d            -\n", i);
+p/bin_dex.c:		int sym_count = bin->methods_list->length;
+p/bin_dex.c:		for (i = 0; i < bin->header.method_size; i++) {
+p/bin_dex.c:			if (bin->methods[i].class_id >= bin->header.types_size) {
+p/bin_dex.c:			if (is_class_idx_in_code_classes(bin, bin->methods[i].class_id)) {
+p/bin_dex.c:			const char *className = getstr (bin, bin->types[bin->methods[i].class_id].descriptor_id);
+p/bin_dex.c:				r_list_append (bin->imports_list, imp);
+p/bin_dex.c:				sym->paddr = sym->vaddr = bin->b->base + bin->header.method_offset + (sizeof (struct dex_method_t) * i) ;
+p/bin_dex.c:				r_list_append (bin->methods_list, sym);
+p/bin_dex.c:	if (bin && bin->imports_list) {
+p/bin_dex.c:		return bin->imports_list;
+p/bin_dex.c:	return bin->imports_list;
+p/bin_dex.c:	if (!bin->methods_list) {
+p/bin_dex.c:	return bin->methods_list;
+p/bin_dex.c:	if (!bin->classes_list) {
+p/bin_dex.c:	return bin->classes_list;
+p/bin_dex.c:	if (!bin->methods_list) {
+p/bin_dex.c:	r_list_foreach (bin->methods_list, iter, m) {
+p/bin_dex.c:		r_list_foreach (bin->methods_list, iter, m) {
+p/bin_dex.c:		if (!already_entry (ret, bin->code_from)) {
+p/bin_dex.c:				ptr->paddr = ptr->vaddr = bin->code_from;
+p/bin_dex.c:		ptr->size = bin->code_from - ptr->vaddr; // fix size
+p/bin_dex.c:		ptr->vaddr = ptr->paddr = bin->code_from; //ptr->vaddr = fsym;
+p/bin_dex.c:		ptr->size = bin->code_to - ptr->paddr;
+p/bin_dex.c:			ptr->paddr = ptr->vaddr = bin->code_to;
+p/bin_dex.c:	rbin->cb_printf ("DEX file header:\n");
+p/bin_dex.c:	rbin->cb_printf ("magic               : 'dex\\n035\\0'\n");
+p/bin_dex.c:	rbin->cb_printf ("checksum            : %x\n", bin->header.checksum);
+p/bin_dex.c:	rbin->cb_printf ("signature           : %02x%02x...%02x%02x\n", bin->header.signature[0], bin->header.signature[1], bin->header.signature[18], bin->header.signature[19]);
+p/bin_dex.c:	rbin->cb_printf ("file_size           : %d\n", bin->header.size);
+p/bin_dex.c:	rbin->cb_printf ("header_size         : %d\n", bin->header.header_size);
+p/bin_dex.c:	rbin->cb_printf ("link_size           : %d\n", bin->header.linksection_size);
+p/bin_dex.c:	rbin->cb_printf ("link_off            : %d (0x%06x)\n", bin->header.linksection_offset, bin->header.linksection_offset);
+p/bin_dex.c:	rbin->cb_printf ("string_ids_size     : %d\n", bin->header.strings_size);
+p/bin_dex.c:	rbin->cb_printf ("string_ids_off      : %d (0x%06x)\n", bin->header.strings_offset, bin->header.strings_offset);
+p/bin_dex.c:	rbin->cb_printf ("type_ids_size       : %d\n", bin->header.types_size);
+p/bin_dex.c:	rbin->cb_printf ("type_ids_off        : %d (0x%06x)\n", bin->header.types_offset, bin->header.types_offset);
+p/bin_dex.c:	rbin->cb_printf ("proto_ids_size       : %d\n", bin->header.prototypes_size);
+p/bin_dex.c:	rbin->cb_printf ("proto_ids_off        : %d (0x%06x)\n", bin->header.prototypes_offset, bin->header.prototypes_offset);
+p/bin_dex.c:	rbin->cb_printf ("field_ids_size      : %d\n", bin->header.fields_size);
+p/bin_dex.c:	rbin->cb_printf ("field_ids_off       : %d (0x%06x)\n", bin->header.fields_offset, bin->header.fields_offset);
+p/bin_dex.c:	rbin->cb_printf ("method_ids_size     : %d\n", bin->header.method_size);
+p/bin_dex.c:	rbin->cb_printf ("method_ids_off      : %d (0x%06x)\n", bin->header.method_offset, bin->header.method_offset);
+p/bin_dex.c:	rbin->cb_printf ("class_defs_size     : %d\n", bin->header.class_size);
+p/bin_dex.c:	rbin->cb_printf ("class_defs_off      : %d (0x%06x)\n", bin->header.class_offset, bin->header.class_offset);
+p/bin_dex.c:	rbin->cb_printf ("data_size           : %d\n", bin->header.data_size);
+p/bin_dex.c:	rbin->cb_printf ("data_off            : %d (0x%06x)\n\n", bin->header.data_offset, bin->header.data_offset);
+p/bin_dex.c:	bin->methods_list = NULL;
+p/bin_elf.c:		return bin->kv;
+p/bin_elf.c:	res = Elf_(r_bin_elf_new_buf) (tbuf, bf->rbin->verbose);
+p/bin_elf.c:		bool is_arm = bin->ehdr.e_machine == EM_ARM;
+p/bin_elf.c:			bf->size = bin? bin->size: 0x9999;
+p/bin_elf.c:		if (bin->ehdr.e_machine == EM_ARM && *ptr->name) {
+p/bin_elf.c:		if (bin->ehdr.e_machine == EM_ARM) {
+p/bin_elf.c:	B = bin->baddr;
+p/bin_elf.c:		if (rel->sym < bin->imports_by_ord_size && bin->imports_by_ord[rel->sym]) {
+p/bin_elf.c:			r->import = bin->imports_by_ord[rel->sym];
+p/bin_elf.c:		} else if (rel->sym < bin->symbols_by_ord_size && bin->symbols_by_ord[rel->sym]) {
+p/bin_elf.c:			r->symbol = bin->symbols_by_ord[rel->sym];
+p/bin_elf.c:	switch (bin->ehdr.e_machine) {
+p/bin_elf.c:	if (got_addr < 1 && bin->ehdr.e_type == ET_REL) {
+p/bin_elf.c:	if (bin->ehdr.e_type != ET_REL) {
+p/bin_elf.c:	size = bin->reloc_num * 4;
+p/bin_elf.c:			if (relcs[i].sym < bin->imports_by_ord_size && bin->imports_by_ord[relcs[i].sym]) {
+p/bin_elf.c:			} else if (relcs[i].sym < bin->symbols_by_ord_size && bin->symbols_by_ord[relcs[i].sym]) {
+p/bin_elf.c:				sym_addr = bin->symbols_by_ord[relcs[i].sym]->vaddr;
+p/bin_elf.c:		_patch_reloc (bin->ehdr.e_machine, &b->iob, &relcs[i], sym_addr ? sym_addr : vaddr, 0, n_vaddr + size);
+p/bin_elf.c:#define p bf->rbin->cb_printf
+p/bin_elf.c:	if (bin && bin->cur && bin->cur->o && bin->cur->o->info) {
+p/bin_elf.c:		is_arm = !strcmp (bin->cur->o->info->arch, "arm");
+p/bin_elf64.c:#define p bf->rbin->cb_printf
+p/bin_java.c:	bin->AllJavaBinObjs = DB;
+p/bin_java.c:	if (bin->kv) {
+p/bin_java.c:		return bin->kv;
+p/bin_mach0.c:	return bin? bin->kv: NULL;
+p/bin_mach0.c:	if (!bin->signature) {
+p/bin_mach0.c:	return strdup ((char*) bin->signature);
+p/bin_mach0.c:	res = MACH0_(new_buf) (tbuf, bf->rbin->verbose);
+p/bin_mach0.c:		if (bin->hdr.cputype == CPU_TYPE_ARM && wordsize < 64) {
+p/bin_mach0.c:		bin->dbg_info = strncmp (ptr->name, "radr://", 7)? 0: 1;
+p/bin_mach0.c:	if (bin->func_start) {
+p/bin_mach0.c:		const ut8* temp = bin->func_start;
+p/bin_mach0.c:		const ut8* temp_end = bin->func_start + bin->func_size;
+p/bin_mach0.c:			ptr->vaddr = bin->baddr + address;
+p/bin_mach0.c:			if (bin->hdr.cputype == CPU_TYPE_ARM && wordsize < 64) {
+p/bin_mach0.c:	bin->lang = lang;
+p/bin_mach0.c:		bin->dbg_info |= R_BIN_DBG_STRIPPED;
+p/bin_mach0.c:	bin->has_canary = false;
+p/bin_mach0.c:		if (bin->imports_by_ord && ptr->ordinal < bin->imports_by_ord_size) {
+p/bin_mach0.c:			bin->imports_by_ord[ptr->ordinal] = ptr;
+p/bin_mach0.c:			bin->has_canary = true;
+p/bin_mach0.c:		if (bin->imports_by_ord && relocs[i].ord < bin->imports_by_ord_size) {
+p/bin_mach0.c:			ptr->import = bin->imports_by_ord[relocs[i].ord];
+p/bin_mach0.c:		ret->has_canary = bin->has_canary;
+p/bin_mach0.c:		ret->dbg_info = bin->dbg_info;
+p/bin_mach0.c:		ret->lang = bin->lang;
+p/bin_mach0.c:	bool is_arm = strstr (bin->cur->o->info->arch, "arm");
+p/bin_mach0.c:	if (bin->cur->o->info->bits == 64) {
+p/bin_mdmp.c:		if (!(libs = Pe32_r_bin_pe_get_libs (pe32_bin->bin))) {
+p/bin_mdmp.c:			ptr = r_str_newf ("[0x%.08x] - %s", pe32_bin->vaddr, libs[i].name);
+p/bin_mdmp.c:		if (!(libs = Pe64_r_bin_pe_get_libs (pe64_bin->bin))) {
+p/bin_mdmp.c:			ptr = r_str_newf ("[0x%.08x] - %s", pe64_bin->vaddr, libs[i].name);
+p/bin_mdmp.c:			if (pe32_bin->vaddr == module->base_of_image && pe32_bin->bin) {
+p/bin_mdmp.c:			if (pe64_bin->vaddr == module->base_of_image && pe64_bin->bin) {
+p/bin_mdmp.c:		if (pe32_bin->bin) {
+p/bin_mdmp.c:			r_list_join (ret, pe32_bin->bin->relocs);
+p/bin_mdmp.c:		if (pe64_bin->bin) {
+p/bin_mdmp.c:			r_list_join (ret, pe64_bin->bin->relocs);
+p/bin_mz.c:		if (bin && bin->kv) {
+p/bin_mz.c:			return bin->kv;
+p/bin_ningba.c:	bf->rbin->maxstrbuf = 0x20000000;
+p/bin_nro.c:	bin->methods_list = r_list_newf ((RListFree)free);
+p/bin_nro.c:	bin->imports_list = r_list_newf ((RListFree)free);
+p/bin_nro.c:	bin->classes_list = r_list_newf ((RListFree)free);
+p/bin_nro.c:			imp->ordinal = bin->imports_list->length;
+p/bin_nro.c:			r_list_append (bin->imports_list, imp);
+p/bin_nro.c:		r_list_append (bin->methods_list, sym);
+p/bin_nro.c:	return bin->methods_list;
+p/bin_nro.c:	return bin->imports_list;
+p/bin_pe.c:	return bin? bin->kv: NULL;
+p/bin_pe.c:	res = PE_(r_bin_pe_new_buf) (tbuf, bf->rbin->verbose);
+p/bin_pe.c:		paddr = sdb_num_get (bin->kv, key, 0);
+p/bin_pe.c:		vaddr = sdb_num_get (bin->kv, key, 0);
+p/bin_pe.c:		haddr = sdb_num_get (bin->kv, key, 0);
+p/bin_pe.c:		if (ptr->size > bin->size) {
+p/bin_pe.c:			if (sections[i].vsize < bin->size) {
+p/bin_pe.c:		const RList* relocs_list = bin->relocs;
+p/bin_pe.c:	ret->signature = bin ? bin->is_signed : false;
+p/bin_pe.c:		RJSVar *json = r_pkcs7_cms_json (bin->cms);
+p/bin_pe.c:		c = r_pkcs7_cms_dump (bin->cms);
+p/bin_pe.c:	at += bin->dos_header->e_lfanew;
+p/bin_pe.c:	rbin->cb_printf ("PE file header:\n");
+p/bin_pe.c:	rbin->cb_printf ("IMAGE_NT_HEADERS\n");
+p/bin_pe.c:	rbin->cb_printf ("\tSignature : 0x%x\n", bin->nt_headers->Signature);
+p/bin_pe.c:	rbin->cb_printf ("IMAGE_FILE_HEADERS\n");
+p/bin_pe.c:	rbin->cb_printf ("\tMachine : 0x%x\n", bin->nt_headers->file_header.Machine);
+p/bin_pe.c:	rbin->cb_printf ("\tNumberOfSections : 0x%x\n", bin->nt_headers->file_header.NumberOfSections);
+p/bin_pe.c:	rbin->cb_printf ("\tTimeDateStamp : 0x%x\n", bin->nt_headers->file_header.TimeDateStamp);
+p/bin_pe.c:	rbin->cb_printf ("\tPointerToSymbolTable : 0x%x\n", bin->nt_headers->file_header.PointerToSymbolTable);
+p/bin_pe.c:	rbin->cb_printf ("\tNumberOfSymbols : 0x%x\n", bin->nt_headers->file_header.NumberOfSymbols);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfOptionalHeader : 0x%x\n", bin->nt_headers->file_header.SizeOfOptionalHeader);
+p/bin_pe.c:	rbin->cb_printf ("\tCharacteristics : 0x%x\n", bin->nt_headers->file_header.Characteristics);
+p/bin_pe.c:	rbin->cb_printf ("IMAGE_OPTIONAL_HEADERS\n");
+p/bin_pe.c:	rbin->cb_printf ("\tMagic : 0x%x\n", bin->nt_headers->optional_header.Magic);
+p/bin_pe.c:	rbin->cb_printf ("\tMajorLinkerVersion : 0x%x\n", bin->nt_headers->optional_header.MajorLinkerVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tMinorLinkerVersion : 0x%x\n", bin->nt_headers->optional_header.MinorLinkerVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfCode : 0x%x\n", bin->nt_headers->optional_header.SizeOfCode);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfInitializedData : 0x%x\n", bin->nt_headers->optional_header.SizeOfInitializedData);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfUninitializedData : 0x%x\n", bin->nt_headers->optional_header.SizeOfUninitializedData);
+p/bin_pe.c:	rbin->cb_printf ("\tAddressOfEntryPoint : 0x%x\n", bin->nt_headers->optional_header.AddressOfEntryPoint);
+p/bin_pe.c:	rbin->cb_printf ("\tBaseOfCode : 0x%x\n", bin->nt_headers->optional_header.BaseOfCode);
+p/bin_pe.c:	rbin->cb_printf ("\tBaseOfData : 0x%x\n", bin->nt_headers->optional_header.BaseOfData);
+p/bin_pe.c:	rbin->cb_printf ("\tImageBase : 0x%x\n", bin->nt_headers->optional_header.ImageBase);
+p/bin_pe.c:	rbin->cb_printf ("\tSectionAlignment : 0x%x\n", bin->nt_headers->optional_header.SectionAlignment);
+p/bin_pe.c:	rbin->cb_printf ("\tFileAlignment : 0x%x\n", bin->nt_headers->optional_header.FileAlignment);
+p/bin_pe.c:	rbin->cb_printf ("\tMajorOperatingSystemVersion : 0x%x\n", bin->nt_headers->optional_header.MajorOperatingSystemVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tMinorOperatingSystemVersion : 0x%x\n", bin->nt_headers->optional_header.MinorOperatingSystemVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tMajorImageVersion : 0x%x\n", bin->nt_headers->optional_header.MajorImageVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tMinorImageVersion : 0x%x\n", bin->nt_headers->optional_header.MinorImageVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tMajorSubsystemVersion : 0x%x\n", bin->nt_headers->optional_header.MajorSubsystemVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tMinorSubsystemVersion : 0x%x\n", bin->nt_headers->optional_header.MinorSubsystemVersion);
+p/bin_pe.c:	rbin->cb_printf ("\tWin32VersionValue : 0x%x\n", bin->nt_headers->optional_header.Win32VersionValue);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfImage : 0x%x\n", bin->nt_headers->optional_header.SizeOfImage);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfHeaders : 0x%x\n", bin->nt_headers->optional_header.SizeOfHeaders);
+p/bin_pe.c:	rbin->cb_printf ("\tCheckSum : 0x%x\n", bin->nt_headers->optional_header.CheckSum);
+p/bin_pe.c:	rbin->cb_printf ("\tSubsystem : 0x%x\n", bin->nt_headers->optional_header.Subsystem);
+p/bin_pe.c:	rbin->cb_printf ("\tDllCharacteristics : 0x%x\n", bin->nt_headers->optional_header.DllCharacteristics);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfStackReserve : 0x%x\n", bin->nt_headers->optional_header.SizeOfStackReserve);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfStackCommit : 0x%x\n", bin->nt_headers->optional_header.SizeOfStackCommit);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfHeapReserve : 0x%x\n", bin->nt_headers->optional_header.SizeOfHeapReserve);
+p/bin_pe.c:	rbin->cb_printf ("\tSizeOfHeapCommit : 0x%x\n", bin->nt_headers->optional_header.SizeOfHeapCommit);
+p/bin_pe.c:	rbin->cb_printf ("\tLoaderFlags : 0x%x\n", bin->nt_headers->optional_header.LoaderFlags);
+p/bin_pe.c:	rbin->cb_printf ("\tNumberOfRvaAndSizes : 0x%x\n", bin->nt_headers->optional_header.NumberOfRvaAndSizes);
+p/bin_pe.c:		if (bin->nt_headers->optional_header.DataDirectory[i].Size > 0) {
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_EXPORT\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_IMPORT\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_RESOURCE\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_EXCEPTION\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_SECURITY\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_BASERELOC\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_DEBUG\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_COPYRIGHT\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_ARCHITECTURE\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_GLOBALPTR\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_TLS\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_IAT\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT\n");
+p/bin_pe.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR\n");
+p/bin_pe.c:			rbin->cb_printf ("\tVirtualAddress : 0x%x\n", bin->nt_headers->optional_header.DataDirectory[i].VirtualAddress);
+p/bin_pe.c:			rbin->cb_printf ("\tSize : 0x%x\n", bin->nt_headers->optional_header.DataDirectory[i].Size);
+Coincidencia en el fichero binario p/bin_pe.dll
+p/bin_pe64.c:	rbin->cb_printf ("PE file header:\n");
+p/bin_pe64.c:	rbin->cb_printf ("IMAGE_NT_HEADERS\n");
+p/bin_pe64.c:	rbin->cb_printf ("\tSignature : 0x%x\n", bin->nt_headers->Signature);
+p/bin_pe64.c:	rbin->cb_printf ("IMAGE_FILE_HEADERS\n");
+p/bin_pe64.c:	rbin->cb_printf ("\tMachine : 0x%x\n", bin->nt_headers->file_header.Machine);
+p/bin_pe64.c:	rbin->cb_printf ("\tNumberOfSections : 0x%x\n", bin->nt_headers->file_header.NumberOfSections);
+p/bin_pe64.c:	rbin->cb_printf ("\tTimeDateStamp : 0x%x\n", bin->nt_headers->file_header.TimeDateStamp);
+p/bin_pe64.c:	rbin->cb_printf ("\tPointerToSymbolTable : 0x%x\n", bin->nt_headers->file_header.PointerToSymbolTable);
+p/bin_pe64.c:	rbin->cb_printf ("\tNumberOfSymbols : 0x%x\n", bin->nt_headers->file_header.NumberOfSymbols);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfOptionalHeader : 0x%x\n", bin->nt_headers->file_header.SizeOfOptionalHeader);
+p/bin_pe64.c:	rbin->cb_printf ("\tCharacteristics : 0x%x\n", bin->nt_headers->file_header.Characteristics);
+p/bin_pe64.c:	rbin->cb_printf ("IMAGE_OPTIONAL_HEADERS\n");
+p/bin_pe64.c:	rbin->cb_printf ("\tMagic : 0x%x\n", bin->nt_headers->optional_header.Magic);
+p/bin_pe64.c:	rbin->cb_printf ("\tMajorLinkerVersion : 0x%x\n", bin->nt_headers->optional_header.MajorLinkerVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tMinorLinkerVersion : 0x%x\n", bin->nt_headers->optional_header.MinorLinkerVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfCode : 0x%x\n", bin->nt_headers->optional_header.SizeOfCode);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfInitializedData : 0x%x\n", bin->nt_headers->optional_header.SizeOfInitializedData);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfUninitializedData : 0x%x\n", bin->nt_headers->optional_header.SizeOfUninitializedData);
+p/bin_pe64.c:	rbin->cb_printf ("\tAddressOfEntryPoint : 0x%x\n", bin->nt_headers->optional_header.AddressOfEntryPoint);
+p/bin_pe64.c:	rbin->cb_printf ("\tBaseOfCode : 0x%x\n", bin->nt_headers->optional_header.BaseOfCode);
+p/bin_pe64.c:	rbin->cb_printf ("\tImageBase : 0x%x\n", bin->nt_headers->optional_header.ImageBase);
+p/bin_pe64.c:	rbin->cb_printf ("\tSectionAlignment : 0x%x\n", bin->nt_headers->optional_header.SectionAlignment);
+p/bin_pe64.c:	rbin->cb_printf ("\tFileAlignment : 0x%x\n", bin->nt_headers->optional_header.FileAlignment);
+p/bin_pe64.c:	rbin->cb_printf ("\tMajorOperatingSystemVersion : 0x%x\n", bin->nt_headers->optional_header.MajorOperatingSystemVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tMinorOperatingSystemVersion : 0x%x\n", bin->nt_headers->optional_header.MinorOperatingSystemVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tMajorImageVersion : 0x%x\n", bin->nt_headers->optional_header.MajorImageVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tMinorImageVersion : 0x%x\n", bin->nt_headers->optional_header.MinorImageVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tMajorSubsystemVersion : 0x%x\n", bin->nt_headers->optional_header.MajorSubsystemVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tMinorSubsystemVersion : 0x%x\n", bin->nt_headers->optional_header.MinorSubsystemVersion);
+p/bin_pe64.c:	rbin->cb_printf ("\tWin32VersionValue : 0x%x\n", bin->nt_headers->optional_header.Win32VersionValue);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfImage : 0x%x\n", bin->nt_headers->optional_header.SizeOfImage);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfHeaders : 0x%x\n", bin->nt_headers->optional_header.SizeOfHeaders);
+p/bin_pe64.c:	rbin->cb_printf ("\tCheckSum : 0x%x\n", bin->nt_headers->optional_header.CheckSum);
+p/bin_pe64.c:	rbin->cb_printf ("\tSubsystem : 0x%x\n", bin->nt_headers->optional_header.Subsystem);
+p/bin_pe64.c:	rbin->cb_printf ("\tDllCharacteristics : 0x%x\n", bin->nt_headers->optional_header.DllCharacteristics);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfStackReserve : 0x%x\n", bin->nt_headers->optional_header.SizeOfStackReserve);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfStackCommit : 0x%x\n", bin->nt_headers->optional_header.SizeOfStackCommit);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfHeapReserve : 0x%x\n", bin->nt_headers->optional_header.SizeOfHeapReserve);
+p/bin_pe64.c:	rbin->cb_printf ("\tSizeOfHeapCommit : 0x%x\n", bin->nt_headers->optional_header.SizeOfHeapCommit);
+p/bin_pe64.c:	rbin->cb_printf ("\tLoaderFlags : 0x%x\n", bin->nt_headers->optional_header.LoaderFlags);
+p/bin_pe64.c:	rbin->cb_printf ("\tNumberOfRvaAndSizes : 0x%x\n", bin->nt_headers->optional_header.NumberOfRvaAndSizes);
+p/bin_pe64.c:		if (bin->nt_headers->optional_header.DataDirectory[i].Size > 0) {
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_EXPORT\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_IMPORT\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_RESOURCE\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_EXCEPTION\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_SECURITY\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_BASERELOC\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_DEBUG\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_COPYRIGHT\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_ARCHITECTURE\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_GLOBALPTR\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_TLS\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_IAT\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT\n");
+p/bin_pe64.c:				rbin->cb_printf ("IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR\n");
+p/bin_pe64.c:			rbin->cb_printf ("\tVirtualAddress : 0x%x\n", bin->nt_headers->optional_header.DataDirectory[i].VirtualAddress);
+p/bin_pe64.c:			rbin->cb_printf ("\tSize : 0x%x\n", bin->nt_headers->optional_header.DataDirectory[i].Size);
+Coincidencia en el fichero binario p/bin_pe64.dll
+p/bin_te.c:	return bin? bin->kv: NULL;
+p/bin_vsf.c:	return bin? bin->kv: NULL;
+p/bin_xtr_dyldcache.c:	return free_xtr (bin->cur->xtr_obj);
+p/bin_xtr_dyldcache.c:	if (!bin || !bin->cur) {
+p/bin_xtr_dyldcache.c:	if (!bin->cur->xtr_obj) {
+p/bin_xtr_dyldcache.c:		bin->cur->xtr_obj = r_bin_dyldcache_new (bin->cur->file);
+p/bin_xtr_dyldcache.c:	if (!bin->file) {
+p/bin_xtr_dyldcache.c:	   	bin->file = bin->cur->file;
+p/bin_xtr_dyldcache.c:	return bin->cur->xtr_obj? true : false;
+p/bin_xtr_dyldcache.c:		(struct r_bin_dyldcache_obj_t*)bin->cur->xtr_obj, idx, &nlib);
+p/bin_xtr_dyldcache.c:	xtr_obj = bin->cur->xtr_obj;
+p/bin_xtr_dyldcache.c:		bin->cur->xtr_obj = NULL;
+p/bin_xtr_dyldcache.c:	if (!bin->file) {
+p/bin_xtr_fatmach0.c:	return free_xtr (bin->cur->xtr_obj);
+p/bin_xtr_fatmach0.c:	return ((bin->cur->xtr_obj = r_bin_fatmach0_new (bin->file)) != NULL);
+p/bin_xtr_fatmach0.c:	struct r_bin_fatmach0_obj_t *fb = bin->cur->xtr_obj;
+p/bin_xtr_fatmach0.c:	if (!bin || !bin->cur) {
+p/bin_xtr_fatmach0.c:	if (!bin->cur->xtr_obj) {
+p/bin_xtr_fatmach0.c:		bin->cur->xtr_obj = r_bin_fatmach0_from_bytes_new (buf, size);
+p/bin_xtr_fatmach0.c:	fb = bin->cur->xtr_obj;
+p/bin_zimg.c:	return bin? bin->kv: NULL;

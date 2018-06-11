@@ -3909,47 +3909,121 @@ static bool cmd_dcu (RCore *core, const char *input) {
 	return true;
 }
 
+static int cmd_debug_dC (RCore *core, const char *input, bool print) {
+	char *input_ = strdup (input);
+	int ret = -1;
+
+	if (!*input) {
+		return -1;
+	}
+	char *cond = strchr (input_, ' ');
+	if (cond) {
+		*cond = '\0';
+		cond++;
+		if (strlen (input_) > 0 && strlen (cond) > 0) {
+			char *tmp = NULL;
+			char *err = NULL;
+			RDebugCond *cond_item;
+
+			cond_item = r_debug_cond_find (core->dbg, input_);
+			if (!strcmp (cond, "-")) {
+				char *tmp;
+				tmp = r_core_editor (core, NULL, cond_item? cond_item->cond : "");
+				if (tmp) {
+					cond = tmp;
+				} else {
+					cond = NULL;
+				}
+			}
+			if (cond) {
+				r_debug_cond_add (core->dbg, input_, cond, &err);
+				if (err) {
+					eprintf ("%s\n", err);
+					free (err);
+				} else {
+					ret = 0;
+				}
+			}
+			free (tmp);
+		}
+	} else if (print) {
+		r_debug_cond_print (core->dbg, input_);
+		ret = 0;
+	}
+	free (input_);
+	return ret;
+}
+
+static void cmd_debug_dCb (RCore *core, const char *input) {
+	bool success = false;
+	RBreakpointItem *bpi = NULL;
+	bool newbp = false;
+
+	if (input[1] != ' ') {
+		eprintf ("Use: dCb [addr] [condition]\n");
+		return;
+	}
+	char *inp = strdup (input + 2);
+	if (inp) {
+		char *arg = strchr (inp, ' ');
+		ut64 addr = r_num_math (core->num, inp);
+		RBreakpointItem *bpi = r_bp_get_at (core->dbg->bp, addr);
+		int hwbp = r_config_get_i (core->config, "dbg.hwbp");
+
+		if (!bpi) {
+			if (validAddress (core, addr)) {
+				bpi = r_debug_bp_add (core->dbg, addr, hwbp, false, 0, NULL, 0);
+				if (!bpi) {
+					eprintf ("Unable to add breakpoint 0x%"PFMT64x"\n", addr);
+					goto err_cmd_debug_dCb;
+				}
+				newbp = true;
+			} else {
+				eprintf ("Invalid breakpoint address 0x%"PFMT64x"\n", addr);
+				goto err_cmd_debug_dCb;
+			}
+		}
+		if (arg) {
+			*arg++ = 0;
+			if (!r_debug_cond_find (core->dbg, arg)) {
+				char *cmd;
+				int len = strlen (arg) + 30;
+				char cond_name[30];
+
+				cmd = (char *)malloc (len);
+				if (!cmd) {
+					r_sys_perror ("cmd_debug_dCb alloc");
+					goto err_cmd_debug_dCb;
+				}
+				snprintf (cond_name, sizeof (cond_name) - 1, "0x%"PFMT64x, addr);
+				snprintf (cmd, len - 1, "%s %s", cond_name, arg);
+				if (cmd_debug_dC(core, cmd, false) == 0) {
+					free (bpi->cond);
+					bpi->cond = strdup (cond_name);
+					success = true;
+				}
+			} else {
+				free (bpi->cond);
+				bpi->cond = strdup (arg);
+				success = true;
+			}
+		} else {
+			R_FREE (bpi->cond);
+		}
+		free (inp);
+	} else {
+		eprintf ("Cannot strdup. Your heap is fucked up\n");
+	}
+err_cmd_debug_dCb:
+	if (!success && bpi && newbp) {
+		r_bp_del (core->dbg->bp, bpi->addr);
+	}
+}
+
 static void cmd_debug_cond (RCore *core, const char *input) {
 	switch (*input) {
 	case ' ': // "dC"
-		{
-		char *input_ = strdup (input);
-		char *name = input_ + 1;
-		if (*name) {
-			char *cond = strchr (name, ' ');
-			if (cond) {
-				*cond = '\0';
-				cond++;
-				if (strlen (name) > 0 && strlen (cond) > 0) {
-					char *tmp = NULL;
-					char *err = NULL;
-					RDebugCond *cond_item;
-
-					cond_item = r_debug_cond_find (core->dbg, name);
-					if (!strcmp (cond, "-")) {
-						char *tmp;
-						tmp = r_core_editor (core, NULL, cond_item? cond_item->cond : "");
-						if (tmp) {
-							cond = tmp;
-						} else {
-							cond = NULL;
-						}
-					}
-					if (cond) {
-						r_debug_cond_add (core->dbg, name, cond, &err);
-						if (err) {
-							eprintf ("%s\n", err);
-							free (err);
-						}
-					}
-					free (tmp);
-				}
-			} else {
-				r_debug_cond_print (core->dbg, name);
-			}
-		}
-		free (input_);
-		}
+		cmd_debug_dC (core, input + 1, true);
 		break;
 	case '-': // "dC-"
 		{
@@ -3961,34 +4035,7 @@ static void cmd_debug_cond (RCore *core, const char *input) {
 		}
 		break;
 	case 'b': // "dCb"
-		if (input[1] == ' ') {
-			char *inp = strdup (input + 2);
-			if (inp) {
-				char *arg = strchr (inp, ' ');
-				ut64 addr = r_num_math (core->num, inp);
-				RBreakpointItem *bpi = r_bp_get_at (core->dbg->bp, addr);
-				if (!bpi) {
-					eprintf ("No breakpoint defined at 0x%08"PFMT64x"\n", addr);
-					break;
-				}
-				if (arg) {
-					*arg++ = 0;
-					if (!r_debug_cond_find (core->dbg, arg)) {
-						eprintf ("can not find condition '%s'\n", arg);
-						break;
-					}
-					free (bpi->cond);
-					bpi->cond = strdup (arg);
-				} else {
-					R_FREE (bpi->cond);
-				}
-				free (inp);
-			} else {
-				eprintf ("Cannot strdup. Your heap is fucked up\n");
-			}
-		} else {
-			eprintf ("Use: dCb [addr] [condition]\n");
-		}
+		cmd_debug_dCb (core, input);
 		break;
 	case '\0':
 		r_debug_cond_print (core->dbg, NULL);

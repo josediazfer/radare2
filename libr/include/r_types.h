@@ -295,16 +295,17 @@ static inline void *r_new_copy(int size, void *data) {
 
 #if PERROR_WITH_FILELINE
 /* make error messages useful by prepending file, line, and function name */
-#define _perror(str,file,line,func) \
+#define _perror(str,file,line,func,msg) \
   { \
 	  char buf[256]; \
 	  snprintf(buf,sizeof(buf),"[%s:%d %s] %s",file,line,func,str); \
-	  r_sys_perror_str(buf); \
+	  r_sys_perror_strf(buf, msg); \
   }
-#define perror(x) _perror(x,__FILE__,__LINE__,__func__)
-#define r_sys_perror(x) _perror(x,__FILE__,__LINE__,__func__)
+#define perror(x) _perror(x,__FILE__,__LINE__,__func__, NULL)
+#define r_sys_perror(x) _perror(x,__FILE__,__LINE__,__func__, NULL)
+#define r_sys_perrorf(f,x) _perror(f,__FILE__,__LINE__,__func__, x)
 #else
-#define r_sys_perror(x) r_sys_perror_str(x);
+#define r_sys_perror(x) r_sys_perror_str(x, NULL);
 #endif
 
 #if __UNIX__

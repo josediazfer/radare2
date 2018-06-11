@@ -9,12 +9,14 @@ extern "C" {
 typedef struct SPDBOptions {
 	char *user_agent;
 	char *symbol_server;
+	char *cache_dir;
 	int extract;
 } SPDBOptions;
 
 typedef struct SPDBDownloaderOpt {
 	char *user_agent;
 	char *symbol_server;
+	char *cache_dir;
 	char *dbg_file;
 	char *guid;
 	char *path;
@@ -43,6 +45,7 @@ void deinit_pdb_downloader(SPDBDownloader *pdb_downloader);
 ///
 /// \brief download PDB file
 R_API int r_bin_pdb_download (RCore* core, int isradjson, int* actions_done, SPDBOptions* options);
+R_API char * r_bin_pdb_cached_get(RCore *core, SPDBOptions *options);
 
 #ifdef __cplusplus
 }

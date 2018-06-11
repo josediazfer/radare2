@@ -9,7 +9,7 @@
 #endif
 
 #define BUFSIZE 1024
-void r_sys_perror_str(const char *fun);
+void r_sys_perror_str(const char *fun, const char *msg);
 
 #define ErrorExit(x) { r_sys_perror(x); return NULL; }
 char *ReadFromPipe(HANDLE fh);

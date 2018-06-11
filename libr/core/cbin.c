@@ -1020,8 +1020,7 @@ static int bin_pdb(RCore *core, int mode) {
 	}
 	if (!pdb.pdb_parse (&pdb)) {
 		eprintf ("pdb was not parsed\n");
-		pdb.finish_pdb_parse (&pdb);
-		return false;
+		goto err_bin_pdb;
 	}
 	if (mode == R_CORE_BIN_JSON) {
 		r_cons_printf("[");
@@ -1052,6 +1051,7 @@ static int bin_pdb(RCore *core, int mode) {
 	if (mode == 'j') {
 		r_cons_printf ("]");
 	}
+err_bin_pdb:
 	pdb.finish_pdb_parse (&pdb);
 
 	return true;

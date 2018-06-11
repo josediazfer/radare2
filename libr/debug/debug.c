@@ -1003,13 +1003,12 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 		r_debug_lua_vars_fill (dbg, lua, true);
 		lua_getglobal (lua, "cond");
 		if (!lua_pcall (lua, 0, 1, 0)) {
-			if (lua_isboolean (lua, 1)) {
-				cond_eval = lua_toboolean (lua, 1);
+			if (lua_isboolean (lua, -1)) {
+				cond_eval = lua_toboolean (lua, -1);
 				lua_pop (lua, 1);
 			}
 		}
 		lua_settop (lua, 0);
-		r_debug_lua_vars_fill (dbg, lua, false);
 	}
 	return (bool)cond_eval;
 }

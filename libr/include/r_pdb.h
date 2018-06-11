@@ -25,6 +25,7 @@ typedef struct R_PDB {
 	RList *pdb_streams;
 	RList *pdb_streams2;
 	RBuffer *buf; // mmap of file
+	char *filename;
 //	int curr;
 
 	void (*print_gvars)(struct R_PDB *pdb, ut64 img_base, int format);

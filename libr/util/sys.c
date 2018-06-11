@@ -182,16 +182,6 @@ R_API RList *r_sys_dir(const char *path) {
 	return list;
 }
 
-R_API char *r_sys_cmd_strf(const char *fmt, ...) {
-	char *ret, cmd[4096];
-	va_list ap;
-	va_start (ap, fmt);
-	vsnprintf (cmd, sizeof (cmd), fmt, ap);
-	ret = r_sys_cmd_str (cmd, NULL, NULL);
-	va_end (ap);
-	return ret;
-}
-
 #ifdef __MAC_10_7
 #define APPLE_WITH_BACKTRACE 1
 #endif
@@ -673,6 +663,16 @@ R_API char *r_sys_cmd_str(const char *cmd, const char *input, int *len) {
 	return NULL;
 }
 
+R_API char *r_sys_cmd_strf(const char *fmt, ...) {
+	char *ret, cmd[4096];
+	va_list ap;
+	va_start (ap, fmt);
+	vsnprintf (cmd, sizeof (cmd), fmt, ap);
+	ret = r_sys_cmd_str (cmd, NULL, NULL);
+	va_end (ap);
+	return ret;
+}
+
 R_API bool r_sys_mkdir(const char *dir) {
 	bool ret;
 
@@ -736,11 +736,38 @@ R_API bool r_sys_mkdirp(const char *dir) {
 	return ret;
 }
 
-R_API void r_sys_perror_str(const char *fun) {
+R_API void r_sys_perror_strf(const char *fun, const char *fmt, ...) {
+	char *msg;
+	va_list ap;
+	va_start (ap, fmt);
+	msg = (char *)malloc (TMP_BUFSIZE);
+	if (msg) {
+		vsnprintf (msg, TMP_BUFSIZE, fmt, ap);
+		r_sys_perror_str (fun, msg);
+		va_end (ap);
+		free (msg);
+	} else {
+		perror ("r_sys_perror_strf/alloc");
+	}
+}
+
+R_API void r_sys_perror_str(const char *fun, const char *msg) {
 #if __UNIX__ || __CYGWIN__ && !defined(MINGW32)
 #pragma push_macro("perror")
 #undef perror
-	perror (fun);
+	if (msg) {
+		char *msg_res;
+
+		msg_res = r_str_newf ("%s %s", fun, msg);
+		if (msg_res) {
+			perror (msg_res);
+			free (msg_res);
+		} else {
+			perror ("r_sys_perror_str/alloc");
+		}
+	} else {
+		perror (fun);
+	}
 #pragma pop_macro("perror")
 #elif __WINDOWS__
 	LPTSTR lpMsgBuf;
@@ -754,10 +781,18 @@ R_API void r_sys_perror_str(const char *fun) {
 			MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
 			(LPTSTR)&lpMsgBuf,
 			0, NULL )) {
-		eprintf ("%s: " W32_TCHAR_FSTR "\n", fun, lpMsgBuf);
+		if (msg) {
+			eprintf ("%s: " W32_TCHAR_FSTR " %s\n", fun, lpMsgBuf, msg);
+		} else {
+			eprintf ("%s: " W32_TCHAR_FSTR "\n", fun, lpMsgBuf);
+		}
 		LocalFree (lpMsgBuf);
 	} else {
-		eprintf ("%s\n", fun);
+		if (msg) {
+			eprintf ("%s: %s\n", fun, msg);
+		} else {
+			eprintf ("%s\n", fun);
+		}
 	}
 #endif
 }
