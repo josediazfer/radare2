@@ -106,6 +106,7 @@ static const char *help_msg_dC[] = {
 	"dC", " <cond_name> <cond>", "Display or add condition(s)",
 	"dC-", " cond_name", "Delete condition with name 'cond_name'",
 	"dCb", " bp_addr cond_name", "Associate breakpoint with condition 'cond_name'",
+	"dCb-", "bp_addr", "Delete both breakpoint and condition",
 	NULL
 };
 
@@ -3954,6 +3955,27 @@ static int cmd_debug_dC (RCore *core, const char *input, bool print) {
 	return ret;
 }
 
+static void cmd_debug_dCb_ (RCore *core, const char *input) {
+	RBreakpointItem *bpi;
+	ut64 addr;
+	RDebugCond *cond;
+	char *str;
+
+	str = input;
+	while (*str++ == ' ') {
+		;
+	}
+	addr = r_num_math (core->num, str);
+	bpi = r_bp_get_at (core->dbg->bp, addr);
+	if (!bpi) {
+		return;
+	}
+	if ((cond = r_debug_cond_find (core->dbg, bpi->cond))) {
+		r_debug_cond_del (core->dbg, cond->name);
+	}
+	r_bp_del (core->dbg->bp, addr);
+}
+
 static void cmd_debug_dCb (RCore *core, const char *input) {
 	bool success = false;
 	RBreakpointItem *bpi = NULL;
@@ -4035,7 +4057,11 @@ static void cmd_debug_cond (RCore *core, const char *input) {
 		}
 		break;
 	case 'b': // "dCb"
-		cmd_debug_dCb (core, input);
+		if (*(input + 1) == '-') {
+			cmd_debug_dCb_ (core, input + 1);
+		} else {
+			cmd_debug_dCb (core, input);
+		}
 		break;
 	case '\0':
 		r_debug_cond_print (core->dbg, NULL);

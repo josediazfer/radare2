@@ -907,7 +907,7 @@ RDebugCond *r_debug_cond_find(RDebug *dbg, const char *name) {
 	return NULL;
 }
 
-static int lua_mem_read(lua_State *lua) {
+static int lua_dread(lua_State *lua) {
 	ut64 addr;
 	int len;
 	RDebug *dbg;
@@ -957,6 +957,61 @@ static int lua_mem_read(lua_State *lua) {
 	return 1;
 }
 
+static int lua_dstrcmp(lua_State *lua) {
+	ut64 addr;
+	int len;
+	RDebug *dbg;
+	int n_args = lua_gettop (lua);
+	ut8 *buff = NULL;
+	const char *str;
+
+	if (n_args < 2) {
+		return 0;
+	}
+	if (!lua_isinteger (lua, 1)) {
+            lua_pushstring (lua, "fist argument is not address value");
+            lua_error (lua);
+	}
+	addr = lua_tointeger (lua, 1);
+	if (!lua_isstring (lua, 2)) {
+            lua_pushstring (lua, "second argument is not string value");
+            lua_error (lua);
+	}
+	str = lua_tostring (lua, 2);
+
+	if (n_args < 3) {
+		len = strlen (str);
+	} else {
+		if (!lua_isinteger (lua, 3)) {
+	            lua_pushstring (lua, "second argument is not length value");
+        	    lua_error (lua);
+		}
+		len = lua_tointeger (lua, 3);
+		if (len <= 0 || len > MAX_LUA_MEM_READ_LENGTH) {
+        	    lua_pushstring (lua, "invalid length value");
+	            lua_error (lua);
+		}
+	}
+	lua_getglobal(lua, "_dbg_");
+	dbg = (RDebug *)lua_touserdata (lua, -1);
+	if (!dbg) {
+            lua_pushstring (lua, "lua_mem_read internal error dbg is NULL");
+            lua_error (lua);
+	}
+	buff = (ut8 *)calloc (1, len);
+	if (!buff) {
+            lua_pushstring (lua, "can not reserve memory to read");
+            lua_error (lua);
+	}
+	if (!dbg->iob.read_at (dbg->iob.io, addr, buff, len)) {
+		lua_pushinteger (lua, -1);
+	} else {
+		lua_pushinteger (lua, memcmp (buff, str, len));
+	}
+	free (buff);
+	return 1;
+}
+
 static lua_State *r_debug_cond_lua_get(RDebug *dbg, const char *cond, char **ret_err) {
 	lua_State *lua;
 	bool success = false;
@@ -995,7 +1050,8 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 		lua_pcall (lua, 0, 0, 0);
 		lua_pushlightuserdata (lua, dbg);
 		lua_setglobal (lua, "_dbg_");
-		lua_register (lua, "mr", lua_mem_read);
+		lua_register (lua, "dread", lua_dread);
+		lua_register (lua, "dstrcmp", lua_dstrcmp);
 		cond_item->data = lua;
 		free (cond_func);
 	}
