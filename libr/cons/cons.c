@@ -31,6 +31,9 @@ typedef struct {
 typedef struct {
 	bool breaked;
 	void *data;
+#if __WINDOWS__
+	DWORD mode;
+#endif
 	RConsEvent event_interrupt;
 } RConsBreakStack;
 
@@ -198,8 +201,8 @@ R_API void r_cons_break_push(RConsBreak cb, void *user) {
 #if __WINDOWS__ && !__CYGWIN__
 		HANDLE h_cons_in = GetStdHandle (STD_INPUT_HANDLE);
 
-		GetConsoleMode (h_cons_in, &I.break_mode);
-		SetConsoleMode (h_cons_in, I.break_mode | ENABLE_PROCESSED_INPUT);
+		GetConsoleMode (h_cons_in, &b->mode);
+		SetConsoleMode (h_cons_in, b->mode | ENABLE_PROCESSED_INPUT);
 #endif
 		//save the actual state
 		b->event_interrupt = I.event_interrupt;
@@ -220,6 +223,11 @@ R_API void r_cons_break_pop() {
 		if (b) {
 			I.event_interrupt = b->event_interrupt;
 			I.data = b->data;
+#if __WINDOWS__ && !__CYGWIN__
+			HANDLE h_cons_in = GetStdHandle (STD_INPUT_HANDLE);
+
+			SetConsoleMode (h_cons_in, b->mode);
+#endif
 			break_stack_free (b);
 		} else {
 			//there is not more elements in the stack
@@ -228,12 +236,6 @@ R_API void r_cons_break_pop() {
 #endif
 			I.breaked = false;
 		}
-
-#if __WINDOWS__ && !__CYGWIN__
-		HANDLE h_cons_in = GetStdHandle (STD_INPUT_HANDLE);
-
-		SetConsoleMode (h_cons_in, I.break_mode);
-#endif
 	}
 }
 

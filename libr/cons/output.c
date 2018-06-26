@@ -77,8 +77,9 @@ R_API int r_cons_w32_print(const ut8 *ptr, int len, int vmode) {
 		len = strlen ((const char *)ptr);
 	}
 	ptr_end = ptr + len;
+	r_cons_break_push (NULL, NULL);
 	if (ptr && hConsole)
-	for (; *ptr && ptr < ptr_end; ptr++) {
+	for (; *ptr && ptr < ptr_end && !r_cons_is_breaked (); ptr++) {
 		if (ptr[0] == 0xa) {
 			ll = (size_t)(ptr - str);
 			lines--;
@@ -342,6 +343,7 @@ R_API int r_cons_w32_print(const ut8 *ptr, int len, int vmode) {
 			linelen += ll;
 		}
 	}
+	r_cons_break_pop ();
 	return ret;
 }
 #endif
