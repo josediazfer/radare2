@@ -547,6 +547,7 @@ R_API bool r_core_visual_esil (RCore *core);
 R_API int r_core_search_preludes(RCore *core);
 R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf, int blen, const ut8 *mask, int mlen);
 R_API RList* /*<RIOMap*>*/ r_core_get_boundaries_prot (RCore *core, int protection, const char *mode);
+R_API RList *r_core_get_boundaries_prot_ex(RCore *core, int protection, const char *mode, const char *map_name);
 R_API RList* /*<RIOMap*>*/ r_core_get_boundaries (RCore *core, const char *mode);
 R_API RList* r_core_get_boundaries_ok(RCore *core);
 

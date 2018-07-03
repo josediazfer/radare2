@@ -543,6 +543,13 @@ static inline void print_search_progress(ut64 at, ut64 to, int n) {
 	}
 }
 
+static void r_core_map_free(RIOMap *map) {
+	if (map) {
+		free (map->name);
+		free (map);
+	}
+}
+
 static void append_bound(RList *list, RIO *io, RAddrInterval search_itv, ut64 from, ut64 size) {
 	RIOMap *map = R_NEW0 (RIOMap);
 	if (!map) {
@@ -568,8 +575,12 @@ static void append_bound(RList *list, RIO *io, RAddrInterval search_itv, ut64 fr
 	}
 }
 
-// TODO(maskray) returns RList<RAddrInterval>
 R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char *mode) {
+	return r_core_get_boundaries_prot_ex (core, protection, mode, NULL);
+}
+
+// TODO(maskray) returns RList<RAddrInterval>
+R_API RList *r_core_get_boundaries_prot_ex(RCore *core, int protection, const char *mode, const char *map_name) {
 	RList *list = r_list_newf (free); // XXX r_io_map_free);
 	const ut64 search_from = r_config_get_i (core->config, "search.from"),
 			search_to = r_config_get_i (core->config, "search.to");
@@ -713,6 +724,7 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char 
 				}
 			} else {
 				bool readonly = false;
+
 				if (!strcmp (mode, "dbg.program")) {
 					first = true;
 					mask = R_IO_EXEC;
@@ -739,13 +751,16 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char 
 							continue;
 						}
 					}
+					if (map_name && *map_name && r_str_cmp_path (map->name, map_name, strlen (map_name))) {
+						continue;
+					}
 					add = (stack && strstr (map->name, "stack"))? 1: 0;
 					if (!add && (heap && (map->perm & R_IO_WRITE)) && strstr (map->name, "heap")) {
 						add = 1;
 					}
 					if ((mask && (map->perm & mask)) || add || all) {
 						if (!list) {
-							list = r_list_newf (free);
+							list = r_list_newf ((RListFree *)r_core_map_free);
 						}
 						RIOMap *nmap = R_NEW0 (RIOMap);
 						if (!nmap) {
@@ -753,6 +768,7 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, int protection, const char 
 						}
 						nmap->itv.addr = map->addr;
 						nmap->itv.size = map->addr_end - map->addr;
+						nmap->name = strdup (map->name);
 						if (nmap->itv.addr) {
 							from = R_MIN (from, nmap->itv.addr);
 							to = R_MAX (to - 1, r_itv_end (nmap->itv) - 1) + 1;

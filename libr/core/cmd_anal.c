@@ -4391,13 +4391,20 @@ static void cmd_anal_calls(RCore *core, const char *input, bool only_print_flag)
 	RIOMap *r;
 	RBinFile *binfile;
 	ut64 addr;
-	ut64 len = r_num_math (core->num, input);
+	ut64 len;
+
+	if (r_str_is_type (input, R_STRING_TYPE_DIGIT)) {
+		len = r_num_math (core->num, input);
+	} else {
+		len = 0;
+	}
 	if (len > 0xffffff) {
 		eprintf ("Too big\n");
 		return;
 	}
 	binfile = r_core_bin_cur (core);
 	addr = core->offset;
+	r_cons_break_push (NULL, NULL);
 	if (binfile) {
 		if (len) {
 			RIOMap *m = R_NEW0 (RIOMap);
@@ -4405,10 +4412,28 @@ static void cmd_anal_calls(RCore *core, const char *input, bool only_print_flag)
 			m->itv.size = len;
 			r_list_append (ranges, m);
 		} else {
-			ranges = r_core_get_boundaries_prot (core, R_IO_EXEC, "io.sections");
+			int cfg_debug = r_config_get_i (core->config, "cfg.debug");
+
+			if (cfg_debug) {
+				const char *map_name;
+
+				for(; *input && isspace (*input); input++)
+					;
+				if (strlen (input) > 0) {
+					map_name = input;
+				} else {
+					map_name = NULL;
+				}
+				ranges = r_core_get_boundaries_prot_ex (core, R_IO_EXEC, "dbg.maps.exec", map_name);
+				if (map_name && !r_list_length (ranges)) {
+					eprintf ("can not find mapped memory with name %s\n", map_name);
+					goto err_cmd_anal_calls;
+				}
+			} else {
+				ranges = r_core_get_boundaries_prot (core, R_IO_EXEC, "io.sections");
+			}
 		}
 	}
-	r_cons_break_push (NULL, NULL);
 	if (!binfile || !r_list_length (ranges)) {
 		RListIter *iter;
 		RIOMap *map;
@@ -4440,6 +4465,7 @@ static void cmd_anal_calls(RCore *core, const char *input, bool only_print_flag)
 			}
 		}
 	}
+err_cmd_anal_calls:
 	r_cons_break_pop ();
 	r_list_free (ranges);
 }

@@ -958,20 +958,32 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 			case STATUS_WX86_BREAKPOINT:
 #endif
 			case EXCEPTION_BREAKPOINT:
+				next_event = false;
 				if (proc->state == PROC_STATE_STARTING) {
+#if __MINGW64__ || _WIN64
+					if (proc->wow64 && de.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT) {
+						next_event = true;
+						proc_dbg_continue (proc, false);
+					} else {
+						proc_lib_names_resolv (dbg, proc);
+						proc->state = PROC_STATE_STARTED;
+					}
+#else
 					proc_lib_names_resolv (dbg, proc);
 					proc->state = PROC_STATE_STARTED;
+#endif
 				}
-				/* unselect debugger thread created in the process */
-				if (proc->intr) {
-					RDebugW32Thread *th = th_dbg_find_excep (proc, tid, NULL);
-					if (th) {
-						dbg->tid = th->tid;
+				if (!next_event) {
+					/* unselect debugger thread created in the process */
+					if (proc->intr) {
+						RDebugW32Thread *th = th_dbg_find_excep (proc, tid, NULL);
+						if (th) {
+							dbg->tid = th->tid;
+						}
+						proc->intr = false;
 					}
-					proc->intr = false;
+					ret = R_DEBUG_REASON_BREAKPOINT;
 				}
-				ret = R_DEBUG_REASON_BREAKPOINT;
-				next_event = false;
 				break;
 #if __MINGW64__ || _WIN64
 			case STATUS_WX86_SINGLE_STEP:

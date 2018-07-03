@@ -735,6 +735,31 @@ R_API char *r_str_newf(const char *fmt, ...) {
 	return tmp;
 }
 
+R_API int r_str_cmp_path(const char *str1, const char *str2, int len) {
+#if __WINDOWS__
+	return strncasecmp (str1, str2, len);
+#else
+	return strncmp (str1, str2, len);
+#endif
+}
+
+R_API bool r_str_is_type(const char *str, int type) {
+	if (!str || !*str) {
+		return false;
+	}
+	switch (type) {
+	case R_STRING_TYPE_DIGIT:
+		for (;*str && isdigit(*str); str++)
+			;
+		break;
+	case R_STRING_TYPE_ALPHANUM:
+		for (;*str && isalpha(*str); str++)
+			;
+		break;
+	}
+	return !*str;
+}
+
 // TODO: rename to r_str_trim_inplace() or something like that
 R_API char *r_str_chop(char *str) {
 	int len;

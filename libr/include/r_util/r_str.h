@@ -17,6 +17,11 @@ typedef enum {
 	R_STRING_ENC_GUESS = 'g',
 } RStrEnc;
 
+typedef enum {
+	R_STRING_TYPE_DIGIT,
+	R_STRING_TYPE_ALPHANUM
+} RStrType;
+
 typedef int (*RStrRangeCallback) (void *, int);
 
 static inline void r_str_rmch(char *s, char ch) {
@@ -30,6 +35,7 @@ R_API const char *r_str_pad(const char ch, int len);
 R_API const char *r_str_rstr(const char *base, const char *p);
 R_API const char *r_str_rchr(const char *base, const char *p, int ch);
 R_API const char *r_str_closer_chr(const char *b, const char *s);
+R_API bool r_str_is_type(const char *str, int type);
 R_API int r_str_bounds(const char *str, int *h);
 R_API char *r_str_crop(const char *str, unsigned int x, unsigned int y, unsigned int x2, unsigned int y2);
 R_API bool r_str_range_in(const char *r, ut64 addr);
@@ -69,6 +75,7 @@ R_API char *r_str_newlen(const char *str, int len);
 R_API const char *r_str_bool(int b);
 R_API const char *r_str_ansi_chrn(const char *str, int n);
 R_API int r_str_ansi_len(const char *str);
+R_API int r_str_cmp_path(const char *str1, const char *str2, int len);
 R_API int r_str_ansi_chop(char *str, int str_len, int n);
 R_API int r_str_ansi_filter(char *str, char **out, int **cposs, int len);
 R_API char *r_str_ansi_crop(const char *str, unsigned int x, unsigned int y, unsigned int x2, unsigned int y2);

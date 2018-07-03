@@ -105,6 +105,19 @@ static inline int is_pe_hdr(unsigned char *pe_hdr) {
 	return 0;
 }
 
+static int map_cmp(const void *map1_, const void *map2_) {
+	RDebugMap *map1 = (RDebugMap *)map1_;
+	RDebugMap *map2 = (RDebugMap *)map2_;
+
+	if (map1->addr > map2->addr) {
+		return 1;
+	} 
+	if (map1->addr < map2->addr) {
+		return -1;
+	} 
+	return 0;
+}
+
 RList *w32_dbg_modules(int pid) {
 	MODULEENTRY32 me32;
 	RDebugMap *map;
@@ -135,7 +148,7 @@ RList *w32_dbg_modules(int pid) {
 		free (mod_name);
 		if (map) {
 			map->file = r_sys_conv_utf16_to_utf8 (me32.szExePath);
-			r_list_append (list, map);
+			r_list_add_sorted (list, map, map_cmp);
 		}
 	} while (Module32Next (h_mod_snap, &me32));
 err_w32_dbg_modules:
