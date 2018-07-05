@@ -14,9 +14,11 @@ endif
 
 ifeq (${OSTYPE},windows)
 NATIVE_OBJS=native/windows/dbg.o
+NATIVE_OBJS+=native/windows/dbg_ui.o
 NATIVE_OBJS+=native/windows/profiler.o
 NATIVE_OBJS+=native/windows/io_dbg.o
 NATIVE_OBJS+=native/windows/map.o
+LDFLAGS+=-lgdi32
 endif
 
 ifeq ($(OSTYPE),$(filter $(OSTYPE),gnulinux android))
@@ -38,4 +40,5 @@ ${TARGET_PTRACE}: ${OBJ_PTRACE}
 		${LDFLAGS_LINKPATH}../../util -L../../util -lr_util \
 		${LDFLAGS_LINKPATH}../../syscall -L../../util -lr_syscall \
 		${LDFLAGS_LINKPATH}../../cons -L../../cons -lr_cons \
+		${LDFLAGS} \
 		${OBJ_PTRACE}

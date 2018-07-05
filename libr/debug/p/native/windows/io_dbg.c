@@ -8,6 +8,7 @@
 #include <r_util.h>
 
 #include "dbg.h"
+#include "dbg_ui.h"
 #include "map.h"
 #include "io_dbg.h"
 
@@ -26,7 +27,6 @@ static int debug_os_read_at(RIOW32Dbg *dbg_io, void *buf, int len, ut64 addr) {
 		if (GetLastError() == ERROR_PARTIAL_COPY && ret_len <= 0) {
 			RList *maps_list = NULL;
 			RDebugMap *map;
-			RListIter *iter;
 			int map_len = len;
 
 			ret_len = -1;
@@ -106,9 +106,16 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		opened = w32_dbg_new_proc (dbg, _cmd, io->args, &proc) != -1;
 		free (_cmd);
 	} else if (!strncmp (file, "attach://", 9)) {
-		int pid = atoi (file + 9);
+		int pid;
 
-		opened = w32_dbg_attach (dbg, pid, &proc) != -1;
+		if (!strncmp(file + 9, "-", 1)) {
+			pid = dlg_dbg_attach ();
+		} else {
+			pid = atoi (file + 9);
+		}
+		if (pid > 0) {
+			opened = w32_dbg_attach (dbg, pid, &proc) != -1;
+		}
 	}
 	if (opened) {
 		RIOW32Dbg *dbg_io = R_NEW0 (RIOW32Dbg);
