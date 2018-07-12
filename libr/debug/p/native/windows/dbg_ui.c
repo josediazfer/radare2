@@ -121,6 +121,10 @@ LRESULT CALLBACK dlg_dbg_attach_msg(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
 		if (hwnd_cursor) {
 			SetCursor (hwnd_cursor);
 		}
+		if (last_win_hwnd) {
+			draw_rect_win (last_win_hwnd);
+			last_win_hwnd = NULL;
+		}
 		capturing = false;
 		break;
 	}
@@ -182,7 +186,7 @@ int dlg_dbg_attach()
 	}
 	ShowWindow (hwnd, SW_SHOW);
 	UpdateWindow (hwnd);
-	eprintf ("wait for attach to a process...."); 
+	eprintf ("waiting for attach to a process....");
 	r_cons_break_push (dlg_dbg_attach_intr, hwnd);
 	while ((msg_code = GetMessage (&msg, hwnd, 0, 0)) != 0 && msg_code != -1 && msg.message != WM_APP + 1 && msg.message != WM_APP + 2) { 
 		TranslateMessage (&msg); 

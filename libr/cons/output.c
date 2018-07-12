@@ -23,6 +23,8 @@ static void w32_clear() {
 	static CONSOLE_SCREEN_BUFFER_INFO csbi;
 	const COORD startCoords = { 0, 0 };
 	DWORD dummy;
+	DWORD scr_sz;
+
 	if (I->is_wine == 1) {
 		write (1, "\x1b[0;0H", 6);
 		write (1, "\x1b[0m", 4);
@@ -30,11 +32,15 @@ static void w32_clear() {
 	}
 	if (!hStdout) {
 		hStdout = GetStdHandle (STD_OUTPUT_HANDLE);
-		GetConsoleScreenBufferInfo (hStdout, &csbi);
-		//GetConsoleWindowInfo (hStdout, &csbi);
 	}
-	FillConsoleOutputCharacter (hStdout, ' ',
-		csbi.dwSize.X * csbi.dwSize.Y, startCoords, &dummy);
+	GetConsoleScreenBufferInfo (hStdout, &csbi);
+	scr_sz = csbi.dwSize.X * csbi.dwSize.Y;
+	FillConsoleOutputCharacter (hStdout, (TCHAR)' ',
+		scr_sz, startCoords, &dummy);
+	GetConsoleScreenBufferInfo (hStdout, &csbi);
+	FillConsoleOutputAttribute (hStdout, csbi.wAttributes,
+		scr_sz, startCoords, &dummy);
+	SetConsoleCursorPosition (hStdout, startCoords);
 }
 
 void w32_gotoxy(int x, int y) {

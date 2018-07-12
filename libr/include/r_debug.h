@@ -393,6 +393,7 @@ typedef struct r_debug_plugin_t {
 	RDebugInfo* (*info)(RDebug *dbg, const char *arg);
 	int (*startv)(int argc, char **argv);
 	int (*attach)(RDebug *dbg, int pid);
+	int (*attached)(RDebug *dbg, int pid);
 	int (*detach)(RDebug *dbg, int pid);
 	void (*free)(RDebug *dbg);
 	int (*select)(RDebug *dbg, int pid, int tid);
@@ -457,6 +458,7 @@ R_API RDebug *r_debug_new(int hard);
 R_API RDebug *r_debug_free(RDebug *dbg);
 
 R_API int r_debug_attach(RDebug *dbg, int pid);
+R_API int r_debug_is_attached(RDebug *dbg, int pid);
 R_API int r_debug_detach(RDebug *dbg, int pid);
 R_API int r_debug_startv(RDebug *dbg, int argc, char **argv);
 R_API int r_debug_start(RDebug *dbg, const char *cmd);

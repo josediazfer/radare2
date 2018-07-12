@@ -310,6 +310,7 @@ static const char *help_msg_dp[] = {
 	"dp-", " <pid>", "Detach select pid",
 	"dp=", "<pid>", "Select pid",
 	"dpa", " <pid>", "Attach and select pid",
+	"dpr", " path", "Debug an executable",
 	"dpc", "", "Select forked pid (see dbg.forks)",
 	"dpc*", "", "Display forked pid (see dbg.forks)",
 	"dpe", "", "Show path to executable",
@@ -1020,20 +1021,47 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 		}
 		break;
 	case 'a': // "dpa"
+	{
+		int pid;
+
 		if (input[2]) {
-			r_debug_attach (core->dbg, (int) r_num_math (
-						core->num, input + 2));
-		} else {
-			if (core->file && core->io) {
-				r_debug_attach (core->dbg,
-						r_io_fd_get_pid (core->io, core->file->fd));
-			}
+			pid = (int) r_num_math (core->num, input + 2);
+		} else if (core->file && core->io) {
+			pid = r_io_fd_get_pid (core->io, core->file->fd);
 		}
-		r_debug_select (core->dbg, core->dbg->pid, core->dbg->tid);
-		r_config_set_i (core->config, "dbg.swstep",
-				(core->dbg->h && !core->dbg->h->canstep));
-		r_core_cmdf (core, "=!pid %d", core->dbg->pid);
+		if (r_debug_is_attached (core->dbg, pid) == 0) {
+			char *uri = r_str_newf ("attach://%d", pid);
+
+			r_core_cmd0 (core, "o--!");
+			r_core_file_open_debug (core, uri);
+			free (uri);
+		} else {
+			r_debug_attach (core->dbg, pid);
+			//r_debug_select (core->dbg, core->dbg->pid, core->dbg->tid);
+			r_config_set_i (core->config, "dbg.swstep",
+					(core->dbg->h && !core->dbg->h->canstep));
+			r_core_cmdf (core, "=!pid %d", core->dbg->pid);
+		}
 		break;
+	}
+	case 'r': // "dpr"
+	{
+		const char *dbgbackend = r_config_get (core->config, "dbg.backend");
+
+		if (dbgbackend != NULL && !strcmp (dbgbackend, "native")) {
+			char *uri, *ptr;
+
+			ptr = input + 2;
+			while (isspace (*ptr)) {
+				ptr++;
+			}
+			uri = r_str_newf ("dbg://%s", ptr);
+			r_core_cmd0 (core, "o--!");
+			r_core_file_open_debug (core, uri);
+			free (uri);
+		}
+		break;
+	}
 	case 'f': // "dpf"
 		if (core->file && core->io) {
 			r_debug_select (core->dbg, r_io_fd_get_pid (core->io, core->file->fd),

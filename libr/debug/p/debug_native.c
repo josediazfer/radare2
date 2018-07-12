@@ -174,6 +174,14 @@ static int r_debug_native_attach (RDebug *dbg, int pid) {
 #endif
 }
 
+static int r_debug_native_is_attached (RDebug *dbg, int pid) {
+#if __WINDOWS__ && !__CGYWIN__
+	return w32_dbg_is_attached (dbg, pid);
+#else
+	return -1;
+#endif 
+}
+
 static int r_debug_native_detach (RDebug *db, int pid) {
 #if __WINDOWS__ && !__CYGWIN__
 	return w32_dbg_detach (db, pid);
@@ -1691,6 +1699,7 @@ RDebugPlugin r_debug_plugin_native = {
 	.cont = &r_debug_native_continue,
 	.contsc = &r_debug_native_continue_syscall,
 	.attach = &r_debug_native_attach,
+	.attached = &r_debug_native_is_attached,
 	.detach = &r_debug_native_detach,
 	.select = &r_debug_native_select,
 	.free = &r_debug_native_free,

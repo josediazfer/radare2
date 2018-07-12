@@ -633,11 +633,23 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 
 R_API int r_debug_attach(RDebug *dbg, int pid) {
 	int ret = false;
+
 	if (dbg && dbg->h && dbg->h->attach) {
 		ret = dbg->h->attach (dbg, pid);
 		if (ret != -1) {
 			r_debug_select (dbg, pid, ret);
 		}
+	}
+	return ret;
+}
+
+R_API int r_debug_is_attached(RDebug *dbg, int pid) {
+	int ret;
+
+	if (dbg && dbg->h && dbg->h->attached) {
+		ret = dbg->h->attached (dbg, pid);
+	} else {
+		ret = -1;
 	}
 	return ret;
 }

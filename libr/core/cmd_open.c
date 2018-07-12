@@ -16,6 +16,7 @@ static const char *help_msg_o[] = {
 	"o=","","list opened files (ascii-art bars)",
 	"ob","[?] [lbdos] [...]","list opened binary files backed by fd",
 	"oc"," [file]","open core file, like relaunching r2",
+	"or","","restart core settings",
 	"oi","[-|idx]","alias for o, but using index instead of fd",
 	"oj","[?]	","list opened files in JSON format",
 	"oL","","list all IO plugins registered",
@@ -831,6 +832,46 @@ R_API void r_core_file_reopen_debug (RCore *core, const char *args) {
 	free (newfile);
 }
 
+R_API bool r_core_file_open_debug (RCore *core, const char *path) {
+	RCoreFile *file = NULL;
+	bool opened = false;
+	RBinObject *obj;
+	ut64 baddr;
+	RIODesc *iod;
+
+	file = r_core_file_open (core, path, 0, 0);
+	if (!file) {
+		eprintf ("Cannot open %s\n", path);
+		goto err_r_core_file_open_debug;
+	}
+	iod = core->io? r_io_desc_get (core->io, file->fd) : NULL;
+	if (!iod || !iod->plugin || !iod->plugin->isdbg) {
+		eprintf ("Opened file is not debugger\n");
+		goto err_r_core_file_open_debug;
+	}
+	r_core_file_set_by_file (core, file);
+	r_debug_use (core->dbg, "native");
+	baddr = r_debug_get_baddr (core->dbg, file);
+	if (!r_core_bin_load (core, file, baddr)) {
+		eprintf ("Error r_core_bin_load baddr 0x%" PFMT64x "\n", baddr);
+		goto err_r_core_file_open_debug;
+	}
+	if (baddr != UT64_MAX) {
+		eprintf ("Using 0x%" PFMT64x "\n", baddr);
+	}
+	obj = r_bin_get_object (core->bin);
+	if (obj && obj->info) {
+		eprintf("asm.bits %d\n", obj->info->bits);
+	}
+	r_core_setup_debugger (core, "native", false);
+	opened = true;
+err_r_core_file_open_debug:
+	if (!opened && file) {
+		r_core_file_close (core, file);
+	}
+	return opened;
+}
+
 static int fdsz = 0;
 
 static bool init_desc_list_visual_cb(void *user, void *data, ut32 id) {
@@ -1153,7 +1194,9 @@ static int cmd_open(void *data, const char *input) {
 			r_list_purge(core->files);
 			break;
 		case '-': // "o--"
-			eprintf ("All core files, io, anal and flags info purged.\n");
+			if (input[2] != '!') {
+				eprintf ("All core files, io, anal and flags info purged.\n");
+			}
 			r_core_file_close_fd (core, -1);
 			r_io_close_all (core->io);
 			r_bin_file_delete_all (core->bin);
@@ -1163,6 +1206,8 @@ static int cmd_open(void *data, const char *input) {
 			// TODO: Move to f-- ?
 			r_flag_unset_all (core->flags);
 			// TODO: rbin?
+			r_core_fini (core);
+			r_core_init (core);
 			break;
 		default:
 			{
@@ -1280,6 +1325,10 @@ static int cmd_open(void *data, const char *input) {
 		} else {
 			eprintf ("Missing argument\n");
 		}
+		break;
+	case 'r': // "or"
+		r_core_fini (core);
+		r_core_init (core);
 		break;
 	case 'x': // "ox"
 		if (input[1] && input[1] != '?') {

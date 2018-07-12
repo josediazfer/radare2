@@ -59,6 +59,7 @@ typedef struct {
 	int tid;
 	bool cont, intr;
 	int state;
+	bool created;
 	bool wow64;
 	char *name, *path;
 	HANDLE h_proc;
@@ -262,6 +263,7 @@ bool w32_dbg_proc_kill(RDebug *dbg, int pid);
 RList *w32_desc_list(int pid);
 int w32_dbg_continue(RDebug *dbg, int pid, int sig);
 int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc);
+int w32_dbg_is_attached(RDebug *dbg, int pid);
 int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **ret_proc);
 bool w32_enable_dbg_priv();
 ut64 w32_get_proc_baddr(int pid);

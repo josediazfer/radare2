@@ -75,6 +75,7 @@ R_API void r_cons_pal_init (const char *foo) {
 	cons->pal.graph_trufae = Color_BLUE; // single jump
 	cons->pal.graph_traced = Color_YELLOW;
 	cons->pal.graph_current = Color_BLUE;
+	cons->pal.instr_pc = Color_INVERT;
 
 	r_cons_pal_free ();
 	cons->pal.list[0] = strdup (Color_RED);
@@ -255,6 +256,7 @@ static struct {
 	{ "creg", r_offsetof (RConsPalette, creg) },
 	{ "num", r_offsetof (RConsPalette, num) },
 	{ "mov", r_offsetof (RConsPalette, mov) },
+	{ "instr_pc", r_offsetof (RConsPalette, instr_pc) },
 
 	{ "ai.read", r_offsetof (RConsPalette, ai_read) },
 	{ "ai.write", r_offsetof (RConsPalette, ai_write) },

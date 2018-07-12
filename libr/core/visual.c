@@ -2427,6 +2427,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 		case 0x1b:
 		case 'q':
 		case 'Q':
+			r_cons_clear ();
 			setcursor (core, false);
 			return false;
 		}

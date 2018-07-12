@@ -180,6 +180,7 @@ typedef struct r_cons_palette_t {
 	char *ret;
 	char *swi;
 	char *trap;
+	char *instr_pc;
 	char *ai_read;
 	char *ai_write;
 	char *ai_exec;
