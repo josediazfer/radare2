@@ -54,6 +54,7 @@ extern char **environ;
 #if __WINDOWS__ && !defined(__CYGWIN__)
 # include <io.h>
 # include <winbase.h>
+# include <tchar.h>
 #define TMP_BUFSIZE	4096
 #ifdef _MSC_VER
 #include <psapi.h>
@@ -772,19 +773,22 @@ R_API void r_sys_perror_str(const char *fun, const char *msg) {
 #elif __WINDOWS__
 	LPTSTR lpMsgBuf;
 	DWORD dw = GetLastError();
+	DWORD n_chars;
 
-	if (FormatMessage ( FORMAT_MESSAGE_ALLOCATE_BUFFER |
+	if ((n_chars = FormatMessage ( FORMAT_MESSAGE_ALLOCATE_BUFFER |
 			FORMAT_MESSAGE_FROM_SYSTEM |
 			FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL,
 			dw,
 			MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
 			(LPTSTR)&lpMsgBuf,
-			0, NULL )) {
+			0, NULL )) > 0) {
+		char *eol;
+		eol = _tcscmp (&lpMsgBuf[n_chars - 1], TEXT("\n")) == 0? "" : "\n";
 		if (msg) {
-			eprintf ("%s: " W32_TCHAR_FSTR " %s\n", fun, lpMsgBuf, msg);
+			eprintf ("%s: %s " W32_TCHAR_FSTR "%s", fun, msg, lpMsgBuf, eol);
 		} else {
-			eprintf ("%s: " W32_TCHAR_FSTR "\n", fun, lpMsgBuf);
+			eprintf ("%s: " W32_TCHAR_FSTR "%s", fun, lpMsgBuf, eol);
 		}
 		LocalFree (lpMsgBuf);
 	} else {

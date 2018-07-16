@@ -216,7 +216,6 @@ static void th_dbg_delete(RDebugW32Proc *proc, RDebugW32Thread *th) {
 
 static void th_dbg_free(RDebugW32Thread *th) {
 	if (th->h_th) {
-		CloseHandle (th->h_th);
 		th->h_th = NULL;
 		free (th);
 	}
@@ -236,9 +235,6 @@ static void proc_dbg_free(RDebugW32Proc *proc) {
 	r_list_free (proc->th_list);
 	free (proc->path);
 	free (proc->name);
-	if (proc->h_proc) {
-		CloseHandle (proc->h_proc);
-	}
 	free (proc);
 }
 
@@ -1339,7 +1335,7 @@ int w32_dbg_attach(RDebug *dbg, int pid, RDebugW32Proc **ret_proc) {
 		return proc->tid;
 	}
 	if (!DebugActiveProcess (pid)) {
-		r_sys_perror ("w32_dbg_attach/DebugActiveProcess");
+		r_sys_perror_strf ("w32_dbg_attach/DebugActiveProcess", "pid (%d)", pid);
 		goto err_w32_dbg_attach;
 	}
 	proc = proc_dbg_new (dbg_w32, pid, PROC_STATE_ATTACHED);
@@ -1362,7 +1358,6 @@ err_w32_dbg_attach:
 
 int w32_dbg_is_attached(RDebug *dbg, int pid) {
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
-	RDebugW32Proc *proc = NULL;
 
 	return proc_dbg_find (dbg_w32, pid, NULL) != NULL? 1 : 0;
 }

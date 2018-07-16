@@ -673,7 +673,7 @@ static void setprintmode(RCore *core, int n) {
 }
 
 #define OPDELTA 32
-static ut64 prevop_addr(RCore *core, ut64 addr) {
+R_API ut64 r_core_prevop_addr_ex(RCore *core, ut64 addr) {
 	ut8 buf[OPDELTA * 2];
 	ut64 target, base;
 	RAnalBlock *bb;
@@ -735,7 +735,7 @@ R_API bool r_core_prevop_addr(RCore *core, ut64 start_addr, int numinstrs, ut64 
 		if (r_anal_bb_opaddr_at (bb, start_addr) != UT64_MAX) {
 			// Do some anal looping.
 			for (i = 0; i < numinstrs; ++i) {
-				*prev_addr = prevop_addr (core, start_addr);
+				*prev_addr = r_core_prevop_addr_ex (core, start_addr);
 				start_addr = *prev_addr;
 			}
 			return true;
@@ -765,7 +765,7 @@ static void visual_offset(RCore *core) {
 }
 
 static int prevopsz(RCore *core, ut64 addr) {
-	ut64 prev_addr = prevop_addr (core, addr);
+	ut64 prev_addr = r_core_prevop_addr_ex (core, addr);
 	return addr - prev_addr;
 }
 
@@ -1137,7 +1137,7 @@ static void cursor_prevrow(RCore *core, bool use_ocur) {
 		prev_roff = row > 0? r_print_rowoff (p, row - 1): UT32_MAX;
 		delta = p->cur - roff;
 		if (prev_roff == UT32_MAX) {
-			ut64 prev_addr = prevop_addr (core, core->offset + roff);
+			ut64 prev_addr = r_core_prevop_addr_ex (core, core->offset + roff);
 			if (prev_addr > core->offset) {
 				prev_roff = 0;
 				prev_sz = 1;
@@ -1357,6 +1357,7 @@ static bool insert_mode_enabled(RCore *core) {
 }
 
 static void visual_browse(RCore *core) {
+	bool go_back = false;
 	const char *browsemsg = \
 		"Browse stuff:\n"
 		"-------------\n"
@@ -1366,6 +1367,7 @@ static void visual_browse(RCore *core) {
 		" c  classes\n"
 		" h  hud mode (V_)\n"
 		" t  types\n"
+		" S  stacks\n"
 		" s  seek history\n"
 		" m  maps\n"
 		" x  xrefs\n"
@@ -1373,7 +1375,7 @@ static void visual_browse(RCore *core) {
 		" v  vars\n"
 		" q  quit\n"
 	;
-	for (;;) {
+	for (;!go_back;) {
 		r_cons_clear00 ();
 		r_cons_printf ("%s\n", browsemsg);
 		r_cons_flush ();
@@ -1405,6 +1407,9 @@ static void visual_browse(RCore *core) {
 			break;
 		case 's':
 			r_core_cmdf (core, "s!~...");
+			break;
+		case 'S':
+			go_back = r_core_visual_stacks (core);
 			break;
 		case 'v':
 			r_core_visual_anal (core);

@@ -2116,3 +2116,67 @@ R_API ut64 r_debug_get_baddr(RDebug *dbg, const char *file) {
 	return 0LL;
 #endif
 }
+
+R_API void r_debug_frame_print(RDebug *dbg, RDebugFrame *frame, int idx, bool sel) {
+
+	char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
+	RCore *core = dbg->corebind.core;
+	RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
+	flagdesc[0] = flagdesc2[0] = 0;
+
+	if (f) {
+		if (f->offset != UT64_MAX) {
+			int delta = (int)(frame->addr - f->offset);
+			if (delta > 0) {
+				snprintf (flagdesc, sizeof (flagdesc),
+						"%s+%d", f->name, delta);
+			} else if (delta < 0) {
+				snprintf (flagdesc, sizeof (flagdesc),
+						"%s%d", f->name, delta);
+			} else {
+				snprintf (flagdesc, sizeof (flagdesc),
+						"%s", f->name);
+			}
+		} else {
+			snprintf (flagdesc, sizeof (flagdesc),
+					"%s", f->name);
+		}
+		if (!strchr (f->name, '.') && (f = r_flag_get_at (core->flags, frame->addr - 1, true))) {
+			if (f->offset != UT64_MAX) {
+				int delta = (int)(frame->addr - 1 - f->offset);
+				if (delta > 0) {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+						"%s+%d", f->name, delta + 1);
+				} else if (delta < 0) {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+						"%s%d", f->name, delta + 1);
+				} else {
+					snprintf (flagdesc2, sizeof (flagdesc2),
+						"%s+1", f->name);
+				}
+			} else {
+				snprintf (flagdesc2, sizeof (flagdesc2),
+					"%s", f->name);
+			}
+		}
+	}
+	if (core->dbg->bits & R_SYS_BITS_64) {
+		snprintf (pcstr, sizeof (pcstr), "0x%-16" PFMT64x, frame->addr);
+		snprintf (spstr, sizeof (spstr), "0x%-16" PFMT64x, frame->sp);
+	} else if (core->dbg->bits & R_SYS_BITS_32) {
+		snprintf (pcstr, sizeof (pcstr), "0x%-8" PFMT64x, frame->addr);
+		snprintf (spstr, sizeof (spstr), "0x%-8" PFMT64x, frame->sp);
+	} else {
+		snprintf (pcstr, sizeof (pcstr), "0x%" PFMT64x, frame->addr);
+		snprintf (spstr, sizeof (spstr), "0x%" PFMT64x, frame->sp);
+	}
+	RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, frame->addr, 0);
+	r_cons_printf (" %c %d  %s sp: %s  %-5d"
+			"[%s]  %s %s\n", sel? '>' : ' ',
+			idx,
+			pcstr, spstr,
+			(int)frame->size,
+			fcn ? fcn->name : "??",
+			flagdesc,
+			flagdesc2);
+}

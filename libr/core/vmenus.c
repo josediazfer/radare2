@@ -1177,6 +1177,220 @@ R_API int r_core_visual_classes(RCore *core) {
 	return true;
 }
 
+static int show_threads(RCore *core, int option, RDebugPid **th_sel) {
+	RListIter *th_iter;
+	RList *th_list;
+	RDebugPid *th;
+	RDebug *dbg = core->dbg;
+	int n_ths = 0;
+
+	*th_sel = NULL;
+	r_cons_printf ("Select a thread to view backtrace\n\n");
+	th_list = r_debug_threads_get (dbg, dbg->pid);
+	r_list_foreach (th_list, th_iter, th) {
+		if (th->pid == dbg->tid) {
+			r_cons_printf (" %c .tid %d\n", option == n_ths? '>' : ' ', th->pid);
+		} else {
+			r_cons_printf (" %c  tid %d\n", option == n_ths? '>' : ' ', th->pid);
+		}
+		if (option == n_ths) {
+			*th_sel = th;
+		}
+		n_ths++;
+	}
+	return n_ths;
+}
+
+static int show_thread_stack(RCore *core, int option, int page_sz, RDebugPid *th_sel, ut64 *addr) {
+	RListIter *iter;
+	RList *list;
+	RDebug *dbg = core->dbg;
+	int tid_orig = dbg->tid;
+	RDebugFrame *frame;
+	int n_frame = 0;
+	int page_start = (option / page_sz) * page_sz;
+	int page_end = page_start + page_sz;
+
+	*addr = UT64_MAX;
+	r_cons_printf ("Select stack frame\n\n");
+	dbg->tid = th_sel->pid;
+	r_debug_reg_sync (dbg, R_REG_TYPE_GPR, false);
+	r_flag_space_push (core->flags, "*");
+	list = r_debug_frames (dbg, UT64_MAX);
+	r_list_foreach (list, iter, frame) {
+		if (n_frame >= page_end) {
+			break;
+		}
+		if (n_frame >= page_start) {
+			r_debug_frame_print (core->dbg, frame, n_frame + 1, option == n_frame); 
+			if (option == n_frame) {
+				*addr = frame->addr;
+			}
+		}
+		n_frame++;
+	}
+	r_flag_space_pop (core->flags);
+	dbg->tid = tid_orig;
+	return n_frame;
+}
+
+R_API bool r_core_visual_stacks(RCore *core) {
+	int menu_idx = 0;
+	int option = 0;
+	int format = 1;
+	char *cmd = NULL;
+	ut64 addr = UT64_MAX;
+	ut64 old_frame_addr = UT64_MAX;
+	ut8 buf[64];
+	int page_sz = 10;
+
+	for (;;) {
+		char ch;
+		RDebugPid *th;
+		ut64 frame_addr;
+		int n_options;
+
+		r_cons_clear00 ();
+		if (menu_idx == 0) {
+			n_options = show_threads (core, option, &th);
+		} else {
+			n_options = show_thread_stack (core, option, page_sz, th, &frame_addr);
+			if (frame_addr != UT64_MAX) {
+				int cols, rows = r_cons_get_size (&cols);
+
+				rows -= 12;
+				r_cons_printf ("\n Selected: 0x%08"PFMT64x" 0x%08"PFMT64x"\n\n", frame_addr, addr);
+				if (old_frame_addr == UT64_MAX || old_frame_addr != frame_addr) {
+					old_frame_addr = frame_addr;
+					addr = frame_addr;
+				}
+				switch (format) {
+				case 0:
+					cmd = r_str_newf ("px %d @ 0x%08"PFMT64x, rows * 16, addr);
+					core->printidx = 0;
+					break;
+				case 1:
+					cmd = r_str_newf ("pd %d @ 0x%08"PFMT64x, rows, addr);
+					core->printidx = 1;
+					break;
+				case 2:
+					cmd = r_str_newf ("ps @ 0x%08"PFMT64x, rows);
+					core->printidx = 5;
+					break;
+				default:
+					format = 0;
+					continue;
+				}
+				if (cmd) {
+					r_core_cmd (core, cmd, 0);
+					free (cmd);
+				}
+			} else {
+				r_cons_printf ("(no stack frame)\n");
+			}
+		}
+		r_cons_visual_flush ();
+		ch = r_cons_readchar ();
+		if (ch == -1 || ch == 4) {
+			return false;
+		}
+		ch = r_cons_arrow_to_hjkl (ch); // get ESC+char, return 'hjkl' char
+		switch (ch) {
+		case 'C':
+			r_config_toggle (core->config, "scr.color");
+			break;
+		case 'J':
+			option += page_sz;
+			if (option >= n_options && n_options > 0) {
+				option = n_options - 1;
+			}
+			break;
+		case 'j':
+			if (n_options > 0 && option < n_options - 1) {
+				option++;
+			}
+			break;
+		case 'K':
+			option -= page_sz;
+			if (option < 0) {
+				option = 0;
+			}
+			break;
+		case 'k':
+			if (n_options > 0 && --option < 0) {
+				option = 0;
+			}
+			break;
+		case 'P': if (--format < 0) format = MAX_FORMAT; break;
+		case 'p': format++; break;
+		case '\r':
+		case '\n':
+			if (menu_idx == 0 && th) {
+				menu_idx = 1;
+			} else if (menu_idx == 1 && addr != UT64_MAX) {
+				r_core_cmdf (core, "s 0x%"PFMT64x, addr);
+				return true;
+			}
+			break;
+		case 'h':
+		case 'b': // back
+		case 'Q':
+		case 'q':
+			if (menu_idx == 0) {
+				return false;
+			}
+			old_frame_addr = UT64_MAX;
+			option = 0;
+			menu_idx--;
+			break;
+		case '+':
+			if (menu_idx == 1 && addr != UT64_MAX) {
+				RAnalOp op;
+
+				if (r_core_read_at (core, addr, buf, sizeof (buf)) &&
+					r_anal_op (core->anal, &op, addr, buf, sizeof (buf))) {
+					addr += op.size;
+					r_anal_op_fini (&op);
+				} else {
+					addr++;	
+				}
+			}
+			break;
+		case '-':
+			if (menu_idx == 1 && addr != UT64_MAX) {
+				ut64 prev_addr;
+				RAnalFunction *f = r_anal_get_fcn_in (core->anal, addr, R_ANAL_FCN_TYPE_NULL);
+
+				if (f && f->folded) {
+					addr -= (addr - f->addr);
+				} if ((prev_addr = r_core_prevop_addr_ex (core, addr)) != addr) {
+					addr = prev_addr;
+				} else {
+					addr--;
+				}
+			}
+			break;
+		case '?':
+			if (menu_idx == 1) {
+				r_cons_clear00 ();
+				r_cons_printf (
+				"\nVF: Visual Stack frame help:\n\n"
+				" q     - quit menu\n"
+				" j/k   - line down/up keys\n"
+				" J/K   - page down/up keys\n"
+				" h/b   - go back\n"
+				" C     - toggle colors\n"
+				" +/-   - next/previous instruction\n"
+				" enter - seek to current address\n");
+				r_cons_flush ();
+				r_cons_any_key (NULL);
+			}
+			break;
+		}
+	}
+	return false;
+}
+
 R_API int r_core_visual_trackflags(RCore *core) {
 	const char *fs = NULL, *fs2 = NULL;
 	int hit, i, j, ch;

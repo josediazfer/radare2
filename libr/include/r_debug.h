@@ -565,6 +565,7 @@ R_API RList *r_debug_frames(RDebug *dbg, ut64 at);
 
 R_API bool r_debug_is_dead(RDebug *dbg);
 R_API int r_debug_map_protect(RDebug *dbg, ut64 addr, int size, int perms);
+R_API void r_debug_frame_print(RDebug *dbg, RDebugFrame *frame, int idx, bool sel);
 /* args XXX: weird food */
 R_API ut64 r_debug_arg_get(RDebug *dbg, int fast, int num);
 R_API bool r_debug_arg_set(RDebug *dbg, int fast, int num, ut64 value);
