@@ -1356,8 +1356,10 @@ static bool insert_mode_enabled(RCore *core) {
 	return true;
 }
 
-static void visual_browse(RCore *core) {
+static void visual_browse(RCore *core, const char *arg) {
 	bool go_back = false;
+	char cmdline_opt;
+
 	const char *browsemsg = \
 		"Browse stuff:\n"
 		"-------------\n"
@@ -1375,11 +1377,19 @@ static void visual_browse(RCore *core) {
 		" v  vars\n"
 		" q  quit\n"
 	;
+	cmdline_opt = *arg? *arg : '\0';
 	for (;!go_back;) {
-		r_cons_clear00 ();
-		r_cons_printf ("%s\n", browsemsg);
-		r_cons_flush ();
-		char ch = r_cons_arrow_to_hjkl (r_cons_readchar ());
+		char ch; 
+
+		if (cmdline_opt != '\0') {
+			ch = cmdline_opt;
+			cmdline_opt = '\0';
+		} else {	
+			r_cons_clear00 ();
+			r_cons_printf ("%s\n", browsemsg);
+			r_cons_flush ();
+			ch = r_cons_arrow_to_hjkl (r_cons_readchar ());
+		}
 		switch (ch) {
 		case 'f':
 			r_core_visual_trackflags (core);
@@ -2365,7 +2375,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			showcursor (core, false);
 			break;
 		case 'b':
-			visual_browse (core);
+			visual_browse (core, arg + 1);
 			break;
 		case 'B':
 			{

@@ -1253,6 +1253,12 @@ R_API bool r_core_visual_stacks(RCore *core) {
 		r_cons_clear00 ();
 		if (menu_idx == 0) {
 			n_options = show_threads (core, option, &th);
+			if (n_options <= 0) {
+				r_cons_printf ("(not exists any thread)\n");
+				r_cons_visual_flush ();
+				r_cons_readchar();
+				return false;
+			}
 		} else {
 			n_options = show_thread_stack (core, option, page_sz, th, &frame_addr);
 			if (frame_addr != UT64_MAX) {
@@ -1388,6 +1394,7 @@ R_API bool r_core_visual_stacks(RCore *core) {
 			break;
 		}
 	}
+	/* UNREACHABLE */
 	return false;
 }
 
