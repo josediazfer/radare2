@@ -1177,7 +1177,7 @@ R_API int r_core_visual_classes(RCore *core) {
 	return true;
 }
 
-static int show_threads(RCore *core, int option, RDebugPid **th_sel) {
+static int show_threads(RCore *core, int option, int tid, RDebugPid **th_sel) {
 	RListIter *th_iter;
 	RList *th_list;
 	RDebugPid *th;
@@ -1188,12 +1188,18 @@ static int show_threads(RCore *core, int option, RDebugPid **th_sel) {
 	r_cons_printf ("Select a thread to view backtrace\n\n");
 	th_list = r_debug_threads_get (dbg, dbg->pid);
 	r_list_foreach (th_list, th_iter, th) {
-		if (th->pid == dbg->tid) {
-			r_cons_printf (" %c .tid %d\n", option == n_ths? '>' : ' ', th->pid);
-		} else {
-			r_cons_printf (" %c  tid %d\n", option == n_ths? '>' : ' ', th->pid);
+		if (tid == -1) {
+			if (th->pid == dbg->tid) {
+				r_cons_printf (" %c .tid %d\n", option == n_ths? '>' : ' ', th->pid);
+			} else {
+				r_cons_printf (" %c  tid %d\n", option == n_ths? '>' : ' ', th->pid);
+			}
 		}
-		if (option == n_ths) {
+		if (tid != -1) {
+			if (tid == th->pid) {
+				*th_sel = th;
+			}
+		} else if (option == n_ths) {
 			*th_sel = th;
 		}
 		n_ths++;
@@ -1218,14 +1224,11 @@ static int show_thread_stack(RCore *core, int option, int page_sz, RDebugPid *th
 	r_flag_space_push (core->flags, "*");
 	list = r_debug_frames (dbg, UT64_MAX);
 	r_list_foreach (list, iter, frame) {
-		if (n_frame >= page_end) {
-			break;
-		}
-		if (n_frame >= page_start) {
+		if (n_frame < page_end && n_frame >= page_start) {
 			r_debug_frame_print (core->dbg, frame, n_frame + 1, option == n_frame); 
-			if (option == n_frame) {
-				*addr = frame->addr;
-			}
+		}
+		if (option == n_frame) {
+			*addr = frame->addr;
 		}
 		n_frame++;
 	}
@@ -1234,7 +1237,7 @@ static int show_thread_stack(RCore *core, int option, int page_sz, RDebugPid *th
 	return n_frame;
 }
 
-R_API bool r_core_visual_stacks(RCore *core) {
+R_API bool r_core_visual_stacks(RCore *core, const char *args, bool *cmd_skip) {
 	int menu_idx = 0;
 	int option = 0;
 	int format = 1;
@@ -1243,7 +1246,24 @@ R_API bool r_core_visual_stacks(RCore *core) {
 	ut64 old_frame_addr = UT64_MAX;
 	ut8 buf[64];
 	int page_sz = 10;
+	int cmdline_tid;
+	int option_back = 0;
 
+	*cmd_skip = true;
+	if (args) {
+		switch (*args) {
+		case ' ':
+			cmdline_tid = r_num_math (core->num, args + 1);
+			break;
+		case '.':
+			cmdline_tid = core->dbg->tid;
+			break;
+		default:
+			cmdline_tid = -1;
+		}
+	} else {
+		cmdline_tid = -1;
+	}
 	for (;;) {
 		char ch;
 		RDebugPid *th;
@@ -1251,25 +1271,36 @@ R_API bool r_core_visual_stacks(RCore *core) {
 		int n_options;
 
 		r_cons_clear00 ();
+		ch = '\0';
 		if (menu_idx == 0) {
-			n_options = show_threads (core, option, &th);
+			n_options = show_threads (core, option, cmdline_tid, &th);
 			if (n_options <= 0) {
 				r_cons_printf ("(not exists any thread)\n");
 				r_cons_visual_flush ();
 				r_cons_readchar();
 				return false;
 			}
+			if (cmdline_tid != -1) {
+				if (!th) {
+					r_cons_printf ("(not exists thread %d)\n", cmdline_tid);
+					r_cons_visual_flush ();
+					r_cons_readchar();
+					return true;
+				}
+				ch = '\n';
+			}
+			cmdline_tid = -1;
 		} else {
 			n_options = show_thread_stack (core, option, page_sz, th, &frame_addr);
 			if (frame_addr != UT64_MAX) {
 				int cols, rows = r_cons_get_size (&cols);
 
 				rows -= 12;
-				r_cons_printf ("\n Selected: 0x%08"PFMT64x" 0x%08"PFMT64x"\n\n", frame_addr, addr);
 				if (old_frame_addr == UT64_MAX || old_frame_addr != frame_addr) {
 					old_frame_addr = frame_addr;
 					addr = frame_addr;
 				}
+				r_cons_printf ("\n Tid: %d Selected: 0x%08"PFMT64x" 0x%08"PFMT64x" (%d/%d)\n\n", th->pid, frame_addr, addr, option + 1, n_options);
 				switch (format) {
 				case 0:
 					cmd = r_str_newf ("px %d @ 0x%08"PFMT64x, rows * 16, addr);
@@ -1296,9 +1327,11 @@ R_API bool r_core_visual_stacks(RCore *core) {
 			}
 		}
 		r_cons_visual_flush ();
-		ch = r_cons_readchar ();
-		if (ch == -1 || ch == 4) {
-			return false;
+		if (ch == '\0') {
+			ch = r_cons_readchar ();
+			if (ch == -1 || ch == 4) {
+				return false;
+			}
 		}
 		ch = r_cons_arrow_to_hjkl (ch); // get ESC+char, return 'hjkl' char
 		switch (ch) {
@@ -1333,8 +1366,10 @@ R_API bool r_core_visual_stacks(RCore *core) {
 		case '\n':
 			if (menu_idx == 0 && th) {
 				menu_idx = 1;
+				option_back = option;
+				option = 0;
 			} else if (menu_idx == 1 && addr != UT64_MAX) {
-				r_core_cmdf (core, "s 0x%"PFMT64x, addr);
+				r_core_cmdf (core, "s 0x%08"PFMT64x, addr);
 				return true;
 			}
 			break;
@@ -1346,7 +1381,7 @@ R_API bool r_core_visual_stacks(RCore *core) {
 				return false;
 			}
 			old_frame_addr = UT64_MAX;
-			option = 0;
+			option = option_back;
 			menu_idx--;
 			break;
 		case '+':

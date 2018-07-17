@@ -1356,7 +1356,7 @@ static bool insert_mode_enabled(RCore *core) {
 	return true;
 }
 
-static void visual_browse(RCore *core, const char *arg) {
+static void visual_browse(RCore *core, const char *arg, bool *cmd_skip) {
 	bool go_back = false;
 	char cmdline_opt;
 
@@ -1419,7 +1419,7 @@ static void visual_browse(RCore *core, const char *arg) {
 			r_core_cmdf (core, "s!~...");
 			break;
 		case 'S':
-			go_back = r_core_visual_stacks (core);
+			go_back = r_core_visual_stacks (core, *arg? arg + 1 : NULL, cmd_skip);
 			break;
 		case 'v':
 			r_core_visual_anal (core);
@@ -1429,12 +1429,12 @@ static void visual_browse(RCore *core, const char *arg) {
 			r_core_visual_hudstuff (core);
 			break;
 		case 'q':
-			return;
+			go_back = true;
 		}
 	}
 }
 
-R_API int r_core_visual_cmd(RCore *core, const char *arg) {
+R_API int r_core_visual_cmd(RCore *core, const char *arg, bool *cmd_skip) {
 	ut8 ch = arg[0];
 	RAsmOp op;
 	ut64 offset = core->offset;
@@ -2375,7 +2375,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			showcursor (core, false);
 			break;
 		case 'b':
-			visual_browse (core, arg + 1);
+			visual_browse (core, arg + 1, cmd_skip);
 			break;
 		case 'B':
 			{
@@ -2785,6 +2785,7 @@ R_API int r_core_visual(RCore *core, const char *input) {
 	ut64 scrseek;
 	int wheel, flags, ch;
 	bool skip;
+	bool cmd_skip = false;
 	char arg[2] = {
 		input[0], 0
 	};
@@ -2807,9 +2808,9 @@ R_API int r_core_visual(RCore *core, const char *input) {
 		free (cmd);
 		return ret;
 	}
-	while (*input) {
+	while (!cmd_skip && *input) {
 		int len = *input == 'd'? 2: 1;
-		if (!r_core_visual_cmd (core, input)) {
+		if (!r_core_visual_cmd (core, input, &cmd_skip)) {
 			return 0;
 		}
 		input += len;
@@ -2909,7 +2910,7 @@ dodo:
 			arg[0] = ch;
 			arg[1] = 0;
 		}
-	} while (skip || r_core_visual_cmd (core, arg));
+	} while (skip || r_core_visual_cmd (core, arg, &cmd_skip));
 
 	r_cons_enable_mouse (false);
 	if (color) {
