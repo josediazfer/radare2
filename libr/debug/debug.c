@@ -40,6 +40,17 @@ static void r_debug_profiler_th_free(RDebugProfilerThread *th) {
 	r_list_free (th->bt_match);
 }
 
+static void r_debug_event_handler_free(RDebugEventHandler *ev_handler) {
+	int i;
+
+	for (i = 0; i < ev_handler->n_args; i++) {
+		free (ev_handler->args[i]);
+	}
+	free (ev_handler->args);
+	free (ev_handler->cmd);
+	free (ev_handler);
+}
+
 static void r_debug_profiler_bt(RDebug *dbg, RDebugProfilerThread *th) 
 {
 	RList *frames_list;
@@ -489,6 +500,130 @@ static void r_debug_excep_state_free(RDebugExcepState *excep) {
 	free (excep);
 }
 
+static int event_sort_list(const RDebugEventHandler *ev_handler1, const RDebugEventHandler *ev_handler2) {
+	if (ev_handler1->type == ev_handler2->type) {
+		return 0;
+	}
+	if (ev_handler1->type < ev_handler2->type) {
+		return -1;
+	}
+	return 1;
+}
+
+static bool r_debug_event_handler_append(RDebug *dbg, RDebugEventHandler *ev_handler) {
+	RDebugEventHandler *ev_entry;
+	RList *list = dbg->events;
+	RListIter *iter;
+
+	r_list_foreach (list, iter, ev_entry) {
+		if (ev_handler->type == ev_entry->type && !strcmp (ev_entry->cmd, ev_handler->cmd)) {
+			ev_entry->max_calls = ev_handler->max_calls;
+			r_debug_event_handler_free (ev_handler);
+			return false;
+		}
+	}
+	r_list_add_sorted (list, ev_handler, (RListComparator)event_sort_list);
+	return true;
+}
+
+static RDebugEventHandler* r_debug_event_handler_new(int type, char *cmd, int max_calls) {
+	RDebugEventHandler *ev_handler = R_NEW0 (RDebugEventHandler);
+
+	if (!ev_handler) {
+		perror ("alloc RDebugEventHandler");
+	} else {
+		ev_handler->type = type;
+		ev_handler->cmd = r_str_new (cmd);
+		ev_handler->max_calls = max_calls;
+	}
+	return ev_handler;
+}
+
+static void r_debug_event_lib_append(RDebug *dbg, RDebugEventHandler *ev_handler, char *libname) {
+	ev_handler->args = calloc (1, sizeof (void *));
+	if (!ev_handler->args) {
+		perror ("alloc RDebugEvenHandler arguments");
+	} else {
+		ev_handler->args[0] = r_str_new (libname);
+		ev_handler->n_args = 1;
+		r_debug_event_handler_append (dbg, ev_handler);
+	}
+}
+
+R_API void r_debug_event_loadlib_append(RDebug *dbg, char *cmd, char *libname, int max_calls) {
+	RDebugEventHandler *ev_handler = r_debug_event_handler_new (R_DEBUG_EVENT_LOAD_LIB, cmd, max_calls);
+
+	if (ev_handler) {
+		r_debug_event_lib_append (dbg, ev_handler, libname);
+	}
+}
+
+R_API void r_debug_event_unloadlib_append(RDebug *dbg, char *cmd, char *libname, int max_calls) {
+	RDebugEventHandler *ev_handler = r_debug_event_handler_new (R_DEBUG_EVENT_UNLOAD_LIB, cmd, max_calls);
+
+	if (ev_handler) {
+		r_debug_event_lib_append (dbg, ev_handler, libname);
+	}
+}
+
+static char *r_debug_event_name_get(int type) {
+	char *event_name;
+
+	switch (type) {
+	case R_DEBUG_EVENT_LOAD_LIB:
+		event_name = "loadlib";
+		break;
+	case R_DEBUG_EVENT_UNLOAD_LIB:
+		event_name = "unloadlib";
+		break;
+	default:
+		event_name = "unknown";
+	}
+	return event_name;
+}
+
+R_API void r_debug_event_handlers_print(RDebug *dbg) {
+	RList *list = dbg->events;
+	RListIter *iter;
+	RDebugEventHandler *ev_handler;
+	int i = 0;
+
+	r_list_foreach (list, iter, ev_handler) {
+		int type = ev_handler->type;
+		
+		switch (type) {
+		case R_DEBUG_EVENT_LOAD_LIB:
+		case R_DEBUG_EVENT_UNLOAD_LIB:
+			r_cons_printf ("[%d] %s \"%s\" %d:%d %s\n", i, r_debug_event_name_get (type),
+							ev_handler->cmd,
+							ev_handler->calls,
+							ev_handler->max_calls,
+							(char *)ev_handler->args[0]);
+			break;
+		default:
+			r_cons_printf ("[%d] %s \"%s\" %d:%d\n", i, r_debug_event_name_get (type),
+							ev_handler->cmd,
+							ev_handler->calls,
+							ev_handler->max_calls);
+		}
+		i++;
+	}
+}
+
+R_API void r_debug_event_handler_delete(RDebug *dbg, int idx) {
+	RList *list = dbg->events;
+	RListIter *iter = list->head;
+	int i = 0;
+
+	for (;iter; iter = iter->n) {
+		if (i == idx) {
+			r_list_delete (list, iter);
+			break;
+		}	
+		i++;
+	}
+}
+
 R_API void r_debug_excep_ign_append(RDebug *dbg, ut64 code) {
 	RListIter *iter;
 	RDebugExcepState *state = dbg->excep;
@@ -559,6 +694,7 @@ R_API RDebug *r_debug_new(int hard) {
 	dbg->snaps = r_list_newf ((RListFree)r_debug_snap_free);
 	dbg->sessions = r_list_newf ((RListFree)r_debug_session_free);
 	dbg->conds = r_list_newf ((RListFree)r_debug_cond_free);
+	dbg->events = r_list_newf ((RListFree)r_debug_event_handler_free);
 	dbg->pid = -1;
 	dbg->bpsize = 1;
 	dbg->tid = -1;
@@ -613,6 +749,7 @@ R_API RDebug *r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->maps);
 		r_list_free (dbg->maps_user);
 		r_list_free (dbg->conds);
+		r_list_free (dbg->events);
 		r_num_free (dbg->num);
 		sdb_free (dbg->sgnls);
 		r_tree_free (dbg->tree);
@@ -919,6 +1056,30 @@ RDebugCond *r_debug_cond_find(RDebug *dbg, const char *name) {
 	return NULL;
 }
 
+static int lua_expr(lua_State *lua) {
+	RDebug *dbg;
+	int n_args = lua_gettop (lua);
+	const char *expr;
+	RCore *core;
+
+	if (n_args != 1) {
+		return 0;
+	}
+	if (!lua_isstring (lua, 1)) {
+            lua_pushstring (lua, "the argument is not a string value");
+            lua_error (lua);
+	}
+	expr = lua_tostring (lua, 2);
+	dbg = (RDebug *)lua_touserdata (lua, -1);
+	if (!dbg) {
+            lua_pushstring (lua, "lua_mem_read internal error dbg is NULL");
+            lua_error (lua);
+	}
+	core = (RCore *)dbg->corebind.core;
+	lua_pushinteger (lua, r_num_calc (core->num, expr, NULL));
+	return 1;
+}
+
 static int lua_dread(lua_State *lua) {
 	ut64 addr;
 	int len;
@@ -1064,6 +1225,7 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 		lua_setglobal (lua, "_dbg_");
 		lua_register (lua, "dread", lua_dread);
 		lua_register (lua, "dstrcmp", lua_dstrcmp);
+		lua_register (lua, "expr", lua_expr);
 		cond_item->data = lua;
 		free (cond_func);
 	}
