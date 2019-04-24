@@ -68,6 +68,7 @@ int gettimeofday (struct timeval* p, void* tz);
 #include "r_util/r_x509.h"
 #include "r_util/r_pkcs7.h"
 #include "r_util/r_interval.h"
+#include "r_util/r_error.h"
 
 #ifdef __cplusplus
 extern "C" {

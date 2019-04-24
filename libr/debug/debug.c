@@ -1069,7 +1069,8 @@ static int lua_expr(lua_State *lua) {
             lua_pushstring (lua, "the argument is not a string value");
             lua_error (lua);
 	}
-	expr = lua_tostring (lua, 2);
+	expr = lua_tostring (lua, 1);
+	lua_getglobal(lua, "_dbg_");
 	dbg = (RDebug *)lua_touserdata (lua, -1);
 	if (!dbg) {
             lua_pushstring (lua, "lua_mem_read internal error dbg is NULL");

@@ -13,7 +13,6 @@ CFLAGS+=-lws2_32
 endif
 
 foo: all
-
 ALL_TARGETS=
 PLUGINS=ptrace.mk debug.mk gdb.mk malloc.mk shm.mk mach.mk procpid.mk windbg.mk bochs.mk qnx.mk r2k.mk ar.mk rbuf.mk
 #zip.mk

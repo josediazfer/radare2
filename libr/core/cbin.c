@@ -1892,7 +1892,10 @@ static int bin_symbols_internal(RCore *r, int mode, ut64 laddr, int va, ut64 at,
 		} else if (IS_MODE_RAD (mode)) {
 			RBinFile *binfile;
 			RBinPlugin *plugin;
+			bool pe_exp;
 			char *name = strdup (sn.demname? sn.demname: symbol->name);
+			const char *prefix;
+
 			r_name_filter (name, -1);
 			if (!strncmp (name, "imp.", 4)) {
 				if (lastfs != 'i')
@@ -1905,13 +1908,21 @@ static int bin_symbols_internal(RCore *r, int mode, ut64 laddr, int va, ut64 at,
 				}
 				lastfs = 's';
 			}
-			if (r->bin->prefix) {
+			binfile = r_core_bin_cur (r);
+			plugin = r_bin_file_cur_plugin (binfile);
+			pe_exp = plugin && plugin->name && !strncmp (plugin->name, "pe", 2) && lastfs == 's';
+			if (pe_exp) {
+				prefix = NULL;
+			} else {
+				prefix = r->bin->prefix;
+			}
+			if (prefix) {
 				if (symbol->dup_count) {
 					r_cons_printf ("f %s.sym.%s_%d %u 0x%08"PFMT64x"\n",
-						r->bin->prefix, name, symbol->dup_count, symbol->size, addr);
+						prefix, name, symbol->dup_count, symbol->size, addr);
 				} else {
 					r_cons_printf ("f %s.sym.%s %u 0x%08"PFMT64x"\n",
-						r->bin->prefix, name, symbol->size, addr);
+						prefix, name, symbol->size, addr);
 				}
 			} else {
 				if (symbol->dup_count) {
@@ -1922,26 +1933,22 @@ static int bin_symbols_internal(RCore *r, int mode, ut64 laddr, int va, ut64 at,
 						name, symbol->size, addr);
 				}
 			}
-			binfile = r_core_bin_cur (r);
-			plugin = r_bin_file_cur_plugin (binfile);
-			if (plugin && plugin->name) {
-				if (!strncmp (plugin->name, "pe", 2) && lastfs == 's') {
-					char *p, *module = strdup (symbol->name);
-					p = strstr (module, ".dll_");
-					if (p) {
-						char *symname = p + 5;
-						*p = 0;
-						r_name_filter (symname, -1);
-						if (r->bin->prefix) {
-							r_cons_printf ("k bin/pe/%s/%d=%s.%s\n",
-								module, symbol->ordinal, r->bin->prefix, symname);
-						} else {
-							r_cons_printf ("k bin/pe/%s/%d=%s\n",
-								module, symbol->ordinal, symname);
-						}
+			if (pe_exp) {
+				char *p, *module = strdup (symbol->name);
+				p = strstr (module, ".dll_");
+				if (p) {
+					char *symname = p + 5;
+					*p = 0;
+					r_name_filter (symname, -1);
+					if (prefix) {
+						r_cons_printf ("k bin/pe/%s/%d=%s.%s\n",
+							module, symbol->ordinal, prefix, symname);
+					} else {
+						r_cons_printf ("k bin/pe/%s/%d=%s\n",
+							module, symbol->ordinal, symname);
 					}
-					free (module);
 				}
+				free (module);
 			}
 		} else {
 			const char *bind = symbol->bind;
@@ -2043,7 +2050,7 @@ static int bin_sections(RCore *r, int mode, ut64 laddr, int va, ut64 at, const c
 	int i = 0;
 	int fd = -1;
 	sections = r_bin_get_sections (r->bin);
-	bool inDebugger = r_config_get_i (r->config, "cfg.debug");
+	bool debug = r_config_get_i (r->config, "cfg.debug");
 	SdbHash *dup_chk_ht = ht_new (NULL, NULL, NULL);
 	bool ret = false;
 
@@ -2093,7 +2100,7 @@ static int bin_sections(RCore *r, int mode, ut64 laddr, int va, ut64 at, const c
 						loaded = 1;
 					}
 				}
-				if (!loaded && !inDebugger) {
+				if (!loaded && !debug) {
 					r_core_cmdf (r, "on malloc://%d 0x%"PFMT64x" # bss\n",
 						section->vsize, addr);
 				}
@@ -2212,34 +2219,35 @@ static int bin_sections(RCore *r, int mode, ut64 laddr, int va, ut64 at, const c
 				addr);
 			free (hashstr);
 		} else if (IS_MODE_RAD (mode)) {
-			if (!strcmp (section->name, ".bss") && !inDebugger) {
+			if (!strcmp (section->name, ".bss") && !debug) {
 #if LOAD_BSS_MALLOC
 				r_cons_printf ("on malloc://%d 0x%"PFMT64x" # bss\n",
 						section->vsize, addr);
 #endif
 			}
-			if (r->bin->prefix) {
-				r_cons_printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s.%s %d\n",
-					section->paddr, addr, section->size, section->vsize,
-					r->bin->prefix, section->name, (int)section->srwx);
-			} else {
-				r_cons_printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d\n",
-					section->paddr, addr, section->size, section->vsize,
-					section->name, (int)section->srwx);
-
-			}
-			if (section->arch || section->bits) {
-				const char *arch = section->arch;
-				int bits = section->bits;
-				if (info) {
-					if (!arch) arch = info->arch;
-					if (!bits) bits = info->bits;
+			if (!debug) {
+				if (r->bin->prefix) {
+					r_cons_printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s.%s %d\n",
+						section->paddr, addr, section->size, section->vsize,
+						r->bin->prefix, section->name, (int)section->srwx);
+				} else {
+					r_cons_printf ("S 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" 0x%08"PFMT64x" %s %d\n",
+						section->paddr, addr, section->size, section->vsize,
+						section->name, (int)section->srwx);
 				}
-				if (!arch) {
-					arch = r_config_get (r->config, "asm.arch");
+				if (section->arch || section->bits) {
+					const char *arch = section->arch;
+					int bits = section->bits;
+					if (info) {
+						if (!arch) arch = info->arch;
+						if (!bits) bits = info->bits;
+					}
+					if (!arch) {
+						arch = r_config_get (r->config, "asm.arch");
+					}
+					r_cons_printf ("Sa %s %d @ 0x%08"
+						PFMT64x"\n", arch, bits, addr);
 				}
-				r_cons_printf ("Sa %s %d @ 0x%08"
-					PFMT64x"\n", arch, bits, addr);
 			}
 			if (r->bin->prefix) {
 				r_cons_printf ("f %s.section.%s %"PFMT64d" 0x%08"PFMT64x"\n",
@@ -2251,7 +2259,7 @@ static int bin_sections(RCore *r, int mode, ut64 laddr, int va, ut64 at, const c
 						i, addr, section->paddr, section->size, section->vsize,
 						perms, r->bin->prefix, section->name, addr);
 
-			} else {
+			} else if (!debug) {
 				r_cons_printf ("f section.%s %"PFMT64d" 0x%08"PFMT64x"\n",
 						section->name, section->size, addr);
 				r_cons_printf ("f section_end.%s 1 0x%08"PFMT64x"\n",

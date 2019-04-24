@@ -5,8 +5,6 @@
 #include "bt/generic-x64.c"
 #include "bt/fuzzy-all.c"
 
-typedef RList* (*RDebugFrameCallback)(RDebug *dbg, ut64 at);
-
 static void prepend_current_pc (RDebug *dbg, RList *list) {
 	RDebugFrame *frame;
 	const char *pcname;
@@ -24,23 +22,23 @@ static void prepend_current_pc (RDebug *dbg, RList *list) {
 
 static RList *r_debug_native_frames(RDebug *dbg, ut64 at) {
 	RList *list;
-	RDebugFrameCallback cb = NULL;
-	if (dbg->btalgo) {
-		if (!strcmp (dbg->btalgo, "fuzzy")) {
-			cb = backtrace_fuzzy;
-		} else if (!strcmp (dbg->btalgo, "anal")) {
-			if (dbg->bits == R_SYS_BITS_64) {
-				cb = backtrace_x86_64_anal;
-			} else {
-				cb = backtrace_x86_32_anal;
-			}
-		}
-	}
-	if (!cb) {
-		cb = backtrace_x86;
-	}
 
-	list = cb (dbg, at);
+	if (!dbg->btalgo) {
+		list = backtrace_x86 (dbg, at);
+	} else if (!strncmp (dbg->btalgo, "fuzzy", 5)) {
+		list = backtrace_fuzzy (dbg,
+					!strcmp (dbg->btalgo, "fuzzy-barrier")?
+					R_DEBUG_BT_FUZZ_BARRIER : R_DEBUG_BT_FUZZ_CALL,
+					at);
+	} else if (!strcmp (dbg->btalgo, "anal")) {
+		if (dbg->bits == R_SYS_BITS_64) {
+			list = backtrace_x86_64_anal (dbg, at);
+		} else {
+			list = backtrace_x86_32_anal (dbg, at);
+		}
+	} else {
+		list = backtrace_x86 (dbg, at);
+	}
 	prepend_current_pc (dbg, list);
 
 	return list;

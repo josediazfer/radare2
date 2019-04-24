@@ -1,6 +1,6 @@
 /* radare - LGPL - Copyright 2007-2016 - pancake */
 
-#if __WINDOWS__ && MINGW32 && !__CYGWIN__
+#if __WINDOWS__ 
 #include <stdlib.h>
 #endif
 
@@ -99,6 +99,9 @@ R_API const char *r_num_get_name(RNum *num, ut64 n) {
 // TODO: try to avoid the use of sscanf
 /* old get_offset */
 R_API ut64 r_num_get(RNum *num, const char *str) {
+	return r_num_get_ex(num, str, NULL);
+}
+R_API ut64 r_num_get_ex(RNum *num, const char *str, RError *err) {
 	int i, j, ok;
 	char lch, len;
 	ut64 ret = 0LL;
@@ -229,7 +232,19 @@ R_API ut64 r_num_get(RNum *num, const char *str) {
 			ret = _strtoui64 (str, NULL, 10);
 #endif
 #endif
-			ret = strtoull (str, NULL, 10);
+			if (!r_str_isnumber(str)) {
+				if (err) {
+					if (num && num->callback) {
+						r_error_set (err, R_NUM_ERR_UNRESOL_NAME,
+								r_str_newf ("name '%s' unresolved", str));
+					} else {
+						r_error_set (err, R_NUM_ERR_INVALID_NUM,
+								r_str_newf ("number '%s' invalid", str));
+					}
+				}
+			} else {
+				ret = strtoull (str, NULL, 10);
+			}
 			break;
 		}
 	}
@@ -279,22 +294,30 @@ R_API static ut64 r_num_math_internal(RNum *num, char *s) {
 #endif
 
 R_API ut64 r_num_math(RNum *num, const char *str) {
+	return r_num_math_ex (num, str, NULL);
+}
+
+R_API ut64 r_num_math_ex(RNum *num, const char *str, RError **err) {
 #if R_NUM_USE_CALC
-	ut64 ret;
-	const char *err = NULL;
-	if (!str) return 0LL;
-	//if (!str || !*str) return 0LL;
+	ut64 ret = 0;
+	RError *calc_err = NULL;
+
+	if (!str) {
+		return 0LL;
+	}
 	if (num) {
 		num->dbz = 0;
 	}
-	ret = r_num_calc (num, str, &err);
-	if (err) {
-		eprintf ("r_num_calc error: (%s) in (%s)\n", err, str);
-	} else if (num) {
-		num->value = ret;
-	}
-	if (num) {
-		num->value = ret;
+	ret = r_num_calc (num, str, &calc_err);
+	if (!r_error_is (calc_err)) {
+		if (num) {
+			num->value = ret;
+		}
+		r_error_free (calc_err);
+	} else if (err) {
+		*err = calc_err;	
+	} else {
+		r_error_free (calc_err);
 	}
 	return ret;
 #else

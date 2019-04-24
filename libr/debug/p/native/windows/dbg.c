@@ -39,7 +39,7 @@
 #endif
 
 static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled);
-static void load_mod_pdb(RDebug *dbg, RDebugW32Proc *proc, char *path, ut64 base_addr);
+static int proc_dbg_wait(RDebug *dbg, int pid, RDebugW32Proc **ret_proc);
 static void load_mod_info(RDebug *dbg, RDebugW32Proc *proc, char *name, char *path, ut64 base_addr);
 
 DWORD (WINAPI *w32_GetMappedFileName)(HANDLE, LPVOID, LPTSTR, DWORD) = NULL;
@@ -397,6 +397,9 @@ static bool dbg_exception_event(DEBUG_EVENT *de, RDebugW32Proc *proc) {
 			eprintf ("(%d) unknown exception %x in thread %d\n",
 				proc->pid, (int)code, proc->tid);
 		}
+		if (proc->state == PROC_STATE_STARTING) {
+			next_event = true;
+		}
 	}
 	return next_event;
 }
@@ -584,10 +587,8 @@ static void proc_lib_init(RDebug *dbg, RDebugW32Proc *proc, RDebugW32Lib *lib, H
 		if (proc->state == PROC_STATE_STARTING) {
 			eprintf ("(%d) loading symbols for %s at %08"PFMT64x"\n", proc->pid, lib->path, lib->base_addr);
 		}
-		load_mod_pdb (dbg, proc, lib->path, lib->base_addr);
 		load_mod_info (dbg, proc, lib->name, lib->path, lib->base_addr);
 	} else {
-		eprintf ("none lib_name %s %x\n", lib->name, h_file);
 		free (path);
 	}
 }
@@ -602,44 +603,12 @@ static void proc_lib_names_resolv(RDebug *dbg, RDebugW32Proc *proc) {
 	}
 }
 
-static void load_mod_pdb(RDebug *dbg, RDebugW32Proc *proc, char *path, ut64 base_addr) {
-	/* Check if autoload PDB is set, and load PDB information if yes */
-	RCore* core = dbg->corebind.core;
-	bool autoload_pdb = dbg->corebind.cfggeti (core, "pdb.autoload");
-	if (autoload_pdb) {
-		char *cmd = r_str_newf ("idpfc %s", path);
-
-		if (!cmd) {
-			perror ("load_mod_pdb");
-		} else {
-			char *pdb_file = dbg->corebind.cmdstr (core, cmd);
-
-			free (cmd);
-			if (pdb_file && *pdb_file) {
-				eprintf ("(%d) loading debug info for %s\n", proc->pid, path);
-				dbg->corebind.cmdf (core, ".idpf* 0x%08"PFMT64x" %s",
-						base_addr, path);
-			}
-			free (pdb_file);
-		}
-	}
-}
-
 static void load_mod_info(RDebug *dbg, RDebugW32Proc *proc, char *name, char *path, ut64 base_addr) {
 	/* Escape backslashes in the file path on Windows */
-	char *escaped_path = r_str_escape (path);
-	char *escaped_name = r_str_escape (name);
-	if (escaped_path && escaped_name) {
-		RCore* core = dbg->corebind.core;
+	RCore *core = dbg->corebind.core;
 
-		r_name_filter (escaped_name, 0);
-		dbg->corebind.cmdf (core, "f mod.%s = 0x%08"PFMT64x,
-				escaped_name, base_addr);
-		dbg->corebind.cmdf (core, ".!rabin2 -rsB 0x%08"PFMT64x" \"%s\" 2> nul",
-				base_addr, escaped_path);
-	}
-	free (escaped_path);
-	free (escaped_name);
+	dbg->corebind.cmdf (core, ".idm* 0x%08"PFMT64x" %s",
+				base_addr, path);
 }
 
 static RDebugW32Lib *set_lib_info(RDebug *dbg, RDebugW32Proc *proc, DEBUG_EVENT *de, int state) {
@@ -809,9 +778,43 @@ int w32_dbg_step (RDebug *dbg) {
 	return true;
 }
 
+static void event_invoke_handler(RDebug *dbg, RDebugEventHandler *ev_handler, int type, void *arg) {
+	switch (type) {
+	case R_DEBUG_EVENT_LOAD_LIB:
+	case R_DEBUG_EVENT_UNLOAD_LIB:
+	{
+		RDebugW32Lib *lib = (RDebugW32Lib *)arg;
+		char *libname = ev_handler->args[0];
+
+		if (!strcmp (libname, "*") || !strcasecmp (libname, lib->name)) {
+			RCore *core = dbg->corebind.core;
+
+			dbg->corebind.cmd (core, ev_handler->cmd);
+			ev_handler->calls++;
+		}
+		break;
+	}
+	}
+}
+
+static void w32_event_invoke_handler(RDebug *dbg, int type, void *arg) {
+	RDebugEventHandler *ev_entry;
+	RList *list = dbg->events;
+	RListIter *iter;
+
+	r_list_foreach (list, iter, ev_entry) {
+		if (type < ev_entry->type) {
+			break;
+		}
+		if (type == ev_entry->type) {
+			event_invoke_handler (dbg, ev_entry, type, arg);
+		}
+	}
+}
+
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 	DEBUG_EVENT de;
-	int tid, pid;
+	int tid, pid = -1;
 	bool next_event = false;
 	unsigned int code;
 	int ret = R_DEBUG_REASON_UNKNOWN;
@@ -930,6 +933,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				}
 				next_event = false;
 			}
+			w32_event_invoke_handler (dbg, R_DEBUG_EVENT_LOAD_LIB, lib);
 			}
 			ret = R_DEBUG_REASON_NEW_LIB;
 			break;
@@ -946,6 +950,7 @@ int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **ret_proc) {
 				}
 				next_event = false;
 			}
+			w32_event_invoke_handler (dbg, R_DEBUG_EVENT_UNLOAD_LIB, lib);
 			}
 			break;
 		case OUTPUT_DEBUG_STRING_EVENT:
@@ -1372,6 +1377,7 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **r
 	char *appname = NULL;
 	RDebugW32Proc *proc = NULL;
 	RDebugW32 *dbg_w32 = (RDebugW32 *)dbg->native_ptr;
+	int event_code;
 
 	if (!*cmd) {
 		return -1;
@@ -1452,8 +1458,8 @@ int w32_dbg_new_proc(RDebug *dbg, const char *cmd, char *args, RDebugW32Proc **r
 		goto err_w32_new_proc;
 	}
 	proc->created = true;
-	if (proc_dbg_wait (dbg, proc->pid, ret_proc) != R_DEBUG_REASON_BREAKPOINT) {
-		eprintf ("w32_dbg_new_proc/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT\n");
+	if ((event_code = proc_dbg_wait (dbg, proc->pid, ret_proc)) != R_DEBUG_REASON_BREAKPOINT) {
+		eprintf ("w32_dbg_new_proc/w32_dbg_wait != R_DEBUG_REASON_BREAKPOINT, code %d\n", event_code);
 		goto err_w32_new_proc;
 	}
 	pid = proc->pid;
@@ -1987,9 +1993,15 @@ int w32_dbg_select (RDebug *dbg, int pid, int tid) {
 	if (!proc) {
 		return false;
 	}
+#if __MINGW64__ || _WIN64
 	if (proc->wow64) {
 		dbg->bits = R_SYS_BITS_32;
+	} else {
+		dbg->bits = R_SYS_BITS_64;
 	}
+#else
+	dbg->bits = R_SYS_BITS_32;
+#endif
 	return true;
 }
 

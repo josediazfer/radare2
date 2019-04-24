@@ -851,8 +851,8 @@ R_API bool r_core_file_open_debug (RCore *core, const char *path) {
 	}
 	r_core_file_set_by_file (core, file);
 	r_debug_use (core->dbg, "native");
-	baddr = r_debug_get_baddr (core->dbg, file);
-	if (!r_core_bin_load (core, file, baddr)) {
+	baddr = r_debug_get_baddr (core->dbg, path);
+	if (!r_core_bin_load (core, path, baddr)) {
 		eprintf ("Error r_core_bin_load baddr 0x%" PFMT64x "\n", baddr);
 		goto err_r_core_file_open_debug;
 	}

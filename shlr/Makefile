@@ -37,7 +37,7 @@ HOST_CC?=gcc
 SHLR?=$(shell pwd)
 AR?=ar
 RANLIB?=ranlib
-MODS=sdb zip udis86 java tcc
+MODS=sdb zip udis86 java tcc lua
 MODS+=gdb qnx ar
 ifneq ($(CC),cccl)
 ifeq (1,$(WITH_GPL))

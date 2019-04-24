@@ -1,6 +1,8 @@
 #ifndef R_NUM_H
 #define R_NUM_H
 
+#include "r_error.h"
+
 #define R_NUMCALC_STRSZ 1024
 #define r_num_abs(x) x>0?x:-x
 
@@ -12,6 +14,15 @@ typedef struct {
 	double d;
 	ut64 n;
 } RNumCalcValue;
+
+typedef enum r_num_err_t {
+	R_NUM_ERR_INIT = R_NUM_ERR_TYPE,
+	R_NUM_ERR_INVALID_NUM,
+	R_NUM_ERR_UNRESOL_NAME,
+	R_NUM_ERR_INVALID_NUM_CONV,
+	R_NUM_ERR_STRING_TOO_LONG,
+	R_NUM_ERR_INVALID_SYNTAX
+} RNumErr;
 
 typedef enum {
 	RNCNAME, RNCNUMBER, RNCEND, RNCINC, RNCDEC,
@@ -27,9 +38,8 @@ typedef struct r_num_calc_t {
 	RNumCalcToken curr_tok;
 	RNumCalcValue number_value;
 	char string_value[R_NUMCALC_STRSZ];
-	int errors;
 	char oc;
-	const char *calc_err;
+	RError *calc_err;
 	int calc_i;
 	const char *calc_buf;
 	int calc_len;
@@ -53,7 +63,7 @@ R_API RNum *r_num_new(RNumCallback cb, RNumCallback2 cb2, void *ptr);
 R_API void r_num_free(RNum *num);
 R_API char *r_num_units(char *buf, ut64 num);
 R_API int r_num_conditional(RNum *num, const char *str);
-R_API ut64 r_num_calc(RNum *num, const char *str, const char **err);
+R_API ut64 r_num_calc(RNum *num, const char *str, RError **err);
 R_API const char *r_num_calc_index(RNum *num, const char *p);
 R_API ut64 r_num_chs(int cylinder, int head, int sector, int sectorsize);
 R_API int r_num_is_valid_input(RNum *num, const char *input_value);
@@ -64,7 +74,9 @@ R_API ut64 r_num_tail(RNum *num, ut64 addr, const char *hex);
 R_API void r_num_minmax_swap(ut64 *a, ut64 *b);
 R_API void r_num_minmax_swap_i(int *a, int *b); // XXX this can be a cpp macro :??
 R_API ut64 r_num_math(RNum *num, const char *str);
+R_API ut64 r_num_math_ex(RNum *num, const char *str, RError **err);
 R_API ut64 r_num_get(RNum *num, const char *str);
+R_API ut64 r_num_get_ex(RNum *num, const char *str, RError *err);
 R_API int r_num_to_bits(char *out, ut64 num);
 R_API int r_num_to_trits(char *out, ut64 num);	//Rename this please
 R_API int r_num_rand(int max);

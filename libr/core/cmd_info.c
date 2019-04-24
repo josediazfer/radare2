@@ -303,36 +303,53 @@ static void playMsg(RCore *core, const char *n, int len) {
 	}
 }
 
-static void cmd_info_pdb_cache_file(SPDBOptions *pdbopts, const char *input) {
+static RCore *load_mod_file(RCore *core, const char *filename, ut64 baddr) {
+	RCore *mod_core = r_core_new ();
+	RCoreFile *file;
+
+	r_config_set_i (mod_core->config, "cfg.debug",
+			r_config_get_i (core->config, "cfg.debug"));
+	file = r_core_file_open (mod_core, filename, R_IO_READ, 0);
+	if (!file) {
+		r_core_free (mod_core);
+		return NULL;
+	}
+	mod_core->bin->verbose = 0;
+	mod_core->bin->filter_rules = 0;
+	r_core_bin_load (mod_core, filename, baddr);
+	return mod_core;
+}
+
+static bool cmd_info_pdb_cache_file(RCore *core, SPDBOptions *pdbopts, const char *input) {
 	const char *filename;
-	RCore *core = NULL;
+	RCore *mod_core = NULL;
 	RCoreFile *file = NULL;
 	char *pdb_file = NULL;
 	int i = 0;
+	bool ret = false;
 
 	if (!pdbopts->cache_dir || !*pdbopts->cache_dir) {
-		return;
+		return false;
 	}
 	while(input[i] == ' ') {
 		i++;
 	}
 	filename = input + i;
-	core = r_core_new ();
-	file = r_core_file_open (core, filename, R_IO_READ, 0);
-	if (!file) {
+	mod_core = load_mod_file (core, filename, 0);
+	if (!mod_core) {
 		eprintf ("Error while opening '%s'", filename);
 		goto err_cmd_info_pdb_cache_file;
 	}
-	core->bin->verbose = 0;
-	core->bin->filter_rules = 0;
-	r_core_bin_load (core, filename, 0);
-	if((pdb_file = r_bin_pdb_cached_get (core, pdbopts))) {
+	file = mod_core->file;
+	if((pdb_file = r_bin_pdb_cached_get (mod_core, pdbopts))) {
 		r_cons_printf ("%s\n", pdb_file);
 		free (pdb_file);
 	}
+	ret = true;
 err_cmd_info_pdb_cache_file:
-	r_core_file_close (core, file);
-	r_core_free (core);
+	r_core_file_close (mod_core, file);
+	r_core_free (mod_core);
+	return ret;
 }
 
 static bool cmd_info_pdb_file(int mode, SPDBOptions *pdbopts, const char *input_) {
@@ -403,6 +420,93 @@ err_cmd_info_pdb_file:
 	free (input);
 	free (pdb_file);
 	r_core_free (core);
+	return ret;
+}
+
+static bool pdb_info_mod(RCore *core, RCore *mod_core, int mode, ut64 baddr) {
+	char *pdb_file;
+	bool ret = false;
+	SPDBOptions pdbopts;
+
+	pdbopts.cache_dir = (char *) r_config_get (core->config, "pdb.cachedir");
+	if (!pdbopts.cache_dir || !*pdbopts.cache_dir) {
+		return false;
+	}
+	pdbopts.user_agent = (char*) r_config_get (core->config, "pdb.useragent");
+	pdbopts.symbol_server = (char*) r_config_get (core->config, "pdb.server");
+	pdbopts.extract = r_config_get_i (core->config, "pdb.extract");
+	pdb_file = r_bin_pdb_cached_get (mod_core, &pdbopts);
+	if (pdb_file) {
+		RCore *pdb_core = load_mod_file (core, pdb_file, baddr);
+		RCoreFile *pdb_file = pdb_core->file;
+		RCoreBinFilter filter = { 0 };
+
+		if (mod_core) {
+			r_core_bin_info (pdb_core, R_CORE_BIN_ACC_PDB, mode, true, &filter, NULL);
+			r_core_file_close (pdb_core, pdb_file);
+			r_core_free (pdb_core);
+			ret = true;
+		}
+	}
+	free (pdb_file);
+	return ret;
+}
+
+static bool cmd_info_mod(RCore *core, const char *input) {
+	const char *mod_path;
+	int i = 0;
+	bool ret = false;
+	RCore *mod_core = NULL;
+	RCoreFile *file = NULL;
+	RCoreBinFilter filter = { 0 };
+	int mode = 0;
+	ut64 baddr;
+	const char *basename = NULL;
+
+	if (!input[i]) {
+		return false;
+	}
+	switch (input[i]) {
+	case '*': mode = R_CORE_BIN_RADARE; break;
+	case 'j': mode = R_CORE_BIN_JSON; break;
+	case 'q': mode = R_CORE_BIN_SIMPLE; break;
+	}
+	i++;
+	while(*input && input[i] == ' ') {
+		i++;
+	}
+	baddr = r_num_math (core->num, input + i);
+	while(input[i] && input[i] != ' ') {
+		i++;
+	}
+	if (input[i] != ' ') {
+		eprintf ("Missing library path\n");
+		goto err_cmd_info_mod;
+	}
+	while(input[i] == ' ') {
+		i++;
+	}
+	if (!input[i]) {
+		eprintf ("Missing library path\n");
+		goto err_cmd_info_mod;
+	}
+	mod_path = input + i;
+	mod_core = load_mod_file (core, mod_path, baddr);
+	if (!mod_core) {
+		eprintf ("Error while opening '%s'", mod_path);
+		goto err_cmd_info_mod;
+	}
+	basename = r_file_basename (mod_path);
+	r_config_set (mod_core->config, "bin.prefix", basename);
+	r_core_bin_info (mod_core, R_CORE_BIN_ACC_SYMBOLS |
+				   R_CORE_BIN_ACC_SECTIONS, mode, true, &filter, NULL);
+#ifdef __WINDOWS__
+	pdb_info_mod (core, mod_core, mode, baddr);
+#endif
+	ret = true;
+err_cmd_info_mod:
+	r_core_file_close (mod_core, file);
+	r_core_free (mod_core);
 	return ret;
 }
 
@@ -632,7 +736,7 @@ static int cmd_info(void *data, const char *input) {
 				case '\0':
 					r_core_cmd0 (core, ".idpi*");
 					break;
-				case 'd':
+				case 'd': /* "idpd" */
 					{
 					char *pdb_file;
 
@@ -646,9 +750,9 @@ static int cmd_info(void *data, const char *input) {
 					input++;
 					}
 					break;
-				case 'f': /* "idpf" */
+				case 'f': /* "idpf/idpfc" */
 					if (input[3] == 'c') {
-						cmd_info_pdb_cache_file (&pdbopts, &input[4]);
+						cmd_info_pdb_cache_file (core, &pdbopts, &input[4]);
 					} else {
 						cmd_info_pdb_file (mode, &pdbopts, &input[3]);
 					}
@@ -726,6 +830,10 @@ static int cmd_info(void *data, const char *input) {
 					break;
 				}
 				input++;
+			} else if (input[1] == 'm') { // "idm"
+				cmd_info_mod (core, &input[2]);
+				while (input[2]) input++;
+				break;
 			} else if (input[1] == '?') { // "id?"
 				r_core_cmd_help (core, help_msg_id);
 				input++;

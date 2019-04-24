@@ -371,6 +371,7 @@ static int bin_pe_parse_imports(struct PE_(r_bin_pe_obj_t)* bin,
 	char* symname;
 	char* filename;
 	char* symdllname = NULL;
+	bool verb_ordinal = true;
 
 	if (!dll_name || *dll_name == '0') {
 		return 0;
@@ -440,8 +441,9 @@ static int bin_pe_parse_imports(struct PE_(r_bin_pe_obj_t)* bin,
 						snprintf (import_name, PE_NAME_LENGTH, "%s_%s", dll_name, symname);
 						R_FREE (symname);
 					}
-				} else {
+				} else if (verb_ordinal) {
 					bprintf ("Cannot find %s\n", filename);
+					verb_ordinal = false;
 
 				}
 			} else {

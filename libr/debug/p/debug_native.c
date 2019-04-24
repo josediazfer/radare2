@@ -115,7 +115,6 @@ static int r_debug_handle_signals (RDebug *dbg) {
 
 static char *r_debug_native_reg_profile (RDebug *dbg) {
 #if __WINDOWS__
-
 	return w32_reg_profile (dbg);
 #elif __APPLE__
 	return strdup (xnu_reg_profile (dbg));

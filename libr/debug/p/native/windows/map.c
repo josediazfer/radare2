@@ -303,6 +303,7 @@ ut64 w32_dbg_map_addr_len(int pid, ut64 addr) {
 	}
 	len = addr - (ut64)mbi.BaseAddress;
 	if (len >= (ut64)mbi.RegionSize) {
+		eprintf ("ERROR: len: %d reg_size: %d\n", len, mbi.RegionSize);
 		map_len = 0;
 	} else {
 		map_len = (ut64)mbi.RegionSize - len;

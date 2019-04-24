@@ -1,29 +1,42 @@
 /* implementation */
 
+enum {
+	R_DEBUG_BT_FUZZ_CALL,
+	R_DEBUG_BT_FUZZ_BARRIER
+};
+
 // 512KB .. should get the size from the regions if possible
 #define MAX_STACK_SIZE (512 * 1024)
 
-static int iscallret(RDebug *dbg, ut64 addr) {
+static int is_call(RDebug *dbg, ut64 addr) {
 	ut8 buf[32];
-	if (addr == 0LL || addr == UT64_MAX)
+	int max_call_len;
+
+	if (addr == 0LL || addr == UT64_MAX) {
 		return 0;
+	}
 	/* check if region is executable */
 	/* check if previous instruction is a call */
 	/* if x86 expect CALL to be 5 byte length */
+#if 0
 	if (dbg->arch && !strcmp (dbg->arch, "x86")) {
 		(void)dbg->iob.read_at (dbg->iob.io, addr-5, buf, 5);
 		if (buf[0] == 0xe8) return 1;
 		if (buf[3] == 0xff && (buf[4] & 0xf0)==0xd0) return 1;
 		// IMMAMISSINGANYOP
 	} else {
-		RAnalOp op;
-		(void) dbg->iob.read_at (dbg->iob.io, addr-8, buf, 8);
-		(void) r_anal_op (dbg->anal, &op, addr-8, buf, 8);
-		if (op.type == R_ANAL_OP_TYPE_CALL || op.type == R_ANAL_OP_TYPE_UCALL) {
-			return 1;
-		}
-		/* delay slot */
-		(void) r_anal_op (dbg->anal, &op, addr-4, buf, 4);
+#endif
+	RAnalOp op;
+	int i;
+
+	if (dbg->arch && !strcmp (dbg->arch, "x86")) {
+		max_call_len = dbg->bits == 32? 5 : 8;
+	} else {
+		max_call_len = 8;
+	}
+	(void) dbg->iob.read_at (dbg->iob.io, addr - max_call_len, buf, max_call_len);
+	for (i = max_call_len; i > 1; i--) {
+		(void) r_anal_op (dbg->anal, &op, addr - i, buf + max_call_len - i, i);
 		if (op.type == R_ANAL_OP_TYPE_CALL || op.type == R_ANAL_OP_TYPE_UCALL) {
 			return 1;
 		}
@@ -31,7 +44,13 @@ static int iscallret(RDebug *dbg, ut64 addr) {
 	return 0;
 }
 
-static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
+static int is_exec(RDebug *dbg, ut64 addr) {
+	RDebugMap *map = r_debug_map_get (dbg, addr);
+
+	return map && (map->perm & R_IO_EXEC) == R_IO_EXEC;
+}
+
+static RList *backtrace_fuzzy(RDebug *dbg, int type, ut64 at) {
 	ut8 *stack = NULL, *ptr;
 	int wordsize = dbg->bits; // XXX, dbg->bits is wordsize not bits
 	ut64 sp;
@@ -67,7 +86,12 @@ static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
 	cursp = oldsp = sp;
 	(void)bio->read_at (bio->io, sp, stack, MAX_STACK_SIZE);
 	ptr = stack;
+	if (type == R_DEBUG_BT_FUZZ_BARRIER) {
+		r_debug_map_sync (dbg);
+	}
 	for (i=0; i<dbg->btdepth; i++) {
+		int is_jump;
+
 		p64 = (ut64*)ptr;
 		p32 = (ut32*)ptr;
 		p16 = (ut16*)ptr;
@@ -79,7 +103,8 @@ static RList *backtrace_fuzzy(RDebug *dbg, ut64 at) {
 			eprintf ("Invalid word size with asm.bits\n");
 			goto err_backtrace_fuzzy;
 		}
-		if (iscallret (dbg, addr)) {
+		is_jump = type == R_DEBUG_BT_FUZZ_CALL? is_call (dbg, addr) : is_exec (dbg, addr);
+		if (is_jump) {
 			RDebugFrame *frame = R_NEW0 (RDebugFrame);
 			frame->addr = addr;
 			frame->size = cursp - oldsp;

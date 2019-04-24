@@ -5703,7 +5703,7 @@ static void cmd_anal_aav(RCore *core, const char *input) {
 	// body
 	r_cons_break_push (NULL, NULL);
 	if (is_debug) {
-		RList *list = r_core_get_boundaries_prot (core, 0, "dbg.map");
+		RList *list = r_core_get_boundaries_prot (core, 0, "dbg.maps");
 		RListIter *iter;
 		RIOMap *map;
 		r_list_foreach (list, iter, map) {

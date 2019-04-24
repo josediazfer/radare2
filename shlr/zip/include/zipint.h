@@ -40,7 +40,9 @@
 #include <zlib.h>
 
 #ifdef __WINDOWS__
+#ifndef ZIP_EXTERN
 #define ZIP_EXTERN __declspec(dllexport)
+#endif
 /* for dup(), close(), etc. */
 #include <io.h>
 #endif

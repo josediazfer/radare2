@@ -306,7 +306,7 @@ R_API int r_core_search_preludes(RCore *core) {
 	ut64 to = UT64_MAX;
 	int fc0, fc1;
 	int cfg_debug = r_config_get_i (core->config, "cfg.debug");
-	const char *where = cfg_debug? "dbg.map": "io.sections.exec";
+	const char *where = cfg_debug? "dbg.maps.exe": "io.sections.exec";
 
 	RList *list = r_core_get_boundaries_prot (core, R_IO_EXEC, where);
 	RListIter *iter;
@@ -760,7 +760,7 @@ R_API RList *r_core_get_boundaries_prot_ex(RCore *core, int protection, const ch
 					}
 					if ((mask && (map->perm & mask)) || add || all) {
 						if (!list) {
-							list = r_list_newf ((RListFree *)r_core_map_free);
+							list = r_list_newf ((RListFree)r_core_map_free);
 						}
 						RIOMap *nmap = R_NEW0 (RIOMap);
 						if (!nmap) {

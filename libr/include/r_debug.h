@@ -112,6 +112,11 @@ typedef enum {
 	R_DEBUG_REASON_USERSUSP,
 } RDebugReasonType;
 
+typedef enum {
+	R_DEBUG_EVENT_LOAD_LIB,
+	R_DEBUG_EVENT_UNLOAD_LIB
+} RDebugEventType;
+
 
 /* TODO: move to r_anal */
 typedef struct r_debug_frame_t {
@@ -272,6 +277,15 @@ typedef struct r_debug_profile_t {
 	int pid;
 } RDebugProfiler;
 
+typedef struct r_debug_event_caller_t {
+	char *cmd;
+	int calls;
+	int max_calls;
+	RDebugEventType type;
+	int n_args;
+	char **args;
+} RDebugEventHandler;
+
 typedef struct r_debug_t {
 	char *arch;
 	int bits; /// XXX: MUST SET ///
@@ -338,6 +352,7 @@ typedef struct r_debug_t {
 	RList *maps_user; // <RDebugMap>
 	RList *snaps; // <RDebugSnap>
 	RList *sessions; // <RDebugSession>
+	RList *events; // <RDebugEventHandler>
 	Sdb *sgnls;
 	RCoreBind corebind;
 	// internal use only
@@ -658,6 +673,12 @@ R_API bool r_debug_excep_ign(RDebug *dbg, ut64 code);
 
 /* profiler */
 R_API void r_debug_profiler_free(RDebugProfiler *profiler);
+
+/* events */
+R_API void r_debug_event_handler_delete(RDebug *dbg, int idx);
+R_API void r_debug_event_handlers_print(RDebug *dbg);
+R_API void r_debug_event_loadlib_append(RDebug *dbg, char *cmd, char *libname, int max_calls);
+R_API void r_debug_event_unloadlib_append(RDebug *dbg, char *cmd, char *libname, int max_calls);
 
 /* plugin pointers */
 extern RDebugPlugin r_debug_plugin_native;

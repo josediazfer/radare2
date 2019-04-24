@@ -65,7 +65,7 @@ extern char **environ;
 typedef BOOL WINAPI (*QueryFullProcessImageName_t) (HANDLE, DWORD, LPTSTR, PDWORD);
 typedef DWORD WINAPI (*GetProcessImageFileName_t) (HANDLE, LPTSTR, DWORD);
 GetProcessImageFileName_t GetProcessImageFileName;
-QueryFullProcessImageName_t QueryFullProcessImageName;
+QueryFullProcessImageName_t PQueryFullProcessImageName;
 #endif
 #endif
 
@@ -915,10 +915,10 @@ R_API char *r_sys_pid_to_path(int pid) {
 	}
 #ifndef _MSC_VER
 	if (!GetProcessImageFileName) {
-		if (!QueryFullProcessImageName) {
-			QueryFullProcessImageName = (QueryFullProcessImageName_t) GetProcAddress (kernel32, W32_TCALL ("QueryFullProcessImageName"));
+		if (!PQueryFullProcessImageName) {
+			PQueryFullProcessImageName = (QueryFullProcessImageName_t) GetProcAddress (kernel32, W32_TCALL ("QueryFullProcessImageName"));
 		}
-		if (!QueryFullProcessImageName) {
+		if (!PQueryFullProcessImageName) {
 			// QueryFullProcessImageName does not exist before Vista, fallback to GetProcessImageFileName
 			HANDLE psapi = LoadLibrary (TEXT("Psapi.dll"));
 			if (!psapi) {
@@ -937,8 +937,8 @@ R_API char *r_sys_pid_to_path(int pid) {
 	DWORD maxlength = MAX_PATH;
 	handle = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 	if (handle != NULL) {
-		if (QueryFullProcessImageName) {
-			if (QueryFullProcessImageName (handle, 0, filename, &maxlength) == 0) {
+		if (PQueryFullProcessImageName) {
+			if (PQueryFullProcessImageName (handle, 0, filename, &maxlength) == 0) {
 				eprintf ("Error calling QueryFullProcessImageName\n");
 				CloseHandle (handle);
 				return NULL;

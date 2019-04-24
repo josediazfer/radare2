@@ -24,6 +24,8 @@ static const char *help_msg_d[] = {
 	"dC", "[?]", "Debugger conditions commands",
 	"dd", "[?]", "File descriptors (!fd in r1)",
 	"de", "[-sc] [rwx] [rm] [e]", "Debug with ESIL (see de?)",
+	"deh", "[?]", "Exceptions handling",
+	"dE", "[?]", "Debugger events handling",
 	"dg", " <file>", "Generate a core-file (WIP)",
 	"dH", " [handler]", "Transplant process to a new handler",
 	"di", "[?]", "Show debugger backend information (See dh)",
@@ -101,9 +103,18 @@ static const char *help_msg_dbt[] = {
 	"dbts", " <addr>", "Swap Breakpoint Trace",
 	NULL
 };
+
+static const char *help_msg_dE[] = {
+	"Usage: dE", "", " # Debugger events handling",
+	"dE+", " event \"cmd\" n_max_calls event_args...", "Insert a new event handler",
+	"dE-", " idx", "Remove an event handler registered",
+	"dEL", "", "List current events handler registered",
+	NULL
+};
+
 static const char *help_msg_dC[] = {
 	"Usage: dC", "", " # Managment debugger conditions commands",
-	"dC", " <cond_name> <cond>", "Display or add condition(s)",
+	"dC", " <cond_name> <.file>|<cond>", "Display or add condition(s)",
 	"dC-", " cond_name", "Delete condition with name 'cond_name'",
 	"dCb", " bp_addr cond_name", "Associate breakpoint with condition 'cond_name'",
 	"dCb-", "bp_addr", "Delete both breakpoint and condition",
@@ -904,7 +915,7 @@ static void cmd_dPt(RCore *core, const char *input) {
 	RListIter *th_iter;
 	RDebugProfilerThread *th;
 	RList *th_list = NULL;
-	int tid = -1, idx = 0;
+	int tid = -1;
 
 	th_list = core->dbg->profiler.th_list;
 	if (input[0] == ' ' && input[1]) {
@@ -1048,7 +1059,8 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 		const char *dbgbackend = r_config_get (core->config, "dbg.backend");
 
 		if (dbgbackend != NULL && !strcmp (dbgbackend, "native")) {
-			char *uri, *ptr;
+			char *uri;
+			const char *ptr;
 
 			ptr = input + 2;
 			while (isspace (*ptr)) {
@@ -2980,6 +2992,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 			}
 			i = 0;
 			list = r_debug_frames (core->dbg, addr);
+			r_flag_space_push (core->flags, "*");
 			r_list_foreach (list, iter, frame) {
 				char flagdesc[1024], flagdesc2[1024], pcstr[32], spstr[32];
 				RFlagItem *f = r_flag_get_at (core->flags, frame->addr, true);
@@ -3048,6 +3061,7 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 						flagdesc,
 						flagdesc2);
 			}
+			r_flag_space_pop (core->flags);
 			r_list_free (list);
 			break;
 		case '?':
@@ -3238,7 +3252,14 @@ static void r_core_cmd_bp(RCore *core, const char *input) {
 			#define DB_ARG(x) r_str_word_get0(str, x)
 			char *str = strdup (p);
 			int sl = r_str_word_set0 (str);
-			addr = r_num_math (core->num, DB_ARG(0));
+			RError *err = NULL;
+
+			addr = r_num_math_ex (core->num, DB_ARG(0), &err);
+			if (err) {
+				eprintf ("invalid expression: %s\n", err->msg);
+				r_error_free (err);
+				break;
+			}
 			if (watch) {
 					if (sl == 2) {
 						rw = (strcmp (DB_ARG(1), "r") == 0 ? R_BP_PROT_READ : R_BP_PROT_WRITE);
@@ -3883,40 +3904,43 @@ static int cmd_debug_dC (RCore *core, const char *input, bool print) {
 	if (!*input) {
 		return -1;
 	}
-	char *cond = strchr (input_, ' ');
-	if (cond) {
-		*cond = '\0';
-		cond++;
-		if (strlen (input_) > 0 && strlen (cond) > 0) {
-			char *tmp = NULL;
-			char *err = NULL;
-			RDebugCond *cond_item;
+	char *cmd = strchr (input_, ' ');
+	if (cmd && cmd[1] != '\0') {
+		char *script = NULL;
 
-			cond_item = r_debug_cond_find (core->dbg, input_);
-			if (!strcmp (cond, "-")) {
-				char *tmp;
-				tmp = r_core_editor (core, NULL, cond_item? cond_item->cond : "");
-				if (tmp) {
-					cond = tmp;
-				} else {
-					cond = NULL;
-				}
+		*cmd = '\0';
+		cmd++;
+		if (*cmd == '.') {
+			cmd++;
+			if (!r_file_exists (cmd)) {
+				eprintf ("can not open script file %s\n", cmd);
+				goto err_cmd_debug_dC;
 			}
-			if (cond) {
-				r_debug_cond_add (core->dbg, input_, cond, &err);
-				if (err) {
-					eprintf ("%s\n", err);
-					free (err);
-				} else {
-					ret = 0;
-				}
-			}
-			free (tmp);
+			script = r_file_slurp (cmd, NULL);
+		} else if (*cmd == '-') {
+			RDebugCond *cond_item = r_debug_cond_find (core->dbg, input_);
+
+			script = r_core_editor (core, NULL, cond_item? cond_item->cond : "");
+		} else {
+			script = strdup (cmd);
 		}
+		if (script) {
+			char *err = NULL;
+
+			r_debug_cond_add (core->dbg, input_, script, &err);
+			if (err) {
+				eprintf ("%s\n", err);
+				free (err);
+			} else {
+				ret = 0;
+			}
+		}
+		free (script);
 	} else if (print) {
 		r_debug_cond_print (core->dbg, input_);
 		ret = 0;
 	}
+err_cmd_debug_dC:
 	free (input_);
 	return ret;
 }
@@ -3925,7 +3949,7 @@ static void cmd_debug_dCb_ (RCore *core, const char *input) {
 	RBreakpointItem *bpi;
 	ut64 addr;
 	RDebugCond *cond;
-	char *str;
+	const char *str;
 
 	str = input;
 	while (*str++ == ' ') {
@@ -3953,11 +3977,23 @@ static void cmd_debug_dCb (RCore *core, const char *input) {
 	}
 	char *inp = strdup (input + 2);
 	if (inp) {
+		RError *err = NULL;
+		RBreakpointItem *bpi;
+		int hwbp;
+		ut64 addr;
 		char *arg = strchr (inp, ' ');
-		ut64 addr = r_num_math (core->num, inp);
-		RBreakpointItem *bpi = r_bp_get_at (core->dbg->bp, addr);
-		int hwbp = r_config_get_i (core->config, "dbg.hwbp");
 
+		if (arg) {
+			*arg++ = '\0';
+		}
+		addr = r_num_calc (core->num, inp, &err);
+		if (err) {
+			eprintf ("invalid expression: %s\n", err->msg);
+			r_error_free (err);
+			goto err_cmd_debug_dCb;
+		}
+		bpi = r_bp_get_at (core->dbg->bp, addr);
+		hwbp = r_config_get_i (core->config, "dbg.hwbp");
 		if (!bpi) {
 			if (validAddress (core, addr)) {
 				bpi = r_debug_bp_add (core->dbg, addr, hwbp, false, 0, NULL, 0);
@@ -3972,7 +4008,6 @@ static void cmd_debug_dCb (RCore *core, const char *input) {
 			}
 		}
 		if (arg) {
-			*arg++ = 0;
 			if (!r_debug_cond_find (core->dbg, arg)) {
 				char *cmd;
 				int len = strlen (arg) + 30;
@@ -4005,6 +4040,108 @@ static void cmd_debug_dCb (RCore *core, const char *input) {
 err_cmd_debug_dCb:
 	if (!success && bpi && newbp) {
 		r_bp_del (core->dbg->bp, bpi->addr);
+	}
+}
+
+static void cmd_debug_events_del(RCore *core, const char *input) {
+	const char *ptr = input;
+
+	while (isspace (*ptr)) {
+		ptr++;
+	}
+	r_debug_event_handler_delete (core->dbg, atoi (ptr));
+}
+
+static void cmd_debug_events_add(RCore *core, const char *input) {
+	char *cmdline = r_str_new (input);
+	char *event_name, *cmd, *aux, *calls, *ptr;
+	int calls_val;
+	RDebug *dbg = core->dbg;
+
+	ptr = cmdline;
+	while (isspace (*ptr)) {
+		ptr++;
+	}
+	/* event type */
+	event_name = ptr;
+	while (!isspace (*ptr)) {
+		ptr++;
+	}
+	if (!*ptr) {
+		eprintf ("invalid syntax, missing cmd argument\n");
+		goto err_cmd_debug_events_add;
+	}
+	*ptr++ = '\0';
+	/* command */
+	while (isspace (*ptr)) {
+		ptr++;
+	}
+	if (!*ptr || *ptr != '"') {
+		eprintf ("invalid syntax, expected \" for the cmd argument\n");
+		goto err_cmd_debug_events_add;
+	}
+	cmd = ++ptr;
+	aux = NULL;
+	while (*ptr) {
+		if (*ptr == '"') {
+			aux = ptr;
+		}
+		ptr++;
+	}
+	if (!aux) {
+		eprintf ("invalid syntax, unclosed cmd argument\n");
+		goto err_cmd_debug_events_add;
+	}
+	*aux = '\0';
+	ptr = aux + 1;
+	while (isspace (*ptr)) {
+		ptr++;
+	}
+	if (!*ptr) {
+		eprintf ("invalid syntax, missing max_calls argument\n");
+		goto err_cmd_debug_events_add;
+	}
+	/* calls count */
+	calls = ptr++;
+	while (isdigit (*ptr)) {
+		ptr++;	
+	}
+	if (*ptr && !isspace(*ptr)) {
+		eprintf ("invalid syntax, invalid max_calls argument\n");
+		goto err_cmd_debug_events_add;
+	}
+	if (!*ptr) {
+		calls_val = 0;
+	} else {
+		*ptr = '\0';
+		calls_val = atoi (calls);
+		ptr++;
+	}
+	if (!strcasecmp(event_name, "loadlib")) {
+		r_debug_event_loadlib_append (dbg, cmd, !*ptr? "*" : ptr, calls_val);
+	} else if (!strcasecmp(event_name, "unloadlib")) {
+		r_debug_event_unloadlib_append (dbg, cmd, !*ptr? "*" : ptr, calls_val);
+	} else {
+		eprintf ("invalid event type %s\n", event_name);
+		goto err_cmd_debug_events_add;
+	}
+err_cmd_debug_events_add:
+	free (cmdline);
+}
+
+static void cmd_debug_events(RCore *core, const char *input) {
+	switch (*input) {
+	case '+':
+		cmd_debug_events_add (core, input + 1);
+		break;
+	case '-':
+		cmd_debug_events_del (core, input + 1);
+		break;
+	case 'L':
+		r_debug_event_handlers_print (core->dbg);
+		break;
+	default:
+		r_core_cmd_help (core, help_msg_dE);
 	}
 }
 
@@ -4664,6 +4801,9 @@ static int cmd_debug(void *data, const char *input) {
 		break;
 	case 'm': // "dm"
 		cmd_debug_map (core, input + 1);
+		break;
+	case 'E':
+		cmd_debug_events (core, input + 1);
 		break;
 	case 'r': // "dr"
 		if (core->io->debug || input[1] == '?') {
