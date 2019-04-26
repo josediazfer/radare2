@@ -261,6 +261,7 @@ typedef struct r_debug_cond_t {
 	void *data;
 	char *name;
 	char *cond;
+	int count;
 } RDebugCond;
 
 typedef struct r_debug_profile_thread_t {

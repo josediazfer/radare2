@@ -1005,7 +1005,7 @@ static void *lua_alloc(void *ud,
 	return realloc (ptr, nsize);
 }
 
-static void r_debug_lua_vars_fill(RDebug *dbg, lua_State *lua, bool set) {
+static void r_debug_lua_vars_fill(RDebug *dbg, RDebugCond *cond_item, lua_State *lua, bool set) {
 	int i;
 
 	/* set registers values */
@@ -1041,6 +1041,8 @@ static void r_debug_lua_vars_fill(RDebug *dbg, lua_State *lua, bool set) {
 		lua_pushnil (lua);
 	}
 	lua_setglobal (lua, "tid");
+	lua_pushinteger (lua, (lua_Integer)++cond_item->count);
+	lua_setglobal (lua, "_counter_");
 }
 
 RDebugCond *r_debug_cond_find(RDebug *dbg, const char *name) {
@@ -1056,20 +1058,46 @@ RDebugCond *r_debug_cond_find(RDebug *dbg, const char *name) {
 	return NULL;
 }
 
-static int lua_expr(lua_State *lua) {
+static int lua_expr_arg(lua_State *lua, int arg) {
+	ut64 addr;
+
+	if (lua_isinteger (lua, arg)) {
+		addr = lua_tointeger (lua, arg);
+	} else if (lua_isstring (lua, arg)) {
+		const char *expr = lua_tostring (lua, arg);
+		RDebug *dbg;
+
+		lua_getglobal(lua, "_dbg_");
+		dbg = (RDebug *)lua_touserdata (lua, -1);
+		if (!dbg) {
+        	    lua_pushstring (lua, "lua_mem_read internal error dbg is NULL");
+	            lua_error (lua);
+		} else {
+			RCore *core = (RCore *)dbg->corebind.core;
+			addr = r_num_calc (core->num, expr, NULL);
+		}
+	} else {
+		addr = MAXINT64;
+		lua_pushstring (lua, "invalid argument type");
+		lua_error (lua);
+	}
+	return addr;
+}
+
+static int lua_cmd(lua_State *lua) {
 	RDebug *dbg;
 	int n_args = lua_gettop (lua);
-	const char *expr;
 	RCore *core;
+	const char *cmd;
 
 	if (n_args != 1) {
 		return 0;
 	}
 	if (!lua_isstring (lua, 1)) {
-            lua_pushstring (lua, "the argument is not a string value");
+            lua_pushstring (lua, "the argument is not string value");
             lua_error (lua);
 	}
-	expr = lua_tostring (lua, 1);
+	cmd = lua_tostring (lua, 1);
 	lua_getglobal(lua, "_dbg_");
 	dbg = (RDebug *)lua_touserdata (lua, -1);
 	if (!dbg) {
@@ -1077,7 +1105,17 @@ static int lua_expr(lua_State *lua) {
             lua_error (lua);
 	}
 	core = (RCore *)dbg->corebind.core;
-	lua_pushinteger (lua, r_num_calc (core->num, expr, NULL));
+	dbg->corebind.cmd (core, cmd);
+	return 0;
+}
+
+static int lua_expr(lua_State *lua) {
+	int n_args = lua_gettop (lua);
+
+	if (n_args != 1) {
+		return 0;
+	}
+	lua_pushinteger (lua, lua_expr_arg (lua, 1));
 	return 1;
 }
 
@@ -1091,15 +1129,7 @@ static int lua_dread(lua_State *lua) {
 	if (n_args < 2) {
 		return 0;
 	}
-	if (!lua_isinteger (lua, 1)) {
-            lua_pushstring (lua, "fist argument is not address value");
-            lua_error (lua);
-	}
-	addr = lua_tointeger (lua, 1);
-	if (!lua_isinteger (lua, 2)) {
-            lua_pushstring (lua, "second argument is not length value");
-            lua_error (lua);
-	}
+	addr = lua_expr_arg (lua, 1);
 	len = lua_tointeger (lua, 2);
 	if (len <= 0 || len > MAX_LUA_MEM_READ_LENGTH) {
             lua_pushstring (lua, "invalid length value");
@@ -1220,6 +1250,7 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 
 	if (!lua) {
 		char *cond_func = r_str_newf ("function cond()\n%s\nend", cond_item->cond);
+
 		lua = r_debug_cond_lua_get (dbg, cond_func, NULL);
 		lua_pcall (lua, 0, 0, 0);
 		lua_pushlightuserdata (lua, dbg);
@@ -1227,11 +1258,12 @@ static bool r_debug_cond_eval(RDebug *dbg, RDebugCond *cond_item) {
 		lua_register (lua, "dread", lua_dread);
 		lua_register (lua, "dstrcmp", lua_dstrcmp);
 		lua_register (lua, "expr", lua_expr);
+		lua_register (lua, "cmd", lua_cmd);
 		cond_item->data = lua;
 		free (cond_func);
 	}
 	if (lua) {
-		r_debug_lua_vars_fill (dbg, lua, true);
+		r_debug_lua_vars_fill (dbg, cond_item, lua, true);
 		lua_getglobal (lua, "cond");
 		if (!lua_pcall (lua, 0, 1, 0)) {
 			if (lua_isboolean (lua, -1)) {
@@ -1409,11 +1441,9 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 	if (dbg->recoil_mode == R_DBG_RECOIL_NONE) {
 		dbg->recoil_mode = R_DBG_RECOIL_STEP;
 	}
-
 	if (r_debug_is_dead (dbg)) {
 		return false;
 	}
-
 	pc = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_PC]);
 	sp = r_debug_reg_get (dbg, dbg->reg->name[R_REG_NAME_SP]);
 
@@ -1483,20 +1513,16 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 		br = 1;
 		break;
 	}
-
 	for (i = 0; i < br; i++) {
 		RBreakpointItem *bpi = r_bp_add_sw (dbg->bp, next[i], dbg->bpsize, R_BP_PROT_EXEC);
 		if (bpi) {
 			bpi->swstep = true;
 		}
 	}
-
 	ret = r_debug_continue (dbg);
-
 	for (i = 0; i < br; i++) {
 		r_bp_del (dbg->bp, next[i]);
 	}
-
 	return ret;
 }
 

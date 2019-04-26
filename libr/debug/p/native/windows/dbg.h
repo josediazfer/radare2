@@ -250,6 +250,7 @@ typedef struct _SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION {
 
 int w32_dbg_wait(RDebug *dbg, RDebugW32Proc **proc);
 int w32_dbg_detach(RDebug *dbg, int pid);
+int w32_proc_match(const char *pattern);
 RDebugInfo* w32_info(RDebug *dbg, const char *arg);
 RList *w32_pids(int pid, RList *list);
 RDebugW32 *w32_dbg_get(RDebug *dbg);

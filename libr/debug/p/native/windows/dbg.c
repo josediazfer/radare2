@@ -1223,6 +1223,23 @@ err_w32_pids:
 	return list;
 }
 
+int w32_proc_match(const char *pattern) {
+	RList *proc_list = r_list_newf ((RListFree) r_debug_pid_free);
+	RListIter *iter;
+	RDebugPid *proc;
+	int pid = -1;
+
+	w32_pids (0, proc_list);
+	r_list_foreach (proc_list, iter, proc) {
+		if (r_regex_match (pattern, NULL, proc->path)) {
+			pid = proc->pid;
+			break;
+		}
+	}
+	r_list_free (proc_list);
+	return pid;
+}
+
 static int proc_dbg_continue(RDebugW32Proc *proc, bool dbg_handled) {
 	RDebugW32Thread *th;
 
@@ -1486,18 +1503,18 @@ bool w32_dbg_proc_kill (RDebug *dbg, int pid) {
 	}
 	h_proc = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
 	if (!h_proc) {
-		r_sys_perror ("w32_dbg_proc_kill/OpenProcess");
+		r_sys_perror_strf ("w32_dbg_proc_kill/OpenProcess", "(%d)", pid);
 		goto err_w32_dbg_proc_kill;
 	}
 	if (TerminateProcess (h_proc, 1) == 0) {
-		r_sys_perror ("w32_dbg_proc_kill/TerminateProcess");
+		r_sys_perror_strf ("w32_dbg_proc_kill/TerminateProcess", "(%d)", pid);
 		goto err_w32_dbg_proc_kill;
 
 	}
 	/* wait up to one second to give the process some time to exit */
 	DWORD ret_wait = WaitForSingleObject (h_proc, 1000);
 	if (ret_wait == WAIT_FAILED) {
-		r_sys_perror ("w32_dbg_proc_kill/WaitForSingleObject");
+		r_sys_perror_strf ("w32_dbg_proc_kill/WaitForSingleObject", "(%d)", pid);
 		goto err_w32_dbg_proc_kill;
 	}
 	if (ret_wait == WAIT_TIMEOUT) {

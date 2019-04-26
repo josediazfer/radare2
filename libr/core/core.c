@@ -2479,7 +2479,11 @@ R_API char *r_core_editor (const RCore *core, const char *file, const char *str)
 		cons->editor = tmp;
 	} else {
 		if (editor && name) {
+#if __WINDOWS__
+			r_sys_cmdf ("%s \"%s\"", editor, name);
+#else
 			r_sys_cmdf ("%s '%s'", editor, name);
+#endif
 		}
 	}
 	ret = name? r_file_slurp (name, &len): 0;

@@ -437,6 +437,7 @@ static RList *r_debug_native_pids (RDebug *dbg, int pid) {
 		return NULL;
 	}
 #if __WINDOWS__ && !__CYGWIN__
+	list->free = (RListFree)&r_debug_pid_free;
 	return w32_pids (pid, list);
 #elif __APPLE__
 	if (pid) {

@@ -107,11 +107,14 @@ static RIODesc *__open(RIO *io, const char *file, int rw, int mode) {
 		free (_cmd);
 	} else if (!strncmp (file, "attach://", 9)) {
 		int pid;
+		const char *path = file + 9;
 
-		if (!strncmp(file + 9, "-", 1)) {
+		if (!strncmp(path, "-", 1)) {
 			pid = dlg_dbg_attach ();
+		} else if (r_str_is_type (path, R_STRING_TYPE_DIGIT)) {
+			pid = atoi (path);
 		} else {
-			pid = atoi (file + 9);
+			pid = w32_proc_match (path);
 		}
 		if (pid > 0) {
 			opened = w32_dbg_attach (dbg, pid, &proc) != -1;
